@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geoguessr-ai"
+version = "0.1.0"
+description = "A self-trained geolocation AI that plays OpenGuessr by watching your screen and controlling your mouse."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "pillow>=10",
+    "opencv-python>=4.8",
+    "mss>=10",
+    "pyautogui>=0.9.54",
+    "pynput>=1.7",
+    "global-land-mask>=1.0",
+    "torch>=2.2",
+    "transformers>=5",
+    "huggingface_hub>=1",
+    "scikit-learn>=1.4",
+    "pandas>=2",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+geoguessr-ai = "geoguessr_ai.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

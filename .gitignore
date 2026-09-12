@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Large or machine-specific artifacts
+data/
+models/
+runs/
+layout.json
+calibration_preview.png

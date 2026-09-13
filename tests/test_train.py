@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
+import torch
 
+from geoguessr_ai.geo import haversine_km
 from geoguessr_ai.model.head import Checkpoint
+from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings
 from geoguessr_ai.model.train import (
     TrainConfig,
     load_embeddings,
@@ -11,6 +14,7 @@ from geoguessr_ai.model.train import (
 )
 
 CITIES = np.array([(48.86, 2.35), (35.68, 139.69), (-33.87, 151.21), (40.71, -74.0)])
+NAIROBI = (-1.29, 36.82)
 
 
 def write_synthetic_embeddings(path, n=480, dim=32, backbone="fake/backbone", seed=0):
@@ -77,3 +81,83 @@ def test_load_embeddings_rejects_mixed_backbones(tmp_path):
     write_synthetic_embeddings(tmp_path / "b.npz", backbone="two")
     with pytest.raises(ValueError, match="different backbones"):
         load_embeddings(resolve_embedding_files([str(tmp_path / "*.npz")]))
+
+
+def write_synthetic_rounds(path, city, n_rounds=20, crops=4, dim=32, backbone="fake/backbone"):
+    """Round crops near ``city`` that share an embedding direction the photos never use."""
+    rng = np.random.default_rng(5)
+    prototype = np.random.default_rng(1234).normal(size=dim)
+    prototype /= np.linalg.norm(prototype)
+    groups = np.repeat([f"s/round_{i:02d}" for i in range(n_rounds)], crops)
+    emb = prototype + rng.normal(0, 0.1, (len(groups), dim))
+    emb /= np.linalg.norm(emb, axis=1, keepdims=True)
+    coords = np.array(city) + rng.normal(0, 0.2, (len(groups), 2))
+    data = RoundEmbeddings(emb.astype(np.float32), groups, coords[:, 0], coords[:, 1], backbone)
+    data.save(path)
+    return prototype, data
+
+
+def test_train_mixes_in_played_rounds(tmp_path):
+    write_synthetic_embeddings(tmp_path / "photos.npz")
+    rounds = tmp_path / ROUNDS_FILE
+    prototype, data = write_synthetic_rounds(rounds, NAIROBI)
+    cfg = TrainConfig(
+        n_cells=8,
+        hidden=64,
+        epochs=15,
+        batch_size=64,
+        lr=3e-3,
+        val_fraction=0.2,
+        val_block_deg=0.01,
+        real_fraction=0.25,
+        rounds_test_fraction=0.0,
+    )
+    logs = []
+
+    train(
+        [tmp_path / "photos.npz"],
+        tmp_path / "m.pt",
+        cfg,
+        rounds_path=rounds,
+        device="cpu",
+        log=logs.append,
+    )
+
+    assert any("20 OpenGuessr rounds: 16 of every 64" in line for line in logs)
+    ckpt = Checkpoint.load(tmp_path / "m.pt")
+    with torch.no_grad():
+        logits = ckpt.head(torch.from_numpy(prototype).float()[None])
+    lat, lon, _ = ckpt.cells.best_guess(torch.softmax(logits, dim=1)[0].numpy())
+    assert haversine_km(lat, lon, *NAIROBI) < 300
+    # The saved prior matches what training saw: a quarter of every batch was Nairobi.
+    nairobi_cells = np.unique(ckpt.cells.assign(data.lat, data.lon))
+    assert np.exp(ckpt.log_prior)[nairobi_cells].sum() == pytest.approx(0.25, abs=0.03)
+
+
+def test_train_never_uses_held_out_rounds(tmp_path):
+    write_synthetic_embeddings(tmp_path / "photos.npz")
+    rounds = tmp_path / ROUNDS_FILE
+    write_synthetic_rounds(rounds, NAIROBI)
+    cfg = TrainConfig(n_cells=8, hidden=64, epochs=2, batch_size=64, rounds_test_fraction=1.0)
+    logs = []
+
+    train(
+        [tmp_path / "photos.npz"],
+        tmp_path / "m.pt",
+        cfg,
+        rounds_path=rounds,
+        device="cpu",
+        log=logs.append,
+    )
+
+    assert not any("OpenGuessr" in line for line in logs)
+    centroids = Checkpoint.load(tmp_path / "m.pt").cells.centroids
+    assert min(haversine_km(lat, lon, *NAIROBI) for lat, lon in centroids) > 2000
+
+
+def test_rounds_file_is_not_plain_training_data(tmp_path):
+    write_synthetic_embeddings(tmp_path / "photos.npz", n=60)
+    write_synthetic_rounds(tmp_path / ROUNDS_FILE, NAIROBI)
+    assert resolve_embedding_files([tmp_path]) == [tmp_path / "photos.npz"]
+    with pytest.raises(ValueError, match="--rounds"):
+        load_embeddings([tmp_path / ROUNDS_FILE])

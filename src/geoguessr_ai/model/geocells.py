@@ -68,10 +68,14 @@ class GeoCells:
         cos = np.clip(to_unit_vectors(lat, lon) @ self.unit_vectors.T, -1.0, 1.0)
         return EARTH_RADIUS_KM * np.arccos(cos)
 
+    def cell_share(self, lat, lon, pseudo_count: float = 1.0) -> np.ndarray:
+        """Share of locations in each cell, after adding ``pseudo_count`` to every cell."""
+        counts = np.bincount(self.assign(lat, lon), minlength=len(self)) + pseudo_count
+        return counts / counts.sum()
+
     def log_prior(self, lat, lon) -> np.ndarray:
         """Log share of training photos per cell (add-one smoothed)."""
-        counts = np.bincount(self.assign(lat, lon), minlength=len(self))
-        return np.log((counts + 1) / (counts.sum() + len(self)))
+        return np.log(self.cell_share(lat, lon))
 
     def soft_targets(self, lat, lon, tau_km: float) -> np.ndarray:
         """Haversine label smoothing: cells near the true location share the target mass."""

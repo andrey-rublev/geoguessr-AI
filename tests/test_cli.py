@@ -24,6 +24,12 @@ def test_every_command_parses(argv):
     assert callable(args.func)
 
 
+@pytest.mark.parametrize("command", [["predict", "a.jpg"], ["evaluate"], ["play"]])
+def test_model_commands_take_prior_strength(command):
+    assert build_parser().parse_args(command).prior_strength == 1.0
+    assert build_parser().parse_args([*command, "--prior-strength", "0"]).prior_strength == 0.0
+
+
 def test_locate_map_command(tmp_path, capsys):
     truth = MapProjection(1600, -70, -260)
     path = tmp_path / "map.png"

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import DEFAULT_LAYOUT_PATH
 from .model.backbone import DEFAULT_BACKBONE
+from .model.geocells import DEFAULT_PRIOR_STRENGTH
 
 DEFAULT_MODEL = Path("models/geoguessr.pt")
 DEFAULT_DATA = Path("data/osv5m")
@@ -74,7 +75,9 @@ def cmd_predict(args: argparse.Namespace) -> None:
 
     from .model.predictor import GeoPredictor
 
-    guess = GeoPredictor(args.model, args.device).predict([Image.open(p) for p in args.images])
+    guess = GeoPredictor(args.model, args.device, args.prior_strength).predict(
+        [Image.open(p) for p in args.images]
+    )
     print(
         f"Guess: {guess.lat:.4f}, {guess.lon:.4f}  (model expects ~{guess.expected_score:,.0f} pts)"
     )
@@ -90,11 +93,15 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
 
     if args.embeddings:
         files = resolve_embedding_files(args.embeddings)
-        print(json.dumps(evaluate_embeddings(args.model, files, args.device), indent=2))
+        print(
+            json.dumps(
+                evaluate_embeddings(args.model, files, args.device, args.prior_strength), indent=2
+            )
+        )
         return
     if not (args.images and args.labels):
         raise SystemExit("Pass --embeddings, or --images together with --labels")
-    predictor = GeoPredictor(args.model, args.device)
+    predictor = GeoPredictor(args.model, args.device, args.prior_strength)
     metrics, rows = evaluate_folder(predictor, args.images, args.labels)
     for row in rows:
         print(
@@ -129,7 +136,7 @@ def cmd_play(args: argparse.Namespace) -> None:
     layout = Layout.load(args.layout)
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Train a model first (see README).")
-    predictor = GeoPredictor(args.model, args.device)
+    predictor = GeoPredictor(args.model, args.device, args.prior_strength)
     settings = BotSettings(
         rounds=args.rounds,
         views=args.views,
@@ -156,6 +163,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     def add_device(p: argparse.ArgumentParser) -> None:
         p.add_argument("--device", default="auto", help="auto, cpu, cuda, xpu or mps")
+
+    def add_prior_strength(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "--prior-strength",
+            type=float,
+            default=DEFAULT_PRIOR_STRENGTH,
+            help="how much to discount regions over-represented in training (0 = off)",
+        )
 
     p = add("calibrate", cmd_calibrate, "Record where the OpenGuessr UI is on your screen.")
     p.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT_PATH)
@@ -195,6 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = add("predict", cmd_predict, "Guess where some images were taken.")
     p.add_argument("images", type=Path, nargs="+")
     p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    add_prior_strength(p)
     add_device(p)
 
     p = add("evaluate", cmd_evaluate, "Score a trained model on held-out data.")
@@ -202,6 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--images", type=Path, help="a folder of labelled images instead")
     p.add_argument("--labels", type=Path, help="CSV with filename,latitude,longitude[,group]")
     p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    add_prior_strength(p)
     add_device(p)
 
     p = add("locate-map", cmd_locate_map, "Debug: find the world on a map screenshot.")
@@ -210,6 +227,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = add("play", cmd_play, "Play OpenGuessr using the trained model.")
     p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    add_prior_strength(p)
     p.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT_PATH)
     p.add_argument("--rounds", type=int, default=5)
     p.add_argument("--views", type=int, default=4, help="screenshots per round")

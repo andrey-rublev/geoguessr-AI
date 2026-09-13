@@ -79,7 +79,7 @@ geoguessr-ai predict some_street.jpg
 
 ### Speed
 
-Embedding is the bottleneck. With the default backbone on an 8-core laptop CPU (Intel Core Ultra, no CUDA), a first measurement gave ~7 images/s including warm-up, so a full 50k-image shard takes hours. Start with `--limit 20000` and add more over time. Finished shards are skipped when you re-run, so `embed` can be stopped and resumed.
+Embedding is the bottleneck, and the model does most of the work: JPEG decoding and preprocessing each run at several hundred images/s. With the default backbone on an 8-core laptop CPU (Intel Core Ultra, no CUDA), steady-state speed is about **45–50 images/s**, so a 50k-image shard takes about 18 minutes. Finished shards are skipped when you re-run, so `embed` can be stopped and resumed.
 
 Other ways to speed it up:
 - **NVIDIA GPU:** install a CUDA build of PyTorch. It's picked up automatically.

@@ -2,8 +2,9 @@ import pytest
 from PIL import Image
 from test_mapcal import render_map
 
-from geoguessr_ai.cli import build_parser, main
+from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
 from geoguessr_ai.mapcal import MapProjection
+from geoguessr_ai.model.rounds import ROUNDS_FILE
 
 
 @pytest.mark.parametrize(
@@ -30,6 +31,15 @@ def test_every_command_parses(argv):
 def test_model_commands_take_prior_strength(command):
     assert build_parser().parse_args(command).prior_strength == 1.0
     assert build_parser().parse_args([*command, "--prior-strength", "0"]).prior_strength == 0.0
+
+
+def test_round_options():
+    parser = build_parser()
+    assert parser.parse_args(["evaluate", "--rounds"]).rounds == DEFAULT_ROUNDS
+    assert DEFAULT_ROUNDS.name == ROUNDS_FILE
+    assert parser.parse_args(["evaluate"]).rounds is None
+    train = parser.parse_args(["train", "--real-fraction", "0.3"])
+    assert train.real_fraction == 0.3 and train.rounds is None
 
 
 def test_locate_map_command(tmp_path, capsys):

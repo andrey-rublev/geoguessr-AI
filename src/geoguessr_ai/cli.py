@@ -13,6 +13,7 @@ from .model.geocells import DEFAULT_PRIOR_STRENGTH
 DEFAULT_MODEL = Path("models/geoguessr.pt")
 DEFAULT_DATA = Path("data/osv5m")
 DEFAULT_EMBEDDINGS = Path("data/embeddings")
+DEFAULT_ROUNDS = DEFAULT_EMBEDDINGS / DEFAULT_BACKBONE.replace("/", "__") / "openguessr-rounds.npz"
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
@@ -66,6 +67,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
 
 
 def cmd_train(args: argparse.Namespace) -> None:
+    from .model.rounds import ROUNDS_FILE
     from .model.train import TrainConfig, resolve_embedding_files, train
 
     cfg = TrainConfig(
@@ -74,8 +76,14 @@ def cmd_train(args: argparse.Namespace) -> None:
         batch_size=args.batch_size,
         lr=args.lr,
         tau_km=args.tau_km,
+        real_fraction=args.real_fraction,
     )
-    metrics = train(resolve_embedding_files(args.embeddings), args.out, cfg, device=args.device)
+    rounds = args.rounds
+    if rounds is None:  # use rounds embedded next to the photos, if there are any
+        folders = [Path(p) if Path(p).is_dir() else Path(p).parent for p in args.embeddings]
+        rounds = next((f / ROUNDS_FILE for f in folders if (f / ROUNDS_FILE).exists()), None)
+    files = resolve_embedding_files(args.embeddings)
+    metrics = train(files, args.out, cfg, rounds_path=rounds, device=args.device)
     print(json.dumps(metrics, indent=2))
 
 
@@ -95,11 +103,30 @@ def cmd_predict(args: argparse.Namespace) -> None:
         print(f"  {prob:6.1%}  {lat:8.3f}, {lon:8.3f}")
 
 
+def _print_rows(rows: list[dict]) -> None:
+    for row in rows:
+        print(
+            f"  {row['group']:<24} off by {row['distance_km']:>8,.0f} km  "
+            f"score {row['score']:>5,.0f}"
+        )
+
+
 def cmd_evaluate(args: argparse.Namespace) -> None:
-    from .model.evaluate import evaluate_embeddings, evaluate_folder
+    import statistics
+
+    from .model.evaluate import evaluate_embeddings, evaluate_folder, evaluate_rounds
     from .model.predictor import GeoPredictor
     from .model.train import resolve_embedding_files
 
+    if args.rounds:
+        metrics, rows = evaluate_rounds(args.model, args.rounds, args.device, args.prior_strength)
+        _print_rows(rows)
+        summary = {"rounds": len(rows), **metrics}
+        if len(rows) > 1:  # how far the mean score could move by luck alone
+            scores = [row["score"] for row in rows]
+            summary["mean_score_stderr"] = statistics.stdev(scores) / len(scores) ** 0.5
+        print(json.dumps(summary, indent=2))
+        return
     if args.embeddings:
         files = resolve_embedding_files(args.embeddings)
         print(
@@ -109,14 +136,10 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
         )
         return
     if not (args.images and args.labels):
-        raise SystemExit("Pass --embeddings, or --images together with --labels")
+        raise SystemExit("Pass --rounds, --embeddings, or --images together with --labels")
     predictor = GeoPredictor(args.model, args.device, args.prior_strength)
     metrics, rows = evaluate_folder(predictor, args.images, args.labels)
-    for row in rows:
-        print(
-            f"  {row['group']:<24} off by {row['distance_km']:>8,.0f} km  "
-            f"score {row['score']:>5,.0f}"
-        )
+    _print_rows(rows)
     print(json.dumps({"places": len(rows), **metrics}, indent=2))
 
 
@@ -221,6 +244,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--batch-size", type=int, default=1024)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--tau-km", type=float, default=100.0)
+    p.add_argument(
+        "--rounds",
+        type=Path,
+        help="embedded OpenGuessr rounds to mix in (default: the rounds file next to the photos)",
+    )
+    p.add_argument(
+        "--real-fraction",
+        type=float,
+        default=0.15,
+        help="share of each batch taken from your rounds (0 = don't use them)",
+    )
     add_device(p)
 
     p = add("predict", cmd_predict, "Guess where some images were taken.")
@@ -230,6 +264,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_device(p)
 
     p = add("evaluate", cmd_evaluate, "Score a trained model on held-out data.")
+    p.add_argument(
+        "--rounds",
+        type=Path,
+        nargs="?",
+        const=DEFAULT_ROUNDS,
+        help=f"score your held-out OpenGuessr rounds (default file: {DEFAULT_ROUNDS})",
+    )
     p.add_argument("--embeddings", nargs="+", help="embedding .npz files, directories, or globs")
     p.add_argument("--images", type=Path, help="a folder of labelled images instead")
     p.add_argument("--labels", type=Path, help="CSV with filename,latitude,longitude[,group]")

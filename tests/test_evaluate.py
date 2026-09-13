@@ -12,7 +12,7 @@ def test_evaluate_embeddings_matches_backbone(tmp_path):
     write_synthetic_embeddings(tmp_path / "test.npz", n=100, seed=1)
     write_synthetic_embeddings(tmp_path / "other.npz", n=100, backbone="other", seed=2)
     model = tmp_path / "model.pt"
-    cfg = TrainConfig(n_cells=8, hidden=64, epochs=10, batch_size=64, lr=3e-3)
+    cfg = TrainConfig(n_cells=8, hidden=64, epochs=10, batch_size=64, lr=3e-3, val_block_deg=0.01)
     train([tmp_path / "train.npz"], model, cfg, device="cpu", log=lambda _: None)
 
     metrics = evaluate_embeddings(model, [tmp_path / "test.npz"], device="cpu")

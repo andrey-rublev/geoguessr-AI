@@ -30,7 +30,28 @@ class TrainConfig:
     tau_km: float = 100.0
     """Label smoothing distance: cells this far from the answer get ~37% of its target weight."""
     val_fraction: float = 0.05
+    val_block_deg: float = 0.5
+    """Validation holds out whole map blocks this size (~50 km), not random photos."""
     seed: int = 0
+
+
+def spatial_split(
+    lat: np.ndarray, lon: np.ndarray, val_fraction: float, block_deg: float, seed: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
+    """Split indices into (train, val) by holding out whole map blocks.
+
+    Street-level datasets contain many photos per drive, so a random split puts
+    near-duplicates on both sides and validation looks far better than it is.
+    """
+    lat_block = np.floor(np.asarray(lat) / block_deg).astype(np.int64) + 100_000
+    lon_block = np.floor(np.asarray(lon) / block_deg).astype(np.int64) + 100_000
+    _, block_of = np.unique(lat_block * 1_000_000 + lon_block, return_inverse=True)
+    rng = np.random.default_rng(seed)
+    block_order = rng.permutation(block_of.max() + 1)
+    sizes = np.bincount(block_of)[block_order]
+    n_val_blocks = int(np.searchsorted(np.cumsum(sizes), val_fraction * len(block_of))) + 1
+    is_val = np.isin(block_of, block_order[:n_val_blocks])
+    return np.flatnonzero(~is_val), np.flatnonzero(is_val)
 
 
 def resolve_embedding_files(patterns: Sequence[str | Path]) -> list[Path]:
@@ -101,13 +122,10 @@ def train(
     if len(x) < 50:
         raise ValueError(f"Need at least 50 embedded images to train, got {len(x)}")
 
-    rng = np.random.default_rng(cfg.seed)
-    order = rng.permutation(len(x))
-    n_val = max(1, round(len(x) * cfg.val_fraction))
-    val, tr = order[:n_val], order[n_val:]
+    tr, val = spatial_split(lat, lon, cfg.val_fraction, cfg.val_block_deg, cfg.seed)
 
     n_cells = cfg.n_cells or int(np.clip(len(tr) // 40, 64, 4096))
-    log(f"{len(tr):,} train / {n_val:,} val images, fitting {n_cells} geocells...")
+    log(f"{len(tr):,} train / {len(val):,} val images, fitting {n_cells} geocells...")
     cells = GeoCells.fit(lat[tr], lon[tr], n_cells, seed=cfg.seed)
 
     dev = pick_device(device)

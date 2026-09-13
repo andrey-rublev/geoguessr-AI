@@ -183,6 +183,10 @@ def train(
         rounds_prior = cells.cell_share(real.lat, real.lon, pseudo_count=0)
         prior = (1 - real_share) * prior + real_share * rounds_prior
     log_prior = np.log(prior)
+    game_log_prior = None
+    if n_real:  # one location per round, not per crop
+        firsts = np.unique(real.groups, return_index=True)[1]
+        game_log_prior = cells.spread_log_prior(real.lat[firsts], real.lon[firsts])
 
     dev = pick_device(device)
     torch.manual_seed(cfg.seed)
@@ -232,7 +236,7 @@ def train(
         )
         if best is None or metrics["mean_score"] > best["mean_score"]:
             best = {**metrics, "epoch": epoch}
-            Checkpoint(head.cpu(), cells, backbone, best, log_prior).save(out_path)
+            Checkpoint(head.cpu(), cells, backbone, best, log_prior, game_log_prior).save(out_path)
             head.to(dev)
 
     log(f"Saved best checkpoint (epoch {best['epoch']}) to {out_path}")

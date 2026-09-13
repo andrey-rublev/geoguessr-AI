@@ -9,7 +9,7 @@ from PIL import Image
 
 from ..geo import geoguessr_score, haversine_km
 from .backbone import pick_device
-from .geocells import DEFAULT_PRIOR_STRENGTH
+from .geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
 from .head import Checkpoint
 from .predictor import Guess, guess_from_embeddings
 from .rounds import DEFAULT_TEST_FRACTION, RoundEmbeddings
@@ -88,6 +88,7 @@ def evaluate_rounds(
     rounds_path: Path,
     device: str = "auto",
     prior_strength: float = DEFAULT_PRIOR_STRENGTH,
+    game_prior_strength: float = DEFAULT_GAME_PRIOR_STRENGTH,
     test_fraction: float = DEFAULT_TEST_FRACTION,
 ) -> tuple[dict[str, float], list[dict]]:
     """Score a checkpoint on your held-out OpenGuessr rounds, views combined as in the game."""
@@ -105,6 +106,8 @@ def evaluate_rounds(
     rows = []
     for round_id in test.round_ids:
         mask = test.groups == round_id
-        guess = guess_from_embeddings(checkpoint, test.embeddings[mask], prior_strength)
+        guess = guess_from_embeddings(
+            checkpoint, test.embeddings[mask], prior_strength, game_prior_strength
+        )
         rows.append(_row(round_id, float(test.lat[mask][0]), float(test.lon[mask][0]), guess))
     return summarize([row["distance_km"] for row in rows]), rows

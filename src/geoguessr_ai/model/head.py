@@ -37,6 +37,8 @@ class Checkpoint:
     metrics: dict[str, float] = field(default_factory=dict)
     log_prior: np.ndarray | None = None
     """Log share of training photos per cell, used to debias predictions."""
+    game_log_prior: np.ndarray | None = None
+    """Where the game sends players, per cell, estimated from played training rounds."""
 
     def save(self, path: Path) -> None:
         path = Path(path)
@@ -49,7 +51,8 @@ class Checkpoint:
                 "centroids": torch.from_numpy(self.cells.centroids),
                 "backbone": self.backbone,
                 "metrics": self.metrics,
-                "log_prior": None if self.log_prior is None else torch.from_numpy(self.log_prior),
+                "log_prior": _tensor(self.log_prior),
+                "game_log_prior": _tensor(self.game_log_prior),
             },
             path,
         )
@@ -60,11 +63,17 @@ class Checkpoint:
         cells = GeoCells(raw["centroids"].numpy())
         head = GeoHead(raw["embed_dim"], len(cells), hidden=raw["hidden"])
         head.load_state_dict(raw["state_dict"])
-        log_prior = raw.get("log_prior")  # absent in checkpoints from before debiasing
+        # Both priors are absent from checkpoints saved before they existed.
+        log_prior, game_log_prior = raw.get("log_prior"), raw.get("game_log_prior")
         return cls(
             head.eval(),
             cells,
             raw["backbone"],
             raw["metrics"],
             None if log_prior is None else log_prior.numpy(),
+            None if game_log_prior is None else game_log_prior.numpy(),
         )
+
+
+def _tensor(array: np.ndarray | None) -> torch.Tensor | None:
+    return None if array is None else torch.from_numpy(array)

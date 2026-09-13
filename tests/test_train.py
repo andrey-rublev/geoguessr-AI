@@ -132,6 +132,10 @@ def test_train_mixes_in_played_rounds(tmp_path):
     # The saved prior matches what training saw: a quarter of every batch was Nairobi.
     nairobi_cells = np.unique(ckpt.cells.assign(data.lat, data.lon))
     assert np.exp(ckpt.log_prior)[nairobi_cells].sum() == pytest.approx(0.25, abs=0.03)
+    # The rounds also show where the game sends players: all 20 went to Nairobi.
+    game = np.exp(ckpt.game_log_prior)
+    assert game[nairobi_cells].sum() > 0.3
+    assert game[nairobi_cells].min() > np.delete(game, nairobi_cells).max()
 
 
 def test_train_never_uses_held_out_rounds(tmp_path):
@@ -151,8 +155,9 @@ def test_train_never_uses_held_out_rounds(tmp_path):
     )
 
     assert not any("OpenGuessr" in line for line in logs)
-    centroids = Checkpoint.load(tmp_path / "m.pt").cells.centroids
-    assert min(haversine_km(lat, lon, *NAIROBI) for lat, lon in centroids) > 2000
+    ckpt = Checkpoint.load(tmp_path / "m.pt")
+    assert min(haversine_km(lat, lon, *NAIROBI) for lat, lon in ckpt.cells.centroids) > 2000
+    assert ckpt.game_log_prior is None
 
 
 def test_rounds_file_is_not_plain_training_data(tmp_path):

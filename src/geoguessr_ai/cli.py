@@ -83,6 +83,27 @@ def cmd_predict(args: argparse.Namespace) -> None:
         print(f"  {prob:6.1%}  {lat:8.3f}, {lon:8.3f}")
 
 
+def cmd_evaluate(args: argparse.Namespace) -> None:
+    from .model.evaluate import evaluate_embeddings, evaluate_folder
+    from .model.predictor import GeoPredictor
+    from .model.train import resolve_embedding_files
+
+    if args.embeddings:
+        files = resolve_embedding_files(args.embeddings)
+        print(json.dumps(evaluate_embeddings(args.model, files, args.device), indent=2))
+        return
+    if not (args.images and args.labels):
+        raise SystemExit("Pass --embeddings, or --images together with --labels")
+    predictor = GeoPredictor(args.model, args.device)
+    metrics, rows = evaluate_folder(predictor, args.images, args.labels)
+    for row in rows:
+        print(
+            f"  {row['group']:<24} off by {row['distance_km']:>8,.0f} km  "
+            f"score {row['score']:>5,.0f}"
+        )
+    print(json.dumps({"places": len(rows), **metrics}, indent=2))
+
+
 def cmd_locate_map(args: argparse.Namespace) -> None:
     import numpy as np
     from PIL import Image
@@ -173,6 +194,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = add("predict", cmd_predict, "Guess where some images were taken.")
     p.add_argument("images", type=Path, nargs="+")
+    p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    add_device(p)
+
+    p = add("evaluate", cmd_evaluate, "Score a trained model on held-out data.")
+    p.add_argument("--embeddings", nargs="+", help="embedding .npz files, directories, or globs")
+    p.add_argument("--images", type=Path, help="a folder of labelled images instead")
+    p.add_argument("--labels", type=Path, help="CSV with filename,latitude,longitude[,group]")
     p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     add_device(p)
 

@@ -14,6 +14,8 @@ from geoguessr_ai.mapcal import MapProjection
         ["embed", "--limit", "100"],
         ["train", "data/embeddings/*.npz", "--epochs", "5"],
         ["predict", "a.jpg"],
+        ["evaluate", "--embeddings", "data/embeddings/x/osv5m-test-04.npz"],
+        ["evaluate", "--images", "photos", "--labels", "photos/labels.csv"],
         ["play", "--dry-run", "--rounds", "1"],
     ],
 )

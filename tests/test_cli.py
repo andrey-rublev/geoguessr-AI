@@ -20,6 +20,7 @@ from geoguessr_ai.model.rounds import ROUNDS_FILE
         ["evaluate", "--embeddings", "data/embeddings/x/osv5m-test-04.npz"],
         ["evaluate", "--images", "photos", "--labels", "photos/labels.csv"],
         ["play", "--dry-run", "--rounds", "1"],
+        ["play", "--no-answers"],
     ],
 )
 def test_every_command_parses(argv):

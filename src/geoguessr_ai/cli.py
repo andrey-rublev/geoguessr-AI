@@ -174,6 +174,7 @@ def cmd_play(args: argparse.Namespace) -> None:
         rounds=args.rounds,
         views=args.views,
         dry_run=args.dry_run,
+        record_answers=not args.no_answers,
         debug_dir=None if args.no_debug else args.debug_dir,
     )
     with Screen() as screen, Controls(dry_run=args.dry_run, stop_key=args.stop_key) as controls:
@@ -300,6 +301,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--stop-key", default="f8")
     p.add_argument("--debug-dir", type=Path, default=Path("runs"))
     p.add_argument("--no-debug", action="store_true", help="don't save screenshots per round")
+    p.add_argument(
+        "--no-answers",
+        action="store_true",
+        help="don't read the real location off result screens (faster; rounds can't train)",
+    )
     add_device(p)
 
     return parser

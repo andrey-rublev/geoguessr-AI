@@ -34,12 +34,21 @@ def cmd_download(args: argparse.Namespace) -> None:
 def cmd_embed(args: argparse.Namespace) -> None:
     from .model.backbone import ImageEncoder
     from .model.embed import embed_folder, embed_osv5m_shard
+    from .model.rounds import ROUNDS_FILE, embed_rounds
 
     if args.images and not args.labels:
         raise SystemExit("--images needs --labels (a CSV of filename,latitude,longitude)")
     encoder = ImageEncoder(args.backbone, args.device)
     out_dir = _embedding_dir(args.out, args.backbone)
     print(f"Embedding with {args.backbone} on {encoder.device} into {out_dir}")
+    if args.rounds:
+        data = embed_rounds(encoder, args.rounds, out_dir / ROUNDS_FILE, batch_size=args.batch_size)
+        train, test = data.split()
+        print(
+            f"{len(data.round_ids):,} rounds saved to {out_dir / ROUNDS_FILE}: "
+            f"{len(train.round_ids):,} for training, {len(test.round_ids):,} held out for testing"
+        )
+        return
     if args.images:
         out_path = out_dir / f"folder-{args.images.name}.npz"
         embed_folder(encoder, args.images, args.labels, out_path, batch_size=args.batch_size)
@@ -187,6 +196,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, help="embed at most this many images per shard")
     p.add_argument("--images", type=Path, help="embed your own image folder instead of OSV-5M")
     p.add_argument("--labels", type=Path, help="CSV with filename,latitude,longitude")
+    p.add_argument(
+        "--rounds",
+        type=Path,
+        nargs="?",
+        const=Path("runs"),
+        help="embed the OpenGuessr rounds saved by play instead (default folder: runs)",
+    )
     p.add_argument("--backbone", default=DEFAULT_BACKBONE)
     p.add_argument("--out", type=Path, default=DEFAULT_EMBEDDINGS)
     p.add_argument("--batch-size", type=int, default=64)

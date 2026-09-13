@@ -12,6 +12,8 @@ from geoguessr_ai.mapcal import MapProjection
         ["calibrate"],
         ["download", "--shards", "0", "1"],
         ["embed", "--limit", "100"],
+        ["embed", "--rounds"],
+        ["embed", "--rounds", "runs/20260913-161603"],
         ["train", "data/embeddings/*.npz", "--epochs", "5"],
         ["predict", "a.jpg"],
         ["evaluate", "--embeddings", "data/embeddings/x/osv5m-test-04.npz"],

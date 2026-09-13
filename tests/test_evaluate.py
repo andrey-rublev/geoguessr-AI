@@ -1,9 +1,11 @@
+import numpy as np
 import pytest
 from PIL import Image
-from test_train import write_synthetic_embeddings
+from test_train import CITIES, write_synthetic_embeddings
 
-from geoguessr_ai.model.evaluate import evaluate_embeddings, evaluate_folder
+from geoguessr_ai.model.evaluate import evaluate_embeddings, evaluate_folder, evaluate_rounds
 from geoguessr_ai.model.predictor import Guess
+from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings
 from geoguessr_ai.model.train import TrainConfig, train
 
 
@@ -47,6 +49,37 @@ def test_groups_views_into_one_prediction(tmp_path):
     assert rows[0]["distance_km"] == pytest.approx(0.0, abs=1e-6)
     assert rows[1]["distance_km"] == pytest.approx(343.5, abs=1.0)
     assert metrics["within_25km"] == 0.5 and metrics["within_750km"] == 1.0
+
+
+def test_evaluate_rounds_combines_each_rounds_views(tmp_path):
+    write_synthetic_embeddings(tmp_path / "photos.npz")
+    model = tmp_path / "model.pt"
+    cfg = TrainConfig(n_cells=8, hidden=64, epochs=10, batch_size=64, lr=3e-3, val_block_deg=0.01)
+    train([tmp_path / "photos.npz"], model, cfg, device="cpu", log=lambda _: None)
+
+    prototypes = np.random.default_rng(99).normal(size=(len(CITIES), 32))  # the photos' cities
+    rng = np.random.default_rng(3)
+    crops, groups, coords = [], [], []
+    for i in range(12):
+        city = i % len(CITIES)
+        # Three crops show the round's city; one looks like somewhere else entirely.
+        for shown in (city, city, city, (city + 1) % len(CITIES)):
+            crop = prototypes[shown] + rng.normal(0, 0.5, 32)
+            crops.append(crop / np.linalg.norm(crop))
+            groups.append(f"s/round_{i:02d}")
+            coords.append(CITIES[city])
+    coords = np.array(coords)
+    rounds = tmp_path / ROUNDS_FILE
+    RoundEmbeddings(
+        np.array(crops, np.float32), np.array(groups), coords[:, 0], coords[:, 1], "fake/backbone"
+    ).save(rounds)
+
+    metrics, rows = evaluate_rounds(model, rounds, device="cpu", test_fraction=1.0)
+
+    assert [row["group"] for row in rows] == [f"s/round_{i:02d}" for i in range(12)]
+    assert metrics["within_750km"] > 0.9
+    with pytest.raises(ValueError, match="held out"):
+        evaluate_rounds(model, rounds, device="cpu", test_fraction=0.0)
 
 
 def test_without_group_column_each_image_is_a_place(tmp_path):

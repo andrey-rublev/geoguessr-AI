@@ -1,4 +1,4 @@
-"""Score a trained model on a labelled folder of images."""
+"""Score a trained model on held-out photos, a labelled folder, or your own OpenGuessr rounds."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from ..geo import geoguessr_score, haversine_km
 from .backbone import pick_device
 from .geocells import DEFAULT_PRIOR_STRENGTH
 from .head import Checkpoint
+from .predictor import Guess, guess_from_embeddings
+from .rounds import DEFAULT_TEST_FRACTION, RoundEmbeddings
 from .train import evaluate, load_embeddings, summarize
 
 
@@ -43,6 +45,19 @@ def evaluate_embeddings(
     }
 
 
+def _row(group: str, lat: float, lon: float, guess: Guess) -> dict:
+    distance = haversine_km(guess.lat, guess.lon, lat, lon)
+    return {
+        "group": group,
+        "lat": lat,
+        "lon": lon,
+        "guess_lat": guess.lat,
+        "guess_lon": guess.lon,
+        "distance_km": distance,
+        "score": geoguessr_score(distance),
+    }
+
+
 def evaluate_folder(
     predictor, folder: Path, labels_csv: Path
 ) -> tuple[dict[str, float], list[dict]]:
@@ -62,18 +77,34 @@ def evaluate_folder(
         images = [Image.open(folder / name).convert("RGB") for name in views["filename"]]
         guess = predictor.predict(images)
         lat, lon = float(views["latitude"].iloc[0]), float(views["longitude"].iloc[0])
-        distance = haversine_km(guess.lat, guess.lon, lat, lon)
-        rows.append(
-            {
-                "group": str(group),
-                "lat": lat,
-                "lon": lon,
-                "guess_lat": guess.lat,
-                "guess_lon": guess.lon,
-                "distance_km": distance,
-                "score": geoguessr_score(distance),
-            }
-        )
+        rows.append(_row(str(group), lat, lon, guess))
     if not rows:
         raise ValueError(f"{labels_csv} has no rows")
+    return summarize([row["distance_km"] for row in rows]), rows
+
+
+def evaluate_rounds(
+    checkpoint_path: Path,
+    rounds_path: Path,
+    device: str = "auto",
+    prior_strength: float = DEFAULT_PRIOR_STRENGTH,
+    test_fraction: float = DEFAULT_TEST_FRACTION,
+) -> tuple[dict[str, float], list[dict]]:
+    """Score a checkpoint on your held-out OpenGuessr rounds, views combined as in the game."""
+    checkpoint = Checkpoint.load(checkpoint_path)
+    _, test = RoundEmbeddings.load(rounds_path).split(test_fraction)
+    if test.backbone != checkpoint.backbone:
+        raise ValueError(
+            f"{rounds_path} was embedded with {test.backbone}, "
+            f"but the model was trained on {checkpoint.backbone}"
+        )
+    if not len(test):
+        raise ValueError(f"No rounds in {rounds_path} are held out for testing yet; play more")
+    checkpoint.head.to(pick_device(device))
+
+    rows = []
+    for round_id in test.round_ids:
+        mask = test.groups == round_id
+        guess = guess_from_embeddings(checkpoint, test.embeddings[mask], prior_strength)
+        rows.append(_row(round_id, float(test.lat[mask][0]), float(test.lon[mask][0]), guess))
     return summarize([row["distance_km"] for row in rows]), rows

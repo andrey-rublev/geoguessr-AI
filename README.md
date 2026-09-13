@@ -134,6 +134,7 @@ Each round is saved to `runs/<timestamp>/round_NN/`:
 | `embed` | Encode OSV-5M shards or your own folder into embeddings |
 | `train` | Train the geocell head; saves the best checkpoint |
 | `predict` | Guess the location of image files |
+| `evaluate` | Score a model on held-out embeddings or a labelled image folder |
 | `calibrate` | Record where the OpenGuessr UI is on screen |
 | `play` | Play OpenGuessr |
 | `locate-map` | Debug: find the world on a map screenshot (`--at LAT LON` prints that point's pixel) |

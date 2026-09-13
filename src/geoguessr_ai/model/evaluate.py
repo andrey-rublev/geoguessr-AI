@@ -8,7 +8,26 @@ import pandas as pd
 from PIL import Image
 
 from ..geo import geoguessr_score, haversine_km
-from .train import summarize
+from .backbone import pick_device
+from .head import Checkpoint
+from .train import evaluate, load_embeddings, summarize
+
+
+def evaluate_embeddings(
+    checkpoint_path: Path, embedding_files: list[Path], device: str = "auto"
+) -> dict[str, float]:
+    """Score a checkpoint on precomputed embeddings, e.g. the OSV-5M test split."""
+    checkpoint = Checkpoint.load(checkpoint_path)
+    x, lat, lon, backbone = load_embeddings(embedding_files)
+    if backbone != checkpoint.backbone:
+        raise ValueError(
+            f"Embeddings come from {backbone} but the model was trained on {checkpoint.backbone}"
+        )
+    dev = pick_device(device)
+    return {
+        "places": len(x),
+        **evaluate(checkpoint.head.to(dev), checkpoint.cells, x, lat, lon, dev),
+    }
 
 
 def evaluate_folder(

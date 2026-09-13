@@ -1,8 +1,25 @@
 import pytest
 from PIL import Image
+from test_train import write_synthetic_embeddings
 
-from geoguessr_ai.model.evaluate import evaluate_folder
+from geoguessr_ai.model.evaluate import evaluate_embeddings, evaluate_folder
 from geoguessr_ai.model.predictor import Guess
+from geoguessr_ai.model.train import TrainConfig, train
+
+
+def test_evaluate_embeddings_matches_backbone(tmp_path):
+    write_synthetic_embeddings(tmp_path / "train.npz", seed=0)
+    write_synthetic_embeddings(tmp_path / "test.npz", n=100, seed=1)
+    write_synthetic_embeddings(tmp_path / "other.npz", n=100, backbone="other", seed=2)
+    model = tmp_path / "model.pt"
+    cfg = TrainConfig(n_cells=8, hidden=64, epochs=10, batch_size=64, lr=3e-3)
+    train([tmp_path / "train.npz"], model, cfg, device="cpu", log=lambda _: None)
+
+    metrics = evaluate_embeddings(model, [tmp_path / "test.npz"], device="cpu")
+    assert metrics["places"] == 100
+    assert metrics["within_750km"] > 0.9
+    with pytest.raises(ValueError, match="trained on"):
+        evaluate_embeddings(model, [tmp_path / "other.npz"], device="cpu")
 
 
 class ParisPredictor:

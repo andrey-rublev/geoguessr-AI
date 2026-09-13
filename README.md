@@ -60,7 +60,12 @@ geoguessr-ai embed --split test --shards 4
 geoguessr-ai evaluate --embeddings data/embeddings/openai__clip-vit-base-patch32/osv5m-test-04.npz
 ```
 
-Trained on one shard, the model averages about 2,270 points (out of 5,000) per location, with a median miss of about 1,100 km.
+Results on the test photos:
+
+| Training data | Mean score (out of 5,000) | Median miss | Within 750 km |
+| --- | --- | --- | --- |
+| 1 shard (~50k photos) | 2,238 | 1,129 km | 42% |
+| 4 shards (~200k photos) | 2,496 | 823 km | 49% |
 
 ### Train further
 

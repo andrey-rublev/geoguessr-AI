@@ -15,6 +15,23 @@ import numpy as np
 
 from ..geo import EARTH_RADIUS_KM, SCORE_SCALE_KM, from_unit_vectors, to_unit_vectors
 
+DEFAULT_PRIOR_STRENGTH = 1.0
+
+
+def debias(log_probs: np.ndarray, log_prior: np.ndarray | None, strength: float) -> np.ndarray:
+    """Turn log-probabilities into probabilities with the training prior divided out.
+
+    Training photos cluster in Europe and North America, so the raw model over-predicts
+    them; the game spreads rounds far more evenly. Subtracting ``strength * log_prior``
+    (logit adjustment) corrects for that: 0 keeps the raw model, 1 removes the prior.
+    """
+    adjusted = np.asarray(log_probs, dtype=np.float64)
+    if log_prior is not None and strength:
+        adjusted = adjusted - strength * log_prior
+    adjusted = adjusted - adjusted.max(axis=-1, keepdims=True)
+    probs = np.exp(adjusted)
+    return probs / probs.sum(axis=-1, keepdims=True)
+
 
 @dataclass
 class GeoCells:
@@ -50,6 +67,11 @@ class GeoCells:
         """(N, K) great-circle distances from each location to each cell centre."""
         cos = np.clip(to_unit_vectors(lat, lon) @ self.unit_vectors.T, -1.0, 1.0)
         return EARTH_RADIUS_KM * np.arccos(cos)
+
+    def log_prior(self, lat, lon) -> np.ndarray:
+        """Log share of training photos per cell (add-one smoothed)."""
+        counts = np.bincount(self.assign(lat, lon), minlength=len(self))
+        return np.log((counts + 1) / (counts.sum() + len(self)))
 
     def soft_targets(self, lat, lon, tau_km: float) -> np.ndarray:
         """Haversine label smoothing: cells near the true location share the target mass."""

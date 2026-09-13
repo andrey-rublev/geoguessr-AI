@@ -2,7 +2,24 @@ import numpy as np
 import pytest
 
 from geoguessr_ai.geo import haversine_km
-from geoguessr_ai.model.geocells import GeoCells
+from geoguessr_ai.model.geocells import GeoCells, debias
+
+
+def test_log_prior_counts_training_photos_per_cell():
+    cells = GeoCells(np.array([PARIS, TOKYO]))
+    lat = np.array([48.9, 48.8, 49.0, 35.7])
+    lon = np.array([2.3, 2.4, 2.2, 139.7])
+    np.testing.assert_allclose(np.exp(cells.log_prior(lat, lon)), [4 / 6, 2 / 6])
+
+
+def test_debias_removes_the_prior():
+    log_prior = np.log(np.array([0.7, 0.2, 0.1]))
+    np.testing.assert_allclose(debias(log_prior, log_prior, strength=1.0), [1 / 3] * 3)
+    np.testing.assert_allclose(debias(log_prior, log_prior, strength=0.0), [0.7, 0.2, 0.1])
+    np.testing.assert_allclose(debias(log_prior, None, strength=1.0), [0.7, 0.2, 0.1])
+    batch = debias(np.stack([log_prior, log_prior]), log_prior, strength=0.5)
+    assert batch.shape == (2, 3) and np.allclose(batch.sum(axis=1), 1)
+
 
 PARIS = (48.86, 2.35)
 BRUSSELS = (50.85, 4.35)

@@ -39,6 +39,15 @@ def test_train_learns_city_locations(tmp_path):
     assert ckpt.head(__import__("torch").zeros(1, 32)).shape == (1, len(ckpt.cells))
 
 
+def test_directories_never_include_test_split_files(tmp_path):
+    for name in ("osv5m-train-00.npz", "osv5m-test-04.npz", "folder-mine.npz"):
+        write_synthetic_embeddings(tmp_path / name, n=60)
+    found = {f.name for f in resolve_embedding_files([tmp_path])}
+    assert found == {"osv5m-train-00.npz", "folder-mine.npz"}
+    explicit = resolve_embedding_files([tmp_path / "osv5m-test-04.npz"])
+    assert [f.name for f in explicit] == ["osv5m-test-04.npz"]
+
+
 def test_load_embeddings_rejects_mixed_backbones(tmp_path):
     write_synthetic_embeddings(tmp_path / "a.npz", backbone="one")
     write_synthetic_embeddings(tmp_path / "b.npz", backbone="two")

@@ -34,11 +34,15 @@ class TrainConfig:
 
 
 def resolve_embedding_files(patterns: Sequence[str | Path]) -> list[Path]:
-    """Expand directories and glob patterns (PowerShell doesn't expand globs for us)."""
+    """Expand directories and glob patterns (PowerShell doesn't expand globs for us).
+
+    Directories skip test-split files (``*-test-*``) so a held-out set embedded into the
+    same folder can never leak into training; name such files explicitly to include them.
+    """
     files: set[Path] = set()
     for pattern in map(str, patterns):
         if Path(pattern).is_dir():
-            files.update(Path(pattern).glob("*.npz"))
+            files.update(f for f in Path(pattern).glob("*.npz") if "-test-" not in f.name)
         else:
             files.update(Path(p) for p in glob.glob(pattern))
     files = {f for f in files if not f.name.endswith(".partial.npz")}

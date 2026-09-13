@@ -13,7 +13,7 @@ Each round has three stages:
 **1. Look.** The bot takes a screenshot of the panorama, drags the view to rotate the camera, and repeats (4 views by default). Screen capture uses [`mss`](https://github.com/BoboTiG/python-mss) and the mouse is driven with [`pyautogui`](https://github.com/asweigart/pyautogui).
 
 **2. Guess.** This is the model you train:
-- Each view is split into square crops and encoded by a **frozen CLIP image encoder** (`openai/clip-vit-base-patch32` by default).
+- Each view is encoded whole and as overlapping square tiles by a **frozen CLIP image encoder** (`openai/clip-vit-base-patch32` by default).
 - A small **MLP head** classifies the embeddings into **geocells**: regions of the globe from k-means on the training locations, so dense areas get small cells.
 - Training uses **haversine label smoothing**, so a near miss is penalised less than a guess on the wrong continent.
 - All crops vote together. The final pin goes where the **expected GeoGuessr score is highest**, not simply on the likeliest cell. If the model is split between Paris and Brussels, a guess between them beats a coin flip.

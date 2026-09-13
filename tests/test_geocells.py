@@ -21,9 +21,26 @@ def test_debias_removes_the_prior():
     assert batch.shape == (2, 3) and np.allclose(batch.sum(axis=1), 1)
 
 
+def test_debias_can_add_the_games_own_prior():
+    even = np.log(np.full(3, 1 / 3))
+    game = np.log(np.array([0.6, 0.3, 0.1]))
+    np.testing.assert_allclose(debias(even, None, 1.0, game, 1.0), [0.6, 0.3, 0.1])
+    np.testing.assert_allclose(debias(even, None, 1.0, game, 0.0), [1 / 3] * 3)
+
+
 PARIS = (48.86, 2.35)
 BRUSSELS = (50.85, 4.35)
 TOKYO = (35.68, 139.69)
+
+
+def test_spread_log_prior_favours_played_places_without_overfitting():
+    cells = GeoCells(np.array([PARIS, BRUSSELS, TOKYO]))
+    one = np.exp(cells.spread_log_prior([48.9], [2.4]))
+    many = np.exp(cells.spread_log_prior(np.full(500, 48.9), np.full(500, 2.4)))
+    assert one.sum() == pytest.approx(1.0) and many.sum() == pytest.approx(1.0)
+    assert one.max() < 0.4  # a single round barely moves it off an even third each
+    assert many[0] > many[1] > many[2]  # Brussels is near Paris, Tokyo is not
+    assert many[2] < 0.05
 
 
 def test_fit_recovers_clusters():

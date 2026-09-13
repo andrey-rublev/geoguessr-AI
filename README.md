@@ -62,6 +62,8 @@ geoguessr-ai embed --split test --shards 4
 geoguessr-ai evaluate --embeddings data/embeddings/openai__clip-vit-base-patch32/osv5m-test-04.npz
 ```
 
+**Regional bias.** OSV-5M's training photos are crowded into a few regions: in shard 0, 41% are from Europe and 28% from North America. The test split, and the game, spread locations far more evenly (in the test split, Africa is 18% and Asia 22%). A raw model therefore guesses "Europe" too often. Predictions correct for this by default, dividing out the share of training photos in each geocell (`--prior-strength 1.0`). On the test split this cut the median error from 1,176 km to 1,081 km. Pass `--prior-strength 0` to turn it off.
+
 Try the model on any photo:
 
 ```bash

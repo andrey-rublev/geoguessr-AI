@@ -6,7 +6,8 @@ A self-trained geolocation AI that plays [OpenGuessr](https://openguessr.com) by
 
 1. **Look:** screenshots the Street View and rotates the camera to capture 4 views.
 2. **Guess:** a frozen CLIP image encoder plus a small classifier you train picks the most likely region of the world.
-3. **Act:** finds the world on the minimap by matching coastlines, clicks the guessed spot, then presses Guess and Continue.
+3. **Act:** finds the world on the minimap by matching coastlines, clicks the guessed spot, and presses Guess.
+4. **Learn:** reads the real location off the result screen, saves the round, and presses Continue.
 
 It only uses what's on screen. It never reads the page's code.
 
@@ -110,6 +111,21 @@ geoguessr-ai play --rounds 10
 ```
 
 **Stop:** press **F8**, or move the mouse into a screen corner. Re-run `calibrate` if you move the browser window.
+
+## Learn from your rounds
+
+Every round is saved in `runs/` with the real location, read off the result screen. These are real game images, unlike OSV-5M's phone and dashcam photos, so they can make the model better at OpenGuessr:
+
+```powershell
+geoguessr-ai embed --rounds                          # 30% of rounds are held out for testing
+geoguessr-ai train --out models/geoguessr-rounds.pt  # mixes your rounds into training
+geoguessr-ai evaluate --rounds --model models/geoguessr.pt
+geoguessr-ai evaluate --rounds --model models/geoguessr-rounds.pt
+```
+
+- Training takes up to 15% of each batch from your rounds (`--real-fraction`) and learns where the game tends to send you (`--game-prior-strength`, 0 = off).
+- Keep the new model only if its mean score beats the old one by more than about twice `mean_score_stderr`. That takes a few hundred rounds.
+- Reading the answer zooms the result map out and adds about 5 to 20 seconds per round (closer guesses take longer). `play --no-answers` skips it.
 
 ## Commands
 

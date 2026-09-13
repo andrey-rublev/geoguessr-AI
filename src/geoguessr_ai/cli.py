@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .config import DEFAULT_LAYOUT_PATH
 from .model.backbone import DEFAULT_BACKBONE
-from .model.geocells import DEFAULT_PRIOR_STRENGTH
+from .model.geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
 
 DEFAULT_MODEL = Path("models/geoguessr.pt")
 DEFAULT_DATA = Path("data/osv5m")
@@ -92,9 +92,8 @@ def cmd_predict(args: argparse.Namespace) -> None:
 
     from .model.predictor import GeoPredictor
 
-    guess = GeoPredictor(args.model, args.device, args.prior_strength).predict(
-        [Image.open(p) for p in args.images]
-    )
+    predictor = GeoPredictor(args.model, args.device, args.prior_strength, args.game_prior_strength)
+    guess = predictor.predict([Image.open(p) for p in args.images])
     print(
         f"Guess: {guess.lat:.4f}, {guess.lon:.4f}  (model expects ~{guess.expected_score:,.0f} pts)"
     )
@@ -119,7 +118,9 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     from .model.train import resolve_embedding_files
 
     if args.rounds:
-        metrics, rows = evaluate_rounds(args.model, args.rounds, args.device, args.prior_strength)
+        metrics, rows = evaluate_rounds(
+            args.model, args.rounds, args.device, args.prior_strength, args.game_prior_strength
+        )
         _print_rows(rows)
         summary = {"rounds": len(rows), **metrics}
         if len(rows) > 1:  # how far the mean score could move by luck alone
@@ -137,7 +138,7 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
         return
     if not (args.images and args.labels):
         raise SystemExit("Pass --rounds, --embeddings, or --images together with --labels")
-    predictor = GeoPredictor(args.model, args.device, args.prior_strength)
+    predictor = GeoPredictor(args.model, args.device, args.prior_strength, args.game_prior_strength)
     metrics, rows = evaluate_folder(predictor, args.images, args.labels)
     _print_rows(rows)
     print(json.dumps({"places": len(rows), **metrics}, indent=2))
@@ -168,7 +169,7 @@ def cmd_play(args: argparse.Namespace) -> None:
     layout = Layout.load(args.layout)
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Train a model first (see README).")
-    predictor = GeoPredictor(args.model, args.device, args.prior_strength)
+    predictor = GeoPredictor(args.model, args.device, args.prior_strength, args.game_prior_strength)
     settings = BotSettings(
         rounds=args.rounds,
         views=args.views,
@@ -202,6 +203,12 @@ def build_parser() -> argparse.ArgumentParser:
             type=float,
             default=DEFAULT_PRIOR_STRENGTH,
             help="how much to discount regions over-represented in training (0 = off)",
+        )
+        p.add_argument(
+            "--game-prior-strength",
+            type=float,
+            default=DEFAULT_GAME_PRIOR_STRENGTH,
+            help="how much to favour places your training rounds came from (0 = off)",
         )
 
     p = add("calibrate", cmd_calibrate, "Record where the OpenGuessr UI is on your screen.")

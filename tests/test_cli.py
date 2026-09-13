@@ -31,6 +31,9 @@ def test_every_command_parses(argv):
 def test_model_commands_take_prior_strength(command):
     assert build_parser().parse_args(command).prior_strength == 1.0
     assert build_parser().parse_args([*command, "--prior-strength", "0"]).prior_strength == 0.0
+    game = build_parser().parse_args([*command, "--game-prior-strength", "0.5"])
+    assert game.game_prior_strength == 0.5
+    assert build_parser().parse_args(command).game_prior_strength == 1.0
 
 
 def test_round_options():

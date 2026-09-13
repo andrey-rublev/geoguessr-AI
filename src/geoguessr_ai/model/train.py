@@ -13,7 +13,7 @@ import torch
 
 from ..geo import EARTH_RADIUS_KM, geoguessr_score, haversine_km, to_unit_vectors
 from .backbone import pick_device
-from .geocells import GeoCells
+from .geocells import DEFAULT_PRIOR_STRENGTH, GeoCells, debias
 from .head import Checkpoint, GeoHead
 
 
@@ -96,13 +96,20 @@ def summarize(distances_km: np.ndarray) -> dict[str, float]:
 
 @torch.inference_mode()
 def evaluate(
-    head: GeoHead, cells: GeoCells, x: np.ndarray, lat: np.ndarray, lon: np.ndarray, device
+    head: GeoHead,
+    cells: GeoCells,
+    x: np.ndarray,
+    lat: np.ndarray,
+    lon: np.ndarray,
+    device,
+    log_prior: np.ndarray | None = None,
+    prior_strength: float = DEFAULT_PRIOR_STRENGTH,
 ) -> dict[str, float]:
     head.eval()
     guesses = []
     for i in range(0, len(x), 4096):
-        logits = head(torch.from_numpy(x[i : i + 4096]).to(device))
-        for probs in torch.softmax(logits, dim=1).cpu().numpy():
+        log_probs = torch.log_softmax(head(torch.from_numpy(x[i : i + 4096]).to(device)), dim=1)
+        for probs in debias(log_probs.cpu().numpy(), log_prior, prior_strength):
             guesses.append(cells.best_guess(probs)[:2])
     g = np.array(guesses)
     return summarize(haversine_km(g[:, 0], g[:, 1], lat, lon))
@@ -127,6 +134,7 @@ def train(
     n_cells = cfg.n_cells or int(np.clip(len(tr) // 40, 64, 4096))
     log(f"{len(tr):,} train / {len(val):,} val images, fitting {n_cells} geocells...")
     cells = GeoCells.fit(lat[tr], lon[tr], n_cells, seed=cfg.seed)
+    log_prior = cells.log_prior(lat[tr], lon[tr])
 
     dev = pick_device(device)
     torch.manual_seed(cfg.seed)
@@ -159,7 +167,7 @@ def train(
             sched.step()
             total_loss += loss.item() * len(idx)
 
-        metrics = evaluate(head, cells, x[val], lat[val], lon[val], dev)
+        metrics = evaluate(head, cells, x[val], lat[val], lon[val], dev, log_prior=log_prior)
         log(
             f"epoch {epoch:>3}/{cfg.epochs}  loss {total_loss / len(tr):.3f}  "
             f"val median {metrics['median_km']:,.0f} km  "
@@ -168,7 +176,7 @@ def train(
         )
         if best is None or metrics["mean_score"] > best["mean_score"]:
             best = {**metrics, "epoch": epoch}
-            Checkpoint(head.cpu(), cells, backbone, best).save(out_path)
+            Checkpoint(head.cpu(), cells, backbone, best, log_prior).save(out_path)
             head.to(dev)
 
     log(f"Saved best checkpoint (epoch {best['epoch']}) to {out_path}")

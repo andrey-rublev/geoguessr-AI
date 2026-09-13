@@ -10,6 +10,7 @@ import torch
 from PIL import Image
 
 from .backbone import ImageEncoder, square_crops
+from .geocells import DEFAULT_PRIOR_STRENGTH, debias
 from .head import Checkpoint
 
 
@@ -24,7 +25,13 @@ class Guess:
 
 
 class GeoPredictor:
-    def __init__(self, checkpoint_path: Path, device: str = "auto") -> None:
+    def __init__(
+        self,
+        checkpoint_path: Path,
+        device: str = "auto",
+        prior_strength: float = DEFAULT_PRIOR_STRENGTH,
+    ) -> None:
+        self.prior_strength = prior_strength
         self.checkpoint = Checkpoint.load(checkpoint_path)
         self.encoder = ImageEncoder(self.checkpoint.backbone, device)
         self.head = self.checkpoint.head.to(self.encoder.device).eval()
@@ -38,7 +45,7 @@ class GeoPredictor:
         embeddings = self.encoder.encode(crops).to(self.encoder.device)
         # Each crop votes; summing log-probabilities rewards cells every view agrees on.
         log_probs = torch.log_softmax(self.head(embeddings), dim=1).mean(dim=0)
-        probs = torch.softmax(log_probs, dim=0).cpu().numpy()
+        probs = debias(log_probs.cpu().numpy(), self.checkpoint.log_prior, self.prior_strength)
 
         cells = self.checkpoint.cells
         lat, lon, expected = cells.best_guess(probs)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -34,6 +35,8 @@ class Checkpoint:
     cells: GeoCells
     backbone: str
     metrics: dict[str, float] = field(default_factory=dict)
+    log_prior: np.ndarray | None = None
+    """Log share of training photos per cell, used to debias predictions."""
 
     def save(self, path: Path) -> None:
         path = Path(path)
@@ -46,6 +49,7 @@ class Checkpoint:
                 "centroids": torch.from_numpy(self.cells.centroids),
                 "backbone": self.backbone,
                 "metrics": self.metrics,
+                "log_prior": None if self.log_prior is None else torch.from_numpy(self.log_prior),
             },
             path,
         )
@@ -56,4 +60,11 @@ class Checkpoint:
         cells = GeoCells(raw["centroids"].numpy())
         head = GeoHead(raw["embed_dim"], len(cells), hidden=raw["hidden"])
         head.load_state_dict(raw["state_dict"])
-        return cls(head.eval(), cells, raw["backbone"], raw["metrics"])
+        log_prior = raw.get("log_prior")  # absent in checkpoints from before debiasing
+        return cls(
+            head.eval(),
+            cells,
+            raw["backbone"],
+            raw["metrics"],
+            None if log_prior is None else log_prior.numpy(),
+        )

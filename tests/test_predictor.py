@@ -41,6 +41,26 @@ def test_predict_uses_every_crop_and_returns_likeliest_place(tmp_path, monkeypat
     assert guess.expected_score > 4000
 
 
+def test_prior_strength_corrects_for_crowded_training_regions(tmp_path, monkeypatch):
+    head = GeoHead(embed_dim=8, n_cells=3, hidden=4)
+    with torch.no_grad():
+        for p in head.parameters():
+            p.zero_()
+        head.net[-1].bias.copy_(torch.tensor([2.0, 2.5, 0.0]))  # leans Tokyo
+    # ...but 85% of the training photos were in Tokyo, so the lean is mostly prior.
+    log_prior = np.log(np.array([0.10, 0.85, 0.05]))
+    path = tmp_path / "model.pt"
+    Checkpoint(head, GeoCells(CENTROIDS), "fake/backbone", log_prior=log_prior).save(path)
+    monkeypatch.setattr(predictor_module, "ImageEncoder", FakeEncoder)
+    view = [Image.new("RGB", (200, 200))]
+
+    raw = predictor_module.GeoPredictor(path, prior_strength=0.0).predict(view)
+    debiased = predictor_module.GeoPredictor(path, prior_strength=1.0).predict(view)
+
+    assert (raw.lat, raw.lon) == pytest.approx(tuple(CENTROIDS[1]))
+    assert (debiased.lat, debiased.lon) == pytest.approx(tuple(CENTROIDS[0]))
+
+
 def test_predict_requires_images(tmp_path, monkeypatch):
     path = tmp_path / "model.pt"
     Checkpoint(GeoHead(8, 3, hidden=4), GeoCells(CENTROIDS), "fake").save(path)

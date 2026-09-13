@@ -9,12 +9,16 @@ from PIL import Image
 
 from ..geo import geoguessr_score, haversine_km
 from .backbone import pick_device
+from .geocells import DEFAULT_PRIOR_STRENGTH
 from .head import Checkpoint
 from .train import evaluate, load_embeddings, summarize
 
 
 def evaluate_embeddings(
-    checkpoint_path: Path, embedding_files: list[Path], device: str = "auto"
+    checkpoint_path: Path,
+    embedding_files: list[Path],
+    device: str = "auto",
+    prior_strength: float = DEFAULT_PRIOR_STRENGTH,
 ) -> dict[str, float]:
     """Score a checkpoint on precomputed embeddings, e.g. the OSV-5M test split."""
     checkpoint = Checkpoint.load(checkpoint_path)
@@ -26,7 +30,16 @@ def evaluate_embeddings(
     dev = pick_device(device)
     return {
         "places": len(x),
-        **evaluate(checkpoint.head.to(dev), checkpoint.cells, x, lat, lon, dev),
+        **evaluate(
+            checkpoint.head.to(dev),
+            checkpoint.cells,
+            x,
+            lat,
+            lon,
+            dev,
+            log_prior=checkpoint.log_prior,
+            prior_strength=prior_strength,
+        ),
     }
 
 

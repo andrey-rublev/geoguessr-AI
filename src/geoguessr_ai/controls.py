@@ -7,11 +7,16 @@
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 
 from .config import Point
 from .screen import enable_dpi_awareness
+
+# pyautogui passes the scroll amount straight to the OS: raw wheel units on Windows
+# (120 per notch), whole notches on macOS and Linux.
+WHEEL_NOTCH = 120 if sys.platform == "win32" else 1
 
 
 class StopRequested(Exception):
@@ -81,7 +86,7 @@ class Controls:
         self.move(p)
         for _ in range(abs(clicks)):
             self.check()
-            self._gui.scroll(120 if clicks > 0 else -120)
+            self._gui.scroll(WHEEL_NOTCH if clicks > 0 else -WHEEL_NOTCH)
             time.sleep(0.08)
 
     def close(self) -> None:

@@ -35,7 +35,7 @@ def test_predict_uses_every_crop_and_returns_likeliest_place(tmp_path, monkeypat
     views = [Image.new("RGB", (1600, 800)), Image.new("RGB", (400, 400))]
     guess = model.predict(views)
 
-    assert model.encoder.seen == 3  # a 2:1 view is split into two square crops
+    assert model.encoder.seen == 4  # a 2:1 view gives itself plus two square tiles
     assert (guess.lat, guess.lon) == pytest.approx(tuple(CENTROIDS[1]))
     assert guess.top_cells[0][2] > 0.9
     assert guess.expected_score > 4000

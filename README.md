@@ -54,6 +54,14 @@ geoguessr-ai train
 
 `train` prints validation metrics each epoch: median error in km, mean GeoGuessr score, and accuracy at 25 / 200 / 750 / 2500 km. It keeps the best checkpoint at `models/geoguessr.pt`.
 
+The validation set comes from the same shards as training, so photos from the same street can land on both sides and make scores look better than they are. For an honest number, score the model on OSV-5M's separate **test split**:
+
+```bash
+geoguessr-ai download --split test --shards 4     # 0.45 GB, ~10k images
+geoguessr-ai embed --split test --shards 4
+geoguessr-ai evaluate --embeddings data/embeddings/openai__clip-vit-base-patch32/osv5m-test-04.npz
+```
+
 Try the model on any photo:
 
 ```bash

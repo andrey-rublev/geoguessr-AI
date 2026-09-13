@@ -12,10 +12,34 @@ It only uses what's on screen. It never reads the page's code.
 
 ## Setup (Windows PowerShell)
 
+First time only:
+
 ```powershell
+cd C:\path\to\geoguessr-AI
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
+```
+
+Every time you open a new terminal, enter the venv:
+
+```powershell
+cd C:\path\to\geoguessr-AI
+.\.venv\Scripts\Activate.ps1
+```
+
+Your prompt now starts with `(.venv)`. Type `deactivate` to leave.
+
+If activation fails with "running scripts is disabled", run this once, then activate again:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Or skip activating and call the venv's copy directly:
+
+```powershell
+.\.venv\Scripts\geoguessr-ai.exe play --dry-run
 ```
 
 ## Train
@@ -40,11 +64,37 @@ Trained on one shard, the model averages about 2,270 points (out of 5,000) per l
 
 ### Train further
 
-- **More data:** `download` and `embed` more shards (e.g. `--shards 1 2 3`), then `train` again. It uses every embedded shard.
-- **Better encoder:** `--backbone geolocal/StreetCLIP` is much more accurate but about 10× slower; best with a GPU.
-- **Your own photos:** `embed --images <folder> --labels labels.csv`, where the CSV has `filename,latitude,longitude` columns.
+1. Add more shards. There are 98, each about 2.5 GB:
 
-Keep a new model only if `evaluate` shows a higher mean score.
+   ```powershell
+   geoguessr-ai download --shards 4 5 6 7
+   geoguessr-ai embed --shards 4 5 6 7
+   ```
+
+2. Retrain on everything embedded so far (test photos are skipped automatically):
+
+   ```powershell
+   geoguessr-ai train --out models/geoguessr-new.pt
+   ```
+
+3. Score it, and keep it only if the mean score is higher than before:
+
+   ```powershell
+   geoguessr-ai evaluate --embeddings data/embeddings/openai__clip-vit-base-patch32/osv5m-test-04.npz --model models/geoguessr-new.pt
+   ```
+
+4. If it's better, make it the default model:
+
+   ```powershell
+   Copy-Item models/geoguessr-new.pt models/geoguessr.pt
+   ```
+
+Other ways to improve it:
+
+- **Better encoder:** add `--backbone geolocal/StreetCLIP` to `embed`. It's much more accurate but about 10× slower, and you have to re-embed every shard with it.
+- **Your own photos:** `geoguessr-ai embed --images <folder> --labels <folder>/labels.csv`, where the CSV has `filename,latitude,longitude` columns.
+
+Once a shard is embedded, its zip in `data/osv5m/images/train/` can be deleted to free space.
 
 ## Play
 

@@ -21,7 +21,7 @@ from geoguessr_ai.model.rounds import ROUNDS_FILE
         ["predict", "a.jpg"],
         ["evaluate", "--embeddings", "data/embeddings/x/osv5m-test-04.npz"],
         ["evaluate", "--images", "photos", "--labels", "photos/labels.csv"],
-        ["play", "--dry-run", "--rounds", "1"],
+        ["play", "--dry-run", "--rounds", "1", "--no-text"],
         ["learn", "--rounds", "20"],
         ["learn", "--no-train"],
     ],
@@ -32,12 +32,17 @@ def test_every_command_parses(argv):
 
 
 @pytest.mark.parametrize("command", [["predict", "a.jpg"], ["evaluate"], ["play"], ["learn"]])
-def test_model_commands_take_prior_strength(command):
-    assert build_parser().parse_args(command).prior_strength == 1.0
-    assert build_parser().parse_args([*command, "--prior-strength", "0"]).prior_strength == 0.0
-    game = build_parser().parse_args([*command, "--game-prior-strength", "0.5"])
-    assert game.game_prior_strength == 0.5
-    assert build_parser().parse_args(command).game_prior_strength == 1.0
+def test_model_commands_take_prior_strengths(command):
+    parser = build_parser()
+    defaults = parser.parse_args(command)
+    assert (defaults.prior_strength, defaults.game_prior_strength) == (1.0, 1.0)
+    assert defaults.coverage_strength == 1.0
+    changed = parser.parse_args(
+        [*command, "--prior-strength", "0", "--game-prior-strength", "0.5"]
+        + ["--coverage-strength", "0"]
+    )
+    assert (changed.prior_strength, changed.game_prior_strength) == (0.0, 0.5)
+    assert changed.coverage_strength == 0.0
 
 
 def test_round_options():
@@ -47,6 +52,8 @@ def test_round_options():
     assert parser.parse_args(["evaluate"]).rounds is None
     train_args = parser.parse_args(["train", "--real-fraction", "0.3"])
     assert train_args.real_fraction == 0.3 and train_args.rounds is None
+    assert parser.parse_args(["play", "--no-text"]).no_text
+    assert not parser.parse_args(["learn"]).no_text
 
 
 @pytest.mark.parametrize("retrained_score,switched", [(2100.0, True), (1900.0, False)])
@@ -74,7 +81,7 @@ def test_learn_switches_to_the_retrained_model_unless_it_scores_worse(
     )
     scores = {model: 2000.0, retrained: retrained_score}
     monkeypatch.setattr(
-        evaluate, "evaluate_rounds", lambda path, *rest: ({"mean_score": scores[path]}, [])
+        evaluate, "evaluate_rounds", lambda path, *a, **kw: ({"mean_score": scores[path]}, [])
     )
     args = build_parser().parse_args(
         ["learn", "--model", str(model), "--embeddings", str(tmp_path)]

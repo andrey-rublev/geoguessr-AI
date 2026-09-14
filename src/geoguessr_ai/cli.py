@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from .config import DEFAULT_LAYOUT_PATH
+from .knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
 from .model.backbone import DEFAULT_BACKBONE
 from .model.geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
 
@@ -19,6 +20,18 @@ DEFAULT_RUNS = Path("runs")
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
     return Path(root) / backbone.replace("/", "__")
+
+
+def _predictor(args: argparse.Namespace):
+    from .model.predictor import GeoPredictor
+
+    return GeoPredictor(
+        args.model,
+        args.device,
+        args.prior_strength,
+        args.game_prior_strength,
+        args.coverage_strength,
+    )
 
 
 def cmd_calibrate(args: argparse.Namespace) -> None:
@@ -91,14 +104,12 @@ def cmd_train(args: argparse.Namespace) -> None:
 def cmd_predict(args: argparse.Namespace) -> None:
     from PIL import Image
 
-    from .model.predictor import GeoPredictor
-
-    predictor = GeoPredictor(args.model, args.device, args.prior_strength, args.game_prior_strength)
-    guess = predictor.predict([Image.open(p) for p in args.images])
+    guess = _predictor(args).predict([Image.open(p) for p in args.images])
     print(
         f"Guess: {guess.lat:.4f}, {guess.lon:.4f}  (model expects ~{guess.expected_score:,.0f} pts)"
     )
     print(f"  https://www.google.com/maps?q={guess.lat:.5f},{guess.lon:.5f}")
+    print("  countries: " + ", ".join(f"{code} {share:.0%}" for code, share in guess.countries))
     for lat, lon, prob in guess.top_cells:
         print(f"  {prob:6.1%}  {lat:8.3f}, {lon:8.3f}")
 
@@ -115,12 +126,16 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     import statistics
 
     from .model.evaluate import evaluate_embeddings, evaluate_folder, evaluate_rounds
-    from .model.predictor import GeoPredictor
     from .model.train import resolve_embedding_files
 
     if args.rounds:
         metrics, rows = evaluate_rounds(
-            args.model, args.rounds, args.device, args.prior_strength, args.game_prior_strength
+            args.model,
+            args.rounds,
+            args.device,
+            args.prior_strength,
+            args.game_prior_strength,
+            coverage_strength=args.coverage_strength,
         )
         _print_rows(rows)
         summary = {"rounds": len(rows), **metrics}
@@ -139,8 +154,7 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
         return
     if not (args.images and args.labels):
         raise SystemExit("Pass --rounds, --embeddings, or --images together with --labels")
-    predictor = GeoPredictor(args.model, args.device, args.prior_strength, args.game_prior_strength)
-    metrics, rows = evaluate_folder(predictor, args.images, args.labels)
+    metrics, rows = evaluate_folder(_predictor(args), args.images, args.labels)
     _print_rows(rows)
     print(json.dumps({"places": len(rows), **metrics}, indent=2))
 
@@ -161,21 +175,21 @@ def cmd_locate_map(args: argparse.Namespace) -> None:
 
 
 def _run_bot(args: argparse.Namespace, settings):
-    """Load the model and play. Returns the predictor, whose encoder learning can reuse."""
+    """Load everything, then play. Returns the predictor, whose encoder learning can reuse."""
     from .config import Layout
     from .controls import Controls
     from .game import OpenGuessrBot
-    from .model.predictor import GeoPredictor
     from .screen import Screen
 
     layout = Layout.load(args.layout)
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Train a model first (see README).")
-    predictor = GeoPredictor(args.model, args.device, args.prior_strength, args.game_prior_strength)
+    predictor = _predictor(args)
     with Screen() as screen, Controls(dry_run=settings.dry_run, stop_key=args.stop_key) as controls:
+        bot = OpenGuessrBot(layout, predictor, settings, screen, controls)
         print(f"Starting in {args.start_delay:g}s - switch to the OpenGuessr window.")
         controls.sleep(args.start_delay)
-        OpenGuessrBot(layout, predictor, settings, screen, controls).play()
+        bot.play()
     return predictor
 
 
@@ -186,6 +200,7 @@ def cmd_play(args: argparse.Namespace) -> None:
         rounds=args.rounds,
         views=args.views,
         dry_run=args.dry_run,
+        read_text=not args.no_text,
         record_answers=False,
         debug_dir=None if args.no_debug else args.debug_dir,
     )
@@ -196,7 +211,11 @@ def cmd_learn(args: argparse.Namespace) -> None:
     from .game import BotSettings
 
     settings = BotSettings(
-        rounds=args.rounds, views=args.views, record_answers=True, debug_dir=args.runs
+        rounds=args.rounds,
+        views=args.views,
+        read_text=not args.no_text,
+        record_answers=True,
+        debug_dir=args.runs,
     )
     predictor = _run_bot(args, settings)
     if not args.no_train:
@@ -229,9 +248,14 @@ def learn_from_rounds(args: argparse.Namespace, encoder) -> None:
     train(photos, retrained, TrainConfig(), rounds_path=rounds_path, device=args.device)
 
     if len(held_out):
-        strengths = (args.device, args.prior_strength, args.game_prior_strength)
-        before = evaluate_rounds(args.model, rounds_path, *strengths)[0]["mean_score"]
-        after = evaluate_rounds(retrained, rounds_path, *strengths)[0]["mean_score"]
+        options = {
+            "device": args.device,
+            "prior_strength": args.prior_strength,
+            "game_prior_strength": args.game_prior_strength,
+            "coverage_strength": args.coverage_strength,
+        }
+        before = evaluate_rounds(args.model, rounds_path, **options)[0]["mean_score"]
+        after = evaluate_rounds(retrained, rounds_path, **options)[0]["mean_score"]
         print(f"Mean score on held-out rounds: {before:,.0f} before retraining, {after:,.0f} after")
         if after < before:
             print(f"Keeping {args.model}. The retrained model is saved as {retrained}")
@@ -270,6 +294,12 @@ def build_parser() -> argparse.ArgumentParser:
             default=DEFAULT_GAME_PRIOR_STRENGTH,
             help="how much to favour places your training rounds came from (0 = off)",
         )
+        p.add_argument(
+            "--coverage-strength",
+            type=float,
+            default=DEFAULT_COVERAGE_STRENGTH,
+            help="how much to avoid countries with little or no Street View (0 = off)",
+        )
 
     def add_game_options(p: argparse.ArgumentParser) -> None:
         p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
@@ -277,6 +307,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT_PATH)
         p.add_argument("--rounds", type=int, default=5)
         p.add_argument("--views", type=int, default=4, help="screenshots per round")
+        p.add_argument("--no-text", action="store_true", help="don't read signs (faster)")
         p.add_argument("--start-delay", type=float, default=5.0)
         p.add_argument("--stop-key", default="f8")
         add_device(p)

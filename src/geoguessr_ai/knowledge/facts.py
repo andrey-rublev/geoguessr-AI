@@ -16,8 +16,11 @@ import numpy as np
 
 from .countries import country_codes
 
-COVERAGE_WEIGHTS = {"full": 1.0, "some": 0.2, "none": 0.01}
-"""How likely the game is to send you to a country, relative to one with full coverage."""
+COVERAGE_WEIGHTS = {"full": 1.0, "some": 0.5, "none": 0.05}
+"""How likely the game is to send you to a country, relative to one with full coverage.
+
+Of the settings tried on 83 played rounds these did best (+49 points, give or take 89): harsher
+ones lost as many rounds to a wrong call as they saved."""
 
 # code, drives on (L/R), coverage, calling codes, web domains, scripts on signs, languages
 _TABLE = """

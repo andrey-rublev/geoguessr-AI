@@ -24,7 +24,7 @@ def test_cells_belong_to_the_countries_around_them():
 
 def test_places_without_street_view_weigh_little():
     weights = cell_weights(GRID)
-    assert weights[cell(40, 116)] < 0.05 * weights[cell(36, 140)]  # Beijing vs Tokyo
+    assert weights[cell(40, 116)] < 0.1 * weights[cell(36, 140)]  # Beijing vs Tokyo
 
 
 def test_evidence_about_country_and_latitude_reweighs_cells():

@@ -42,8 +42,11 @@ Place = tuple[np.ndarray, float, float]  # embeddings of every crop, latitude, l
 def country_name(code: str) -> str:
     import langcodes
 
+    if not code:  # the slot for places outside every country's borders
+        return "the open sea"
     name = langcodes.Language.make(territory=code).territory_name()
     name = re.sub(r" \(.*\)| SAR China", "", name)  # Myanmar (Burma), Hong Kong SAR China
+    name = name.replace(" & ", " and ").replace("St. ", "Saint ")
     return RENAMES.get(name, name)
 
 

@@ -74,10 +74,12 @@ class Controls:
         self._gui.click()
 
     def drag(self, start: Point, dx: int, dy: int = 0, duration: float = 0.5) -> None:
+        """Drag by (``dx``, ``dy``) from ``start``, pausing before release so maps don't glide."""
         self.move(start)
         self._gui.mouseDown()
         try:
             self._gui.moveTo(start.x + dx, start.y + dy, duration=duration)
+            self.sleep(0.25)
         finally:
             self._gui.mouseUp()
 

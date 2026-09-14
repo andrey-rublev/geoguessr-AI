@@ -98,7 +98,10 @@ Results on the test photos:
 
 Other ways to improve it:
 
-- **Better encoder:** add `--backbone geolocal/StreetCLIP` to `embed`. It's much more accurate but about 10× slower, and you have to re-embed every shard with it.
+- **More shards:** every shard is a random sample of the whole world (each has about 190 of 222 countries, in the same mix), so more shards mostly add photos of rare countries.
+- **Better encoder:** add `--backbone geolocal/StreetCLIP` to `embed`. It's much more accurate but a far bigger model: on a CPU expect many hours per shard, and slower rounds. You have to re-embed every shard with it.
+- **CLIP's own idea of the country:** `python scripts/try_zero_shot_countries.py` scores the model with CLIP's zero-shot guess of the country ("a Street View photo taken in Kenya") mixed in, using embeddings you already have (a few minutes).
+- **Reading signs at a larger size:** `python scripts/compare_ocr_sizes.py` reads your saved rounds at several sizes, showing what more it finds and how long each round takes.
 - **Your own photos:** `geoguessr-ai embed --images <folder> --labels <folder>/labels.csv`, where the CSV has `filename,latitude,longitude` columns.
 
 Once a shard is embedded, its zip in `data/osv5m/images/train/` can be deleted to free space.
@@ -116,6 +119,7 @@ geoguessr-ai learn --rounds 20   # play, read every answer, then retrain on your
 - Each round prints its clues and likeliest countries, like `clue: Portuguese: farmácia, rua` and `guess -23.550, -46.630 (BR 81%, PT 6%, AR 3%; driving on the right 97%)`.
 - Reading signs adds about 3 seconds a round, and its models (about 100 MB) download the first time. `--no-text` skips it.
 - Keep Street View's compass (right edge, above the zoom buttons) on screen. Without it the bot drags the view round instead, which doesn't cover every direction.
+- `calibrate` also snapshots the Continue button (`layout-continue.png`). If an advert covers the button, the bot waits up to 20 seconds, then stops rather than click the advert. Layouts from before this need `calibrate` again.
 
 **Stop:** press **F8**, or move the mouse into a screen corner. Re-run `calibrate` if you move the browser window.
 

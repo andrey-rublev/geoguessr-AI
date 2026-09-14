@@ -11,6 +11,7 @@ import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
 
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -26,6 +27,13 @@ RECOGNISERS = {  # RapidOCR recognition model: the script it reads, besides Lati
     "arabic": "arabic",
     "devanagari": "devanagari",
 }
+DETECT_WIDTH = 1024
+"""Text is looked for on a copy at most this wide: several times faster, and signs still show."""
+MIN_BOX_SCORE = 0.6
+MIN_TEXT_HEIGHT = 10
+"""Pixels; smaller text can't be read reliably anyway."""
+MAX_LINES = 12
+"""Only the biggest lines of text in a view are read."""
 _RANGES = {
     "latin": ((0x41, 0x5A), (0x61, 0x7A), (0xC0, 0x24F), (0x1E00, 0x1EFF)),
     "hangul": ((0xAC00, 0xD7A3), (0x1100, 0x11FF), (0x3130, 0x318F)),
@@ -103,6 +111,7 @@ class SignReader:
                     "Det.lang_type": LangDet("ch"),
                     "Det.model_type": ModelType("mobile"),
                     "Det.ocr_version": OCRVersion("PP-OCRv5"),
+                    "Det.limit_type": "max",  # don't blow small copies back up
                     "Rec.engine_type": EngineType("onnxruntime"),
                     "Rec.lang_type": LangRec(model),
                     "Rec.model_type": ModelType("mobile"),
@@ -120,10 +129,7 @@ class SignReader:
         from rapidocr.utils.process_img import get_rotate_crop_image
 
         bgr = np.ascontiguousarray(np.asarray(image.convert("RGB"))[:, :, ::-1])
-        boxes = self._detect(bgr).boxes
-        if boxes is None or not len(boxes):
-            return []
-        crops = [get_rotate_crop_image(bgr, np.asarray(box, dtype=np.float32)) for box in boxes]
+        crops = [get_rotate_crop_image(bgr, box) for box in self._find_lines(bgr)]
         readings: list[list[tuple[str, str, float]]] = [[] for _ in crops]
         pending = list(range(len(crops)))
         for model, recognise in self._recognisers.items():
@@ -136,3 +142,20 @@ class SignReader:
                 pending = [i for i in pending if not _plainly_latin(*readings[i][-1][1:])]
         lines = (pick_reading(r, self.min_score) for r in readings)
         return [line for line in lines if line and not _NOT_A_SIGN.search(line.text)]
+
+    def _find_lines(self, bgr: np.ndarray) -> list[np.ndarray]:
+        """Corners of the biggest confidently detected lines of text, in full-size pixels."""
+        h, w = bgr.shape[:2]
+        scale = min(1.0, DETECT_WIDTH / w)
+        small = cv2.resize(bgr, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
+        found = self._detect(small if scale < 1 else bgr)
+        if found.boxes is None:
+            return []
+        boxes = []
+        for box, score in zip(found.boxes, found.scores, strict=True):
+            corners = np.asarray(box, dtype=np.float32) / scale
+            sides = np.linalg.norm(corners - np.roll(corners, -1, axis=0), axis=1)
+            if score >= MIN_BOX_SCORE and sides.min() >= MIN_TEXT_HEIGHT:
+                boxes.append(corners)
+        boxes.sort(key=lambda corners: -cv2.contourArea(corners))
+        return boxes[:MAX_LINES]

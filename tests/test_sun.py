@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import pytest
 
-from geoguessr_ai.knowledge.sun import find_sun, latitude_likelihood, sun_azimuth
+from geoguessr_ai.knowledge.sun import FLOOR, find_sun, latitude_likelihood, sun_azimuth
 
 
 def sky(sun_at=None, clouds=()):
@@ -41,4 +41,5 @@ def test_a_southern_sun_means_the_north_and_vice_versa():
     south = latitude_likelihood(180)
     north = latitude_likelihood(0)
     assert south(45) > 3 * south(-35) and north(-35) > 3 * north(45)
-    assert 0.25 <= min(south(np.arange(-60, 76))) and max(south(np.arange(-60, 76))) == 1
+    everywhere = south(np.arange(-60, 76))
+    assert everywhere.min() >= FLOOR and everywhere.max() == 1

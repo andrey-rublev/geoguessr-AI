@@ -15,27 +15,28 @@ import numpy as np
 
 VIEW_FOV = 105.0
 """Degrees across the calibrated view (Street View's whole picture spans about 130)."""
-FLOOR = 0.25
-"""The least likely latitude keeps this share of the likeliest one's weight, in case the sun
-was misjudged."""
+FLOOR = 0.2
+"""Latitudes where such a sun would be rare keep this much weight, in case it was misjudged."""
 BIN_DEGREES = 5
 
 
 def find_sun(rgb: np.ndarray) -> tuple[float, float] | None:
-    """Where the sun is in a view, if it plainly shows: one small blown-out disc with a glow.
+    """Where the sun is in a view, if it plainly shows: one small blown-out disc glowing into
+    open sky all round.
 
-    Big blown-out patches (overcast skies, white walls) or several bright spots mean no sun.
+    Blown-out patches that are big (overcast skies, white walls), several, or not ringed by
+    glowing sky (lamps, reflections, the edges of clouds and roofs) don't count.
     """
     h, w = rgb.shape[:2]
     sky = rgb[: int(h * 0.6), :, :3].astype(np.int16)
     blown = (sky.min(axis=2) >= 245).astype(np.uint8)
-    count, labels, stats, centroids = cv2.connectedComponentsWithStats(blown)
+    count, _, stats, centroids = cv2.connectedComponentsWithStats(blown)
     least, most = 0.0002 * h * w, 0.02 * h * w
     patches = [i for i in range(1, count) if stats[i, cv2.CC_STAT_AREA] >= least]
     if len(patches) != 1:
         return None
     i = patches[0]
-    x, y, bw, bh, area = stats[i]
+    _, _, bw, bh, area = stats[i]
     if area > most or area < 0.45 * bw * bh or max(bw, bh) > 2.5 * min(bw, bh):
         return None
     cx, cy = centroids[i]
@@ -43,12 +44,20 @@ def find_sun(rgb: np.ndarray) -> tuple[float, float] | None:
     brightness = sky.mean(axis=2)
     ys, xs = np.mgrid[0 : sky.shape[0], 0:w]
     distance = np.hypot(xs - cx, ys - cy)
-    near = brightness[(distance >= 1.2 * radius) & (distance <= 2 * radius)]
-    far = brightness[(distance >= 2.5 * radius) & (distance <= 4 * radius)]
-    if near.size == 0 or far.size == 0:
+    near = (distance >= 1.2 * radius) & (distance <= 2 * radius)
+    far = (distance >= 3 * radius) & (distance <= 5 * radius)
+    sector = ((np.arctan2(ys - cy, xs - cx) + np.pi) // (np.pi / 4)).astype(int) % 8
+    glow = [brightness[near & (sector == s)] for s in range(8)]
+    if any(g.size < 5 for g in glow) or far.sum() < 100:
+        return None  # too near the edge of the view to judge
+    around = brightness[far]
+    # The sun lights the sky evenly all round, brightest close in...
+    if min(g.mean() for g in glow) < np.median(brightness) + 30:
         return None
-    # The sun lights up the sky around it; a white sign or wall doesn't.
-    if near.mean() < np.median(brightness) + 30 or near.mean() < far.mean() + 10:
+    if around.mean() > 235 or brightness[near].mean() < around.mean() + 25:
+        return None
+    # ...and hangs in open sky, not against a wall or roof.
+    if (around < 120).mean() > 0.2:
         return None
     return float(cx), float(cy)
 
@@ -88,8 +97,12 @@ def _azimuth_table() -> tuple[np.ndarray, np.ndarray]:
 
 
 def latitude_likelihood(azimuth: float):
-    """A function giving how well each latitude fits a sun seen towards ``azimuth``."""
+    """A function giving how well each latitude fits a sun seen towards ``azimuth``.
+
+    Latitudes where a low sun stands that way at least as often as on average get 1; rarer
+    ones get less, down to :data:`FLOOR`.
+    """
     lats, table = _azimuth_table()
     fit = table[:, int(azimuth % 360 // BIN_DEGREES)]
-    weights = FLOOR + (1 - FLOOR) * fit / fit.max()
+    weights = np.clip(fit / fit.mean(), FLOOR, 1.0)
     return lambda lat: np.interp(lat, lats, weights)

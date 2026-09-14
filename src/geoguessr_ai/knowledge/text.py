@@ -175,6 +175,53 @@ _DOMAIN = re.compile(
     r"(?<![\w.-])((?:https?://)?(?:www\.)?)((?:[a-z0-9-]+\.)+)([a-z]{2,3})(?![\w])"
 )
 _PHONE = re.compile(r"\+\s?(\d[\d\s().-]{7,})")
+_TOKEN = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*")
+
+BRAND_FLOOR = 0.3
+# Chains found in only one or a few countries: fuel stations, shops and phone networks.
+BRANDS: dict[str, tuple[str, ...]] = {
+    "pemex": ("MX",),
+    "oxxo": ("MX", "CO", "CL", "PE"),
+    "petrobras": ("BR",),
+    "ipiranga": ("BR",),
+    "ypf": ("AR",),
+    "copec": ("CL",),
+    "ancap": ("UY",),
+    "terpel": ("CO", "PA", "PE", "EC"),
+    "primax": ("PE", "EC"),
+    "pertamina": ("ID",),
+    "indomaret": ("ID",),
+    "alfamart": ("ID", "PH"),
+    "petronas": ("MY",),
+    "ptt": ("TH", "TR"),
+    "bangchak": ("TH",),
+    "petron": ("PH", "MY"),
+    "jollibee": ("PH",),
+    "lukoil": ("RU", "BG", "RO", "KZ"),
+    "rosneft": ("RU",),
+    "orlen": ("PL", "CZ", "LT"),
+    "żabka": ("PL",),
+    "zabka": ("PL",),
+    "biedronka": ("PL",),
+    "omv": ("AT", "RO", "BG", "HU", "SK", "SI", "RS"),
+    "repsol": ("ES", "PT", "PE"),
+    "cepsa": ("ES", "PT"),
+    "galp": ("PT", "ES"),
+    "mercadona": ("ES",),
+    "esselunga": ("IT",),
+    "neste": ("FI",),
+    "preem": ("SE",),
+    "okq8": ("SE",),
+    "tesco": ("GB", "IE", "CZ", "SK", "HU"),
+    "asda": ("GB",),
+    "woolworths": ("AU", "NZ", "ZA"),
+    "engen": ("ZA", "BW", "NA", "LS", "SZ", "KE", "GH"),
+    "sasol": ("ZA",),
+    "safaricom": ("KE",),
+    "lawson": ("JP",),
+    "eneos": ("JP",),
+    "gs25": ("KR",),
+}
 
 
 @dataclass(frozen=True)
@@ -214,6 +261,8 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
     for letters, places in LETTER_HINTS.items():
         if seen := sorted(set(letters) & set(everything)):
             weigh(lambda c, p=places: c.code in p, LETTER_FLOOR, f"letters {''.join(seen)}")
+    for brand in sorted(set(_TOKEN.findall(everything)) & BRANDS.keys()):
+        weigh(lambda c, b=brand: c.code in BRANDS[b], BRAND_FLOOR, f"brand {brand}")
 
     latin = " ".join(line.text for line in lines if line.script == "latin").lower()
     for languages, signs in sorted(_language_signs(latin).items(), key=lambda kv: sorted(kv[0])):

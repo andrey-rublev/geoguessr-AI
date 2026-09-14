@@ -45,6 +45,11 @@ def test_web_domains_and_phone_codes():
     assert not text_clues([TextLine("St.No 5", "latin", 0.9)]).notes  # not a domain
 
 
+def test_regional_brands():
+    clues = text_clues([TextLine("PEMEX", "latin", 0.95)])
+    assert ratio(clues, "MX", "US") >= 3 and clues.notes == ["brand pemex"]
+
+
 def test_english_barely_counts_and_no_text_changes_nothing():
     english = text_clues([TextLine("Main Street Parking", "latin", 0.9)])
     assert 1 < ratio(english, "US", "FR") < 2

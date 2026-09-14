@@ -3,6 +3,8 @@ import pytest
 import torch
 from PIL import Image
 
+from geoguessr_ai.knowledge.countries import country_codes
+from geoguessr_ai.knowledge.evidence import Evidence
 from geoguessr_ai.model import predictor as predictor_module
 from geoguessr_ai.model.geocells import GeoCells
 from geoguessr_ai.model.head import Checkpoint, GeoHead
@@ -78,6 +80,31 @@ def test_game_prior_from_played_rounds_tips_a_close_call(tmp_path, monkeypatch):
 
     assert (ignored.lat, ignored.lon) == pytest.approx(tuple(CENTROIDS[1]))
     assert (used.lat, used.lon) == pytest.approx(tuple(CENTROIDS[0]))
+
+
+def test_street_view_coverage_and_clues_reweigh_places(tmp_path, monkeypatch):
+    centroids = np.array([(48.86, 2.35), (35.68, 139.69), (39.90, 116.40)])  # Paris, Tokyo, Beijing
+    head = GeoHead(embed_dim=8, n_cells=3, hidden=4)
+    with torch.no_grad():
+        for p in head.parameters():
+            p.zero_()
+        head.net[-1].bias.copy_(torch.tensor([1.0, 1.5, 2.0]))  # leans Beijing, then Tokyo
+    path = tmp_path / "model.pt"
+    Checkpoint(head, GeoCells(centroids), "fake/backbone").save(path)
+    monkeypatch.setattr(predictor_module, "ImageEncoder", FakeEncoder)
+    view = [Image.new("RGB", (200, 200))]
+    french_signs = Evidence(countries=np.where(np.array(country_codes()) == "FR", 1.0, 0.05))
+
+    anywhere = predictor_module.GeoPredictor(path, coverage_strength=0.0).predict(view)
+    covered = predictor_module.GeoPredictor(path).predict(view)
+    clued = predictor_module.GeoPredictor(path).predict(view, french_signs)
+
+    assert (anywhere.lat, anywhere.lon) == pytest.approx(tuple(centroids[2]))
+    assert (covered.lat, covered.lon) == pytest.approx(
+        tuple(centroids[1])
+    )  # no Street View in China
+    assert covered.countries[0][0] == "JP" and covered.drives_left > 0.5
+    assert (clued.lat, clued.lon) == pytest.approx(tuple(centroids[0]))
 
 
 def test_predict_requires_images(tmp_path, monkeypatch):

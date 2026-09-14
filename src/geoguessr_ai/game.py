@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from .compass import CompassReader, compass_region
+from .compass import Compass, CompassReader, compass_region
 from .config import Layout, Region
 from .controls import StopRequested
 from .geo import haversine_km
@@ -24,6 +24,11 @@ from .minimap import GuessMap, Placement
 from .model.predictor import Guess
 from .ocr import SignReader
 from .result import Reading, ResultReader, result_region
+
+PRESSES_PER_TURN = 3
+"""Street View sometimes ignores a press on the compass; press again up to this many times."""
+HEADING_TOLERANCE = 30.0
+"""How far from north, east, south or west a view may face and still count as that way."""
 
 
 class Predictor(Protocol):
@@ -171,14 +176,30 @@ class OpenGuessrBot:
         if compass is None:
             return self._drag_around()
         look = Look()
-        self.controls.click(compass.center)  # the compass itself turns the view north
         for turn in range(min(s.views, 4)):
-            if turn:
-                self.controls.click(compass.clockwise)
-            self.controls.sleep(s.turn_wait)
-            reading = self.compass.read()
-            self._capture(look, reading.heading if reading else 90.0 * turn)
+            heading = self._face(compass, 90.0 * turn)
+            self._capture(look, 90.0 * turn if heading is None else heading)
         return look
+
+    def _face(self, compass: Compass, target: float) -> float | None:
+        """Press the compass until the view faces ``target``, a quarter turn on from the last
+        view: pressing the compass itself faces north, its arrow turns to the next quarter.
+        Returns the heading the compass shows, or None if it can't be read."""
+        button = compass.center if target == 0 else compass.clockwise
+        heading = None
+        for _ in range(PRESSES_PER_TURN):
+            self.controls.click(button)
+            self.controls.sleep(self.settings.turn_wait)
+            reading = self.compass.read()
+            if reading is None:
+                return None
+            heading = reading.heading
+            still_to_turn = (target - heading) % 360
+            if min(still_to_turn, 360 - still_to_turn) <= HEADING_TOLERANCE:
+                break
+            if target and still_to_turn > 180:  # already past it: the arrow would go further
+                break
+        return heading
 
     def notice(self, look: Look) -> tuple[Evidence, list[TextLine]]:
         """Read the signs every way and look for the sun: clues the model can't see."""

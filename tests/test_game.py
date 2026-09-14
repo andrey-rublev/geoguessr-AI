@@ -66,12 +66,14 @@ class FakeControls:
 
 class TurningStreetView(FakeScreen, FakeControls):
     """Street View with Google's compass: pressing it faces north, its arrow turns 90 degrees.
-    The sun shows low in the sky when facing ``sun_heading``."""
+    The sun shows low in the sky when facing ``sun_heading``. The presses numbered in
+    ``ignored`` (counting from 1) do nothing, as when Street View is busy."""
 
-    def __init__(self, sun_heading=None):
+    def __init__(self, sun_heading=None, ignored=()):
         FakeScreen.__init__(self)
         FakeControls.__init__(self)
-        self.heading, self.sun_heading = 37.0, sun_heading
+        self.heading, self.sun_heading = 260.0, sun_heading
+        self.ignored, self.presses = set(ignored), 0
 
     def grab(self, region):
         if region.left != LAYOUT.view.left:
@@ -88,10 +90,13 @@ class TurningStreetView(FakeScreen, FakeControls):
 
     def click(self, p):
         super().click(p)
+        self.presses += 1
+        if self.presses in self.ignored:
+            return
         if abs(p.x - self.compass_at.x) <= 3 and abs(p.y - self.compass_at.y) <= 3:
             self.heading = 0.0
         elif self.compass_at.x + 15 < p.x < self.compass_at.x + 40:
-            self.heading = (self.heading + 90) % 360
+            self.heading = (self.heading // 90 + 1) * 90 % 360  # on to the next quarter
 
 
 class FakePredictor:
@@ -183,6 +188,18 @@ def test_turns_north_east_south_and_west_with_the_compass():
     assert [round(h) % 360 for h in look.headings] == [0, 90, 180, 270]
     assert len(look.views) == 4 and not street_view.drags
     assert look.scenes[0].size == (1600, 860)  # the view plus the road below it
+
+
+@pytest.mark.parametrize("ignored", [(1,), (3,), (1, 2)])
+def test_presses_the_compass_again_when_street_view_ignores_it(ignored):
+    street_view = TurningStreetView(ignored=ignored)
+    settings = BotSettings(rounds=1, views=4, record_answers=False, debug_dir=None)
+
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
+    look = bot.look_around()
+
+    assert [round(h) % 360 for h in look.headings] == [0, 90, 180, 270]
+    assert street_view.presses == 4 + len(ignored)
 
 
 def test_a_sun_to_the_south_hints_at_the_northern_hemisphere():

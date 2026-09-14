@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from .buttons import MIN_SIMILARITY, button_region, similarity
 from .compass import Compass, CompassReader, compass_region
 from .config import Layout, Region
 from .controls import StopRequested
@@ -29,6 +30,10 @@ PRESSES_PER_TURN = 3
 """Street View sometimes ignores a press on the compass; press again up to this many times."""
 HEADING_TOLERANCE = 30.0
 """How far from north, east, south or west a view may face and still count as that way."""
+
+
+class ContinueBlocked(Exception):
+    """Something, like an advert, kept covering the Continue button."""
 
 
 class Predictor(Protocol):
@@ -53,6 +58,8 @@ class BotSettings:
     zoom_levels: int = 3
     """Wheel notches to zoom the minimap in by before clicking the guess."""
     result_wait: float = 3.5
+    continue_timeout: float = 20.0
+    """How long to wait for something covering the Continue button, like an advert, to go."""
     min_map_score: float = 0.6
     read_text: bool = True
     """Read signs and road names (needs RapidOCR)."""
@@ -83,9 +90,18 @@ def scene_region(layout: Layout) -> Region:
 
 class OpenGuessrBot:
     def __init__(
-        self, layout: Layout, predictor: Predictor, settings: BotSettings, screen, controls
+        self,
+        layout: Layout,
+        predictor: Predictor,
+        settings: BotSettings,
+        screen,
+        controls,
+        continue_image: Image.Image | None = None,
     ):
+        """``continue_image`` is calibration's snapshot of the Continue button. With it, the bot
+        won't click Continue while something else covers the button."""
         self.layout = layout
+        self.continue_image = continue_image
         self.predictor = predictor
         self.settings = settings
         self.screen = screen
@@ -127,6 +143,8 @@ class OpenGuessrBot:
                 self.play_round(number, run_dir)
         except StopRequested:
             print("Stopped by user.")
+        except ContinueBlocked as blocked:
+            print(f"Stopped: {blocked}")
 
     def play_round(self, number: int, run_dir: Path | None = None) -> Placement:
         s = self.settings
@@ -163,7 +181,7 @@ class OpenGuessrBot:
                 self._report(reading, placed)
                 if folder is not None:
                     self._save_reading(folder, reading)
-            self.controls.click(self.layout.continue_button)
+            self._press_continue(folder)
         return placement
 
     def look_around(self) -> Look:
@@ -233,6 +251,31 @@ class OpenGuessrBot:
         look.scenes.append(scene)
         look.views.append(scene.crop((0, 0, self.layout.view.width, self.layout.view.height)))
         look.headings.append(heading)
+
+    def _press_continue(self, folder: Path | None) -> None:
+        """Click Continue, but only once it looks as it did at calibration, not covered."""
+        if self.continue_image is None:
+            self.controls.click(self.layout.continue_button)
+            return
+        region, waited = button_region(self.layout.continue_button), 0.0
+        while True:
+            patch = self.screen.grab(region)
+            if similarity(patch, self.continue_image) >= MIN_SIMILARITY:
+                self.controls.click(self.layout.continue_button)
+                return
+            if waited >= self.settings.continue_timeout:
+                break
+            if not waited:
+                print("  something covers the Continue button, maybe an advert; waiting")
+            self.controls.sleep(1.0)
+            waited += 1.0
+        if folder is not None:
+            folder.mkdir(parents=True, exist_ok=True)
+            patch.save(folder / "continue_blocked.png")
+        raise ContinueBlocked(
+            "the Continue button stayed covered, maybe by an advert, so it wasn't clicked. "
+            "Close whatever covers it and play again; if nothing does, re-run calibrate."
+        )
 
     def _wait_for_street_view(self) -> None:
         """Wait while Street View is still a black screen."""

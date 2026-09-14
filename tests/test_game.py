@@ -4,10 +4,12 @@ import cv2
 import numpy as np
 import pytest
 from PIL import Image
+from test_buttons import draw_button
 from test_compass import draw_compass
 from test_sun import sky
 
 from geoguessr_ai import game as game_module
+from geoguessr_ai.buttons import button_region
 from geoguessr_ai.config import Layout, Point, Region
 from geoguessr_ai.game import BotSettings, OpenGuessrBot
 from geoguessr_ai.knowledge.text import TextLine
@@ -241,6 +243,44 @@ def test_unreadable_answer_is_saved_as_missing(tmp_path, monkeypatch):
     saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
     assert saved["answer"] is None and "flag" in saved["answer_problem"]
     assert controls.clicks[-1] == LAYOUT.continue_button
+
+
+class CoveredContinue(FakeScreen):
+    """An advert covers the Continue button for the first ``covered_grabs`` looks at it."""
+
+    def __init__(self, covered_grabs):
+        super().__init__()
+        self.covered_grabs = covered_grabs
+
+    def grab(self, region):
+        if region != button_region(LAYOUT.continue_button):
+            return super().grab(region)
+        if self.covered_grabs:
+            self.covered_grabs -= 1
+            return Image.new("RGB", (region.width, region.height), "white")
+        return draw_button()
+
+
+def test_waits_for_an_advert_to_uncover_continue():
+    controls, screen = FakeControls(), CoveredContinue(covered_grabs=3)
+    settings = BotSettings(rounds=1, record_answers=False, read_text=False, debug_dir=None)
+
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, screen, controls, draw_button())
+    bot.play()
+
+    assert controls.clicks[-1] == LAYOUT.continue_button and screen.covered_grabs == 0
+
+
+def test_stops_rather_than_click_an_advert_covering_continue(tmp_path, capsys):
+    controls, screen = FakeControls(), CoveredContinue(covered_grabs=10**6)
+    settings = BotSettings(rounds=3, record_answers=False, read_text=False, debug_dir=tmp_path)
+
+    OpenGuessrBot(LAYOUT, FakePredictor(), settings, screen, controls, draw_button()).play()
+
+    assert LAYOUT.continue_button not in controls.clicks
+    assert "Continue button stayed covered" in capsys.readouterr().out
+    assert [p.name for p in tmp_path.glob("*/round_*")] == ["round_01"]
+    assert next(tmp_path.glob("*/round_01/continue_blocked.png")).exists()
 
 
 def test_waits_for_street_view_to_stop_being_black():

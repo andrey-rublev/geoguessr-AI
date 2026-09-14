@@ -176,6 +176,9 @@ def cmd_locate_map(args: argparse.Namespace) -> None:
 
 def _run_bot(args: argparse.Namespace, settings):
     """Load everything, then play. Returns the predictor, whose encoder learning can reuse."""
+    from PIL import Image
+
+    from .buttons import button_image_path
     from .config import Layout
     from .controls import Controls
     from .game import OpenGuessrBot
@@ -184,9 +187,13 @@ def _run_bot(args: argparse.Namespace, settings):
     layout = Layout.load(args.layout)
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Train a model first (see README).")
+    button = button_image_path(args.layout)
+    continue_image = Image.open(button).convert("RGB") if button.exists() else None
+    if continue_image is None and not settings.dry_run:
+        print("Re-run `geoguessr-ai calibrate` so the bot won't click adverts covering Continue.")
     predictor = _predictor(args)
     with Screen() as screen, Controls(dry_run=settings.dry_run, stop_key=args.stop_key) as controls:
-        bot = OpenGuessrBot(layout, predictor, settings, screen, controls)
+        bot = OpenGuessrBot(layout, predictor, settings, screen, controls, continue_image)
         print(f"Starting in {args.start_delay:g}s - switch to the OpenGuessr window.")
         controls.sleep(args.start_delay)
         bot.play()

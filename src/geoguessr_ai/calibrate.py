@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PIL import ImageDraw
 
+from .buttons import button_image_path, button_region
 from .config import DEFAULT_LAYOUT_PATH, Layout, Point, Region
 from .controls import Controls
 from .screen import Screen
@@ -71,6 +72,10 @@ def run_calibration(
         guess = _record(controls, "6/7", "The Guess button.")
         print("\nNow drop any pin on the map and press Guess yourself, so the result screen shows.")
         cont = _record(controls, "7/7", "The Continue button on the result screen.")
+        # Remember how the button looks, unhovered, so play can tell when an advert covers it.
+        controls.move(view_a)
+        time.sleep(0.5)
+        screen.grab(button_region(cont)).save(button_image_path(path))
 
         layout = Layout(
             view=Region.from_corners(view_a, view_b),
@@ -82,5 +87,8 @@ def run_calibration(
         layout.save(path)
         _save_preview(screen, layout, preview_path)
 
-    print(f"\nSaved {path}. Check {preview_path}: green = view, cyan = map, magenta = clicks.")
+    print(
+        f"\nSaved {path}. Check {preview_path}: green = view, cyan = map, magenta = clicks.\n"
+        f"Check {button_image_path(path)} shows the Continue button, not an advert."
+    )
     return layout

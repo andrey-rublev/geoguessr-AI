@@ -120,14 +120,14 @@ class FakeGuessMap:
 
 
 class FakeSignReader:
-    """Reads one Portuguese street sign in the first direction it looks."""
+    """Reads one Portuguese street sign among everything it is shown."""
 
     def __init__(self):
         self.scenes = []
 
-    def read(self, image):
-        self.scenes.append(image.size)
-        return [TextLine("Rua Augusta 12", "latin", 0.93)] if len(self.scenes) == 1 else []
+    def read(self, images):
+        self.scenes.extend(image.size for image in images)
+        return [TextLine("Rua Augusta 12", "latin", 0.93)]
 
 
 class FakeReader:

@@ -1,5 +1,14 @@
+import numpy as np
+
 from geoguessr_ai.knowledge.text import TextLine
-from geoguessr_ai.ocr import pick_reading, script_of
+from geoguessr_ai.ocr import _pad_width, pick_reading, script_of
+
+
+def test_lines_are_padded_to_a_few_widths():
+    crop = np.full((20, 130, 3), 40, np.uint8)
+    padded = _pad_width(crop)
+    assert padded.shape == (20, 160, 3) and (padded[:, :130] == crop).all()
+    assert _pad_width(padded) is padded
 
 
 def test_script_of_letters():

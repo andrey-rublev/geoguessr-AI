@@ -182,10 +182,7 @@ class OpenGuessrBot:
 
     def notice(self, look: Look) -> tuple[Evidence, list[TextLine]]:
         """Read the signs every way and look for the sun: clues the model can't see."""
-        lines: list[TextLine] = []
-        if self.signs is not None:
-            for scene in look.scenes:
-                lines.extend(self.signs.read(scene))
+        lines: list[TextLine] = [] if self.signs is None else self.signs.read(look.scenes)
         clues = text_clues(lines)
         evidence = Evidence(countries=clues.likelihood, notes=clues.notes)
         for view, heading in zip(look.views, look.headings, strict=True):

@@ -1,12 +1,13 @@
 """Read the writing in Street View screenshots: signs, shop fronts and Google's road labels.
 
-Text is found once per image, then every line is read by one recogniser per script, and each
-line keeps its most confident reading. Uses RapidOCR (PaddleOCR's models on ONNX Runtime),
-which downloads its models, about 100 MB, the first time.
+Text is found in each image, then all its lines are read together by one recogniser per script,
+and each line keeps its most confident reading. Uses RapidOCR (PaddleOCR's models on ONNX
+Runtime), which downloads its models, about 100 MB, the first time.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
@@ -33,7 +34,9 @@ MIN_BOX_SCORE = 0.6
 MIN_TEXT_HEIGHT = 10
 """Pixels; smaller text can't be read reliably anyway."""
 MAX_LINES = 12
-"""Only the biggest lines of text in a view are read."""
+"""Only the biggest lines of text in an image are read."""
+WIDTH_STEP = 4
+"""Lines are padded to a width that is a multiple of this many heights (see _pad_width)."""
 _RANGES = {
     "latin": ((0x41, 0x5A), (0x61, 0x7A), (0xC0, 0x24F), (0x1E00, 0x1EFF)),
     "hangul": ((0xAC00, 0xD7A3), (0x1100, 0x11FF), (0x3130, 0x318F)),
@@ -94,6 +97,22 @@ def _plainly_latin(text: str, score: float) -> bool:
     return score >= 0.9 and len(scripts) >= 3 and scripts.count("latin") >= 0.9 * len(scripts)
 
 
+def _pad_width(crop: np.ndarray) -> np.ndarray:
+    """Pad a line on the right to a width of a whole number of ``WIDTH_STEP`` heights.
+
+    The recognisers then see only a few input sizes, and ONNX Runtime runs sizes it has seen
+    before several times faster.
+    """
+    h, w = crop.shape[:2]
+    width = math.ceil(w / (WIDTH_STEP * h)) * WIDTH_STEP * h
+    if width == w:
+        return crop
+    edge = np.concatenate([crop[0], crop[-1], crop[:, -1]])
+    padding = np.empty((h, width - w, 3), dtype=crop.dtype)
+    padding[:] = np.median(edge, axis=0)
+    return np.concatenate([crop, padding], axis=1)
+
+
 class SignReader:
     def __init__(self, models: Sequence[str] | None = None, min_score: float = 0.8) -> None:
         import importlib.util
@@ -124,12 +143,15 @@ class SignReader:
         self._recognisers = {model: e.text_rec for model, e in engines.items()}
         self.min_score = min_score
 
-    def read(self, image: Image.Image) -> list[TextLine]:
+    def read(self, images: Sequence[Image.Image]) -> list[TextLine]:
+        """Every line of text confidently read in ``images``."""
         from rapidocr.ch_ppocr_rec import TextRecInput
         from rapidocr.utils.process_img import get_rotate_crop_image
 
-        bgr = np.ascontiguousarray(np.asarray(image.convert("RGB"))[:, :, ::-1])
-        crops = [get_rotate_crop_image(bgr, box) for box in self._find_lines(bgr)]
+        crops = []
+        for image in images:
+            bgr = np.ascontiguousarray(np.asarray(image.convert("RGB"))[:, :, ::-1])
+            crops += [_pad_width(get_rotate_crop_image(bgr, b)) for b in self._find_lines(bgr)]
         readings: list[list[tuple[str, str, float]]] = [[] for _ in crops]
         pending = list(range(len(crops)))
         for model, recognise in self._recognisers.items():

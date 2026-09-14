@@ -3,16 +3,15 @@ import json
 import numpy as np
 import pytest
 from PIL import Image
-from test_mapcal import render_map
 
 from geoguessr_ai import game as game_module
 from geoguessr_ai.config import Layout, Point, Region
 from geoguessr_ai.game import BotSettings, OpenGuessrBot
 from geoguessr_ai.mapcal import MapProjection
+from geoguessr_ai.minimap import Placement
 from geoguessr_ai.model.predictor import Guess
 from geoguessr_ai.result import Answer, Reading, result_region
 
-TRUE_MAP = MapProjection(1600, -70, -260)
 LAYOUT = Layout(
     view=Region(0, 100, 1600, 700),
     map_hover=Point(1800, 950),
@@ -20,16 +19,23 @@ LAYOUT = Layout(
     guess_button=Point(1800, 1040),
     continue_button=Point(960, 1040),
 )
+LAGOS = (6.45, 3.39)
 
 
 class FakeScreen:
-    def __init__(self):
-        self.map_rgb = render_map(845, 633, TRUE_MAP)
+    """Street View that stays black for the first ``blank_grabs`` grabs."""
+
+    def __init__(self, blank_grabs=0):
+        self.blank_grabs, self.grabs = blank_grabs, 0
 
     def grab(self, region):
-        if region == LAYOUT.map_region:
-            return Image.fromarray(self.map_rgb)
-        return Image.new("RGB", (region.width, region.height), (120, 160, 90))
+        assert region == LAYOUT.view
+        self.grabs += 1
+        if self.blank_grabs:
+            self.blank_grabs -= 1
+            return Image.new("RGB", (region.width, region.height))
+        noise = np.random.default_rng(self.grabs).integers(0, 256, (region.height, region.width, 3))
+        return Image.fromarray(noise.astype(np.uint8))
 
 
 class FakeControls:
@@ -48,9 +54,6 @@ class FakeControls:
     def drag(self, start, dx, dy=0):
         self.drags.append((start, dx))
 
-    def scroll(self, p, clicks):
-        raise AssertionError("the synthetic map should be readable without zooming")
-
 
 class FakePredictor:
     def __init__(self):
@@ -58,20 +61,38 @@ class FakePredictor:
 
     def predict(self, images):
         self.view_counts.append(len(images))
-        return Guess(
-            lat=6.45, lon=3.39, expected_score=2500.0, top_cells=[]
-        )  # Lagos, visible on TRUE_MAP
+        return Guess(*LAGOS, expected_score=2500.0, top_cells=[])
+
+
+class FakeGuessMap:
+    """Stands in for the minimap, which has its own tests."""
+
+    def __init__(self, screen, controls, region, hover, **settings):
+        self.controls, self.region, self.guesses, self.scale = controls, region, [], 1.5
+
+    def place(self, lat, lon):
+        self.guesses.append((lat, lon))
+        click = self.region.to_screen(400, 300)
+        self.controls.click(click)
+        image = Image.new("RGB", (self.region.width, self.region.height))
+        projection = MapProjection(1600, -70, -260)
+        return Placement(lat + 0.01, lon, click, image, projection, (400.0, 300.0), True)
 
 
 class FakeReader:
     """Stands in for the result-screen reader, which has its own tests."""
 
     def __init__(self, screen, controls, region):
-        self.region, self.placed = region, []
+        self.region, self.placed, self.scale = region, [], None
 
     def read(self, lat, lon):
         self.placed.append((lat, lon))
         return Reading(Answer(6.52, 3.38, zoom_outs=2), screenshot=Image.new("RGB", (40, 20)))
+
+
+@pytest.fixture(autouse=True)
+def fake_guess_map(monkeypatch):
+    monkeypatch.setattr(game_module, "GuessMap", FakeGuessMap)
 
 
 def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monkeypatch):
@@ -84,22 +105,19 @@ def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monke
 
     assert predictor.view_counts == [4, 4]
     assert len(controls.drags) == 6 and all(dx < 0 for _, dx in controls.drags)
-    pin, guess, cont = controls.clicks[:3]
-    tx, ty = TRUE_MAP.to_pixel(6.45, 3.39)
-    assert abs(pin.x - (LAYOUT.map_region.left + tx)) <= 2
-    assert abs(pin.y - (LAYOUT.map_region.top + ty)) <= 2
-    assert (guess, cont) == (LAYOUT.guess_button, LAYOUT.continue_button)
+    assert bot.guess_map.guesses == [LAGOS, LAGOS]
+    assert controls.clicks[1:3] == [LAYOUT.guess_button, LAYOUT.continue_button]
 
     assert bot.reader.region == result_region(LAYOUT)
-    placed = bot.reader.placed[0]  # where the pin really went, from the map it was placed on
-    assert placed == pytest.approx((6.45, 3.39), abs=0.3)
+    assert bot.reader.placed[0] == pytest.approx((6.46, 3.39))  # where the pin really went
+    assert bot.reader.scale == 1.5  # the minimap already showed how big pins are drawn
     folder = next(tmp_path.glob("*/round_01"))
     saved = json.loads((folder / "round.json").read_text())
     assert saved["guess"]["lat"] == 6.45
-    assert (saved["placed"]["lat"], saved["placed"]["lon"]) == pytest.approx(placed)
+    assert (saved["placed"]["lat"], saved["placed"]["lon"]) == pytest.approx((6.46, 3.39))
     assert saved["answer"] == {"lat": 6.52, "lon": 3.38, "zoom_outs": 2}
-    assert (folder / "result.png").exists()
-    assert np.asarray(Image.open(folder / "map.png")).shape == (633, 845, 3)
+    assert saved["pin_seen"] is True
+    assert (folder / "result.png").exists() and (folder / "map.png").exists()
 
 
 def test_unreadable_answer_is_saved_as_missing(tmp_path, monkeypatch):
@@ -116,6 +134,15 @@ def test_unreadable_answer_is_saved_as_missing(tmp_path, monkeypatch):
     saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text())
     assert saved["answer"] is None and "flag" in saved["answer_problem"]
     assert controls.clicks[-1] == LAYOUT.continue_button
+
+
+def test_waits_for_street_view_to_stop_being_black():
+    screen = FakeScreen(blank_grabs=3)
+    settings = BotSettings(rounds=1, views=4, dry_run=True, debug_dir=None)
+
+    OpenGuessrBot(LAYOUT, FakePredictor(), settings, screen, FakeControls()).play()
+
+    assert screen.grabs == 3 + 4
 
 
 def test_dry_run_plays_one_round_without_continuing(tmp_path):

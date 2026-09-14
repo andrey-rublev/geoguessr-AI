@@ -13,10 +13,10 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from .config import Layout, Point
+from .config import Layout
 from .controls import StopRequested
 from .geo import haversine_km
-from .mapcal import MapNotFound, MapProjection, locate_world
+from .minimap import GuessMap, Placement
 from .model.predictor import Guess
 from .result import Reading, ResultReader, result_region
 
@@ -34,7 +34,11 @@ class BotSettings:
     """How far to drag per rotation, as a fraction of the view width."""
     round_load_wait: float = 3.0
     view_settle_wait: float = 0.8
+    view_load_timeout: float = 10.0
+    """How long to wait for Street View while it is still a black screen."""
     map_expand_wait: float = 1.0
+    zoom_levels: int = 3
+    """Wheel notches to zoom the minimap in by before clicking the guess."""
     result_wait: float = 3.5
     min_map_score: float = 0.6
     record_answers: bool = True
@@ -52,6 +56,16 @@ class OpenGuessrBot:
         self.settings = settings
         self.screen = screen
         self.controls = controls
+        self.guess_map = GuessMap(
+            screen,
+            controls,
+            layout.map_region,
+            layout.map_hover,
+            zoom_levels=settings.zoom_levels,
+            min_score=settings.min_map_score,
+            expand_wait=settings.map_expand_wait,
+            dry_run=settings.dry_run,
+        )
         self.reader = None
         if settings.record_answers:
             self.reader = ResultReader(screen, controls, result_region(layout))
@@ -64,7 +78,7 @@ class OpenGuessrBot:
             run_dir.mkdir(parents=True, exist_ok=True)
         rounds = 1 if s.dry_run else s.rounds
         if s.dry_run:
-            print("Dry run: one round, no clicks. The mouse still hovers and drags the view.")
+            print("Dry run: one round, no clicks. The mouse still hovers, drags and zooms.")
         print("Stop any time with F8, or by slamming the mouse into a screen corner.")
         try:
             for number in range(1, rounds + 1):
@@ -72,7 +86,7 @@ class OpenGuessrBot:
         except StopRequested:
             print("Stopped by user.")
 
-    def play_round(self, number: int, run_dir: Path | None = None) -> Point:
+    def play_round(self, number: int, run_dir: Path | None = None) -> Placement:
         s = self.settings
         print(f"\nRound {number}")
         self.controls.sleep(s.round_load_wait)
@@ -84,26 +98,28 @@ class OpenGuessrBot:
             f"(model expects ~{guess.expected_score:,.0f} points)"
         )
 
-        map_image, projection = self.read_map()
-        pin = self.place_pin(projection, guess.lat, guess.lon)
-        region = self.layout.map_region
-        placed = projection.to_latlon(pin.x - region.left, pin.y - region.top)
+        placement = self.guess_map.place(guess.lat, guess.lon)
+        if placement.confirmed is False:
+            print("  couldn't see the pin where it was clicked; guessing anyway")
+        placed = (placement.lat, placement.lon)
         folder = None
         if run_dir is not None:
             folder = run_dir / f"round_{number:02d}"
-            self._save_round(folder, views, map_image, projection, guess, pin, placed)
+            self._save_round(folder, views, guess, placement)
 
         self.controls.sleep(0.4)
         self.controls.click(self.layout.guess_button)
         if not s.dry_run:
             self.controls.sleep(s.result_wait)
             if self.reader is not None:
+                if self.reader.scale is None:  # the result screen draws the same pin
+                    self.reader.scale = self.guess_map.scale
                 reading = self.reader.read(*placed)
                 self._report(reading, placed)
                 if folder is not None:
                     self._save_reading(folder, reading)
             self.controls.click(self.layout.continue_button)
-        return pin
+        return placement
 
     def look_around(self) -> list[Image.Image]:
         """Capture several headings by dragging the panorama right-to-left between shots."""
@@ -112,47 +128,26 @@ class OpenGuessrBot:
         # Moving onto the panorama also collapses the minimap if it was open.
         self.controls.move(view.center)
         self.controls.sleep(s.view_settle_wait)
-        views = [self.screen.grab(view)]
+        views = [self._loaded_view()]
         distance = round(view.width * s.drag_fraction)
-        start = Point(view.center.x + distance // 2, view.center.y)
+        start = view.center.offset(distance // 2, 0)
         for _ in range(s.views - 1):
             self.controls.drag(start, -distance)
             self.controls.sleep(s.view_settle_wait)
             views.append(self.screen.grab(view))
         return views
 
-    def read_map(self) -> tuple[Image.Image, MapProjection]:
-        """Expand the minimap and work out its projection, zooming out once if needed."""
-        region = self.layout.map_region
-        self.controls.move(self.layout.map_hover)
-        self.controls.move(region.center)  # stay over the expanded map so it doesn't collapse
-        self.controls.sleep(self.settings.map_expand_wait)
-        problem = ""
-        for attempt in range(2):
-            image = self.screen.grab(region)
-            try:
-                projection = locate_world(np.asarray(image))
-                if projection.score >= self.settings.min_map_score:
-                    return image, projection
-                problem = f"match score {projection.score:.2f} is too low"
-            except MapNotFound as exc:
-                problem = str(exc)
-            if attempt == 0:
-                print(f"  couldn't read the map ({problem}); zooming out and retrying")
-                self.controls.scroll(region.center, -6)
-                self.controls.sleep(self.settings.map_expand_wait)
-        raise MapNotFound(f"Couldn't read the map: {problem}. Check map_region in layout.json.")
-
-    def place_pin(self, projection: MapProjection, lat: float, lon: float) -> Point:
-        region = self.layout.map_region
-        x, y = projection.to_pixel(lat, lon, region.width)
-        cx = float(np.clip(x, 3, region.width - 4))
-        cy = float(np.clip(y, 3, region.height - 4))
-        if (cx, cy) != (x, y):
-            print("  guess is outside the visible map; placing the pin at the nearest edge")
-        pin = region.to_screen(cx, cy)
-        self.controls.click(pin)
-        return pin
+    def _loaded_view(self) -> Image.Image:
+        """Grab the view, waiting while Street View is still a black screen."""
+        image = self.screen.grab(self.layout.view)
+        waited = 0.0
+        while _is_blank(image) and waited < self.settings.view_load_timeout:
+            self.controls.sleep(0.5)
+            waited += 0.5
+            image = self.screen.grab(self.layout.view)
+        if _is_blank(image):
+            print("  Street View still looks blank; guessing from it anyway")
+        return image
 
     @staticmethod
     def _report(reading: Reading, placed: tuple[float, float]) -> None:
@@ -163,28 +158,23 @@ class OpenGuessrBot:
         km = haversine_km(*placed, answer.lat, answer.lon)
         print(f"  answer {answer.lat:.3f}, {answer.lon:.3f}: our pin was {km:,.0f} km away")
 
+    @staticmethod
     def _save_round(
-        self,
-        folder: Path,
-        views: Sequence[Image.Image],
-        map_image: Image.Image,
-        projection: MapProjection,
-        guess: Guess,
-        pin: Point,
-        placed: tuple[float, float],
+        folder: Path, views: Sequence[Image.Image], guess: Guess, placement: Placement
     ) -> None:
         folder.mkdir(parents=True, exist_ok=True)
         for i, view in enumerate(views):
             view.save(folder / f"view_{i}.jpg", quality=90)
-        marked = np.array(map_image)
-        local = (pin.x - self.layout.map_region.left, pin.y - self.layout.map_region.top)
-        cv2.drawMarker(marked, local, (255, 0, 0), cv2.MARKER_TILTED_CROSS, 28, 3)
+        marked = np.array(placement.image.convert("RGB"))
+        x, y = (round(v) for v in placement.map_xy)
+        cv2.drawMarker(marked, (x, y), (255, 0, 0), cv2.MARKER_TILTED_CROSS, 28, 3)
         Image.fromarray(marked).save(folder / "map.png")
         info = {
             "guess": asdict(guess),
-            "projection": asdict(projection),
-            "pin": asdict(pin),
-            "placed": {"lat": placed[0], "lon": placed[1]},
+            "projection": asdict(placement.projection),
+            "pin": asdict(placement.click),
+            "placed": {"lat": placement.lat, "lon": placement.lon},
+            "pin_seen": placement.confirmed,
         }
         (folder / "round.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
 
@@ -199,3 +189,8 @@ class OpenGuessrBot:
         if reading.problem:
             info["answer_problem"] = reading.problem
         path.write_text(json.dumps(info, indent=2), encoding="utf-8")
+
+
+def _is_blank(image: Image.Image) -> bool:
+    """A view with almost no contrast: Street View hasn't drawn the panorama yet."""
+    return float(np.asarray(image.convert("L")).std()) < 8.0

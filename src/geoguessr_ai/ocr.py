@@ -80,6 +80,12 @@ def pick_reading(readings: Iterable[tuple[str, str, float]], min_score: float) -
     return best
 
 
+def _plainly_latin(text: str, score: float) -> bool:
+    """A confident reading made almost only of Latin letters: other scripts needn't try."""
+    scripts = [s for s in map(script_of, text) if s]
+    return score >= 0.9 and len(scripts) >= 3 and scripts.count("latin") >= 0.9 * len(scripts)
+
+
 class SignReader:
     def __init__(self, models: Sequence[str] | None = None, min_score: float = 0.8) -> None:
         import importlib.util
@@ -119,9 +125,14 @@ class SignReader:
             return []
         crops = [get_rotate_crop_image(bgr, np.asarray(box, dtype=np.float32)) for box in boxes]
         readings: list[list[tuple[str, str, float]]] = [[] for _ in crops]
+        pending = list(range(len(crops)))
         for model, recognise in self._recognisers.items():
-            result = recognise(TextRecInput(img=crops))
-            for i, (text, score) in enumerate(zip(result.txts, result.scores, strict=True)):
+            if not pending:
+                break
+            result = recognise(TextRecInput(img=[crops[i] for i in pending]))
+            for i, text, score in zip(pending, result.txts, result.scores, strict=True):
                 readings[i].append((RECOGNISERS[model], text, float(score)))
+            if model == "latin":  # most signs are Latin; only puzzle over the rest
+                pending = [i for i in pending if not _plainly_latin(*readings[i][-1][1:])]
         lines = (pick_reading(r, self.min_score) for r in readings)
         return [line for line in lines if line and not _NOT_A_SIGN.search(line.text)]

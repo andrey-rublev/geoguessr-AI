@@ -27,6 +27,13 @@ def test_portuguese_street_words_point_to_brazil_and_portugal():
     assert ratio(clues, "BR", "ES") >= 3 and ratio(clues, "PT", "BR") == 1
 
 
+def test_words_read_without_their_accents_still_count():
+    capitals = text_clues([TextLine("PRACA DA SE", "latin", 0.9)])
+    assert ratio(capitals, "BR", "ES") >= 2 and capitals.notes == ["Portuguese: praca"]
+    pharmacy = text_clues([TextLine("FARMACIA", "latin", 0.9)])  # farmácia, or Spanish farmacia
+    assert ratio(pharmacy, "BR", "FR") >= 2 and ratio(pharmacy, "BR", "MX") == 1
+
+
 def test_shop_signs_in_swahili_and_spanish():
     kenya = text_clues([TextLine("LAST CUT KINYOZI", "latin", 0.9)])  # a barber in Nairobi
     assert ratio(kenya, "KE", "BD") >= 2 and kenya.notes == ["Swahili: kinyozi"]

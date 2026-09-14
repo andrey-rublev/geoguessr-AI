@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import re
+import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
@@ -291,7 +292,8 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
 
 @functools.lru_cache(maxsize=1)
 def _indexes() -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
-    """Which languages use each telling letter, and which use each word or phrase."""
+    """Which languages use each telling letter, and which use each word or phrase. Words are
+    also listed without their accents, which signs in capitals and misreadings often lose."""
     letters: dict[str, set[str]] = {}
     words: dict[str, set[str]] = {}
     for code, (_, telling, common) in LANGUAGES.items():
@@ -299,11 +301,21 @@ def _indexes() -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
             letters.setdefault(letter, set()).add(code)
         for word in common.split(","):
             words.setdefault(word, set()).add(code)
+            if len(plain := _without_accents(word)) >= 4:
+                words.setdefault(plain, set()).add(code)
     for abbreviation, codes in ABBREVIATIONS.items():
         words.setdefault(abbreviation + ".", set()).update(codes.split(","))
     return (
         {k: frozenset(v) for k, v in letters.items()},
         {k: frozenset(v) for k, v in words.items()},
+    )
+
+
+def _without_accents(word: str) -> str:
+    """``praça`` as ``praca``. Letters that aren't accented forms, like ß and đ, stay."""
+    decomposed = unicodedata.normalize("NFD", word)
+    return unicodedata.normalize(
+        "NFC", "".join(c for c in decomposed if not unicodedata.combining(c))
     )
 
 

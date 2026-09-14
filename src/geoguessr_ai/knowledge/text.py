@@ -31,6 +31,8 @@ CUT_OFF_LETTERS, CUT_OFF_MISSING = 5, 3
 when it has at least this many letters and the sign word only this many more."""
 DOMAIN_FLOOR = 0.1
 PHONE_FLOOR = 0.1
+LOCAL_PHONE_FLOOR = 0.3
+"""For a phone number written the local way, which neighbours and misreadings can share."""
 
 SCRIPT_NAMES = {
     "han": "Chinese characters",
@@ -186,6 +188,25 @@ _DOMAIN = re.compile(
     r"(?<![\w.-])((?:https?://)?(?:www\.)?)((?:[a-z0-9-]+\.)+)([a-z]{2,3})(?![\w])"
 )
 _PHONE = re.compile(r"\+\s?(\d[\d\s().-]{7,})")
+_NANP = tuple(code for code, country in countries().items() if "1" in country.calling_codes)
+# Phone numbers without a country code, by how they are grouped where they are written.
+LOCAL_PHONES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (r"(?:\(\d{2}\)\s?)?9\d{4}[-.\s]\d{4}", ("BR",)),  # (11) 99983-2915
+    (r"(?:\([2-9]\d{2}\)\s?|[2-9]\d{2}[-.])[2-9]\d{2}[-.]\d{4}", _NANP),  # (415) 555-0132
+    (r"0[1-9](?:[\s.]\d{2}){4}", ("FR",)),  # 01 42 68 53 00
+    (r"0[17]\d{3}\s\d{3}\s?\d{3}|020\s[378]\d{3}\s\d{4}", ("GB", "IM", "JE", "GG")),
+    (r"04\d{2}\s\d{3}\s\d{3}|\(0[2378]\)\s?\d{4}\s\d{4}", ("AU",)),  # 0412 345 678
+    (r"07\d{2}\s\d{3}\s?\d{3}", ("KE", "UG", "TZ", "RW", "ZM", "MW")),  # 0722 123 456
+    (r"0[789]\d{2}[\s-]\d{3}[\s-]\d{4}", ("PH", "NG")),  # 0917 123 4567
+    (r"0[689]\d-\d{3}-\d{4}", ("TH",)),  # 081-234-5678
+    (r"08\d{2}[-\s]\d{4}[-\s]\d{3,5}", ("ID",)),  # 0812-3456-7890
+    (r"0[789]0-\d{4}-\d{4}|0120-\d{3}-\d{3}", ("JP",)),  # 090-1234-5678
+    (r"010-\d{4}-\d{4}", ("KR",)),  # 010-1234-5678
+    (r"\d{3}-\d{2}-\d{2}", ("RU", "UA", "BY", "KZ", "KG", "UZ", "TJ", "MD")),  # 123-45-67
+    (r"[6-9]\d{4}\s\d{5}", ("IN",)),  # 98765 43210
+    (r"0\d{2,4}\s?/\s?\d{3,8}", ("DE", "AT", "CH", "LI")),  # 0221 / 123456
+    (r"[69]\d{2}\s\d{3}\s\d{3}", ("ES", "PT")),  # 612 345 678
+)
 _TOKEN = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*")
 
 BRAND_FLOOR = 0.3
@@ -353,6 +374,8 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
         weigh(lambda c, t=tld: t in c.domains, DOMAIN_FLOOR, f"web domain .{tld}")
     for code in sorted(_calling_codes(everything)):
         weigh(lambda c, k=code: k in c.calling_codes, PHONE_FLOOR, f"phone number +{code}")
+    for number, places in _local_numbers(_PHONE.sub(" ", everything)):
+        weigh(lambda c, p=places: c.code in p, LOCAL_PHONE_FLOOR, f"phone number {number}")
     return clues
 
 
@@ -442,6 +465,15 @@ def _domains(text: str) -> set[str]:
         clearly_web = bool(prefix) or names[-1] in _SECOND_LEVEL
         if clearly_web or (tld not in _AMBIGUOUS_DOMAINS and len(names[-1]) >= 4):
             found.add(tld)
+    return found
+
+
+def _local_numbers(text: str) -> list[tuple[str, tuple[str, ...]]]:
+    """The first phone number of each local way of writing them, and where it is written so."""
+    found = []
+    for pattern, places in LOCAL_PHONES:
+        if match := re.search(rf"(?<![\d+])(?:{pattern})(?!\d)", text):
+            found.append((match.group(0), places))
     return found
 
 

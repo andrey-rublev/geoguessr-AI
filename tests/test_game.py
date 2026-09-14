@@ -1,9 +1,11 @@
 import json
 
+import cv2
 import numpy as np
 import pytest
 from PIL import Image
 from test_compass import draw_compass
+from test_sun import sky
 
 from geoguessr_ai import game as game_module
 from geoguessr_ai.config import Layout, Point, Region
@@ -63,19 +65,25 @@ class FakeControls:
 
 
 class TurningStreetView(FakeScreen, FakeControls):
-    """Street View with Google's compass: pressing it faces north, its arrow turns 90 degrees."""
+    """Street View with Google's compass: pressing it faces north, its arrow turns 90 degrees.
+    The sun shows low in the sky when facing ``sun_heading``."""
 
-    def __init__(self):
+    def __init__(self, sun_heading=None):
         FakeScreen.__init__(self)
         FakeControls.__init__(self)
-        self.heading = 37.0
+        self.heading, self.sun_heading = 37.0, sun_heading
 
     def grab(self, region):
-        if region.left == LAYOUT.view.left:
+        if region.left != LAYOUT.view.left:
+            self.compass_at = Point(region.left + 90, region.top + 355)
+            rgb = np.full((region.height, region.width, 3), (90, 110, 70), np.uint8)
+            rgb[300:420, :160] = draw_compass(self.heading)
+            return Image.fromarray(rgb)
+        if self.heading != self.sun_heading:
             return super().grab(region)
-        self.compass_at = Point(region.left + 90, region.top + 355)
-        rgb = np.full((region.height, region.width, 3), (90, 110, 70), np.uint8)
-        rgb[300:420, :160] = draw_compass(self.heading)
+        rgb = np.full((region.height, region.width, 3), (70, 110, 60), np.uint8)
+        rows = min(region.height, LAYOUT.view.height)
+        rgb[:rows] = cv2.resize(sky(sun_at=(700, 150)), (region.width, LAYOUT.view.height))[:rows]
         return Image.fromarray(rgb)
 
     def click(self, p):
@@ -166,15 +174,26 @@ def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monke
 
 
 def test_turns_north_east_south_and_west_with_the_compass():
-    street_view, predictor = TurningStreetView(), FakePredictor()
+    street_view = TurningStreetView()
     settings = BotSettings(rounds=1, views=4, record_answers=False, debug_dir=None)
 
-    bot = OpenGuessrBot(LAYOUT, predictor, settings, street_view, street_view)
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
     look = bot.look_around()
 
     assert [round(h) % 360 for h in look.headings] == [0, 90, 180, 270]
     assert len(look.views) == 4 and not street_view.drags
     assert look.scenes[0].size == (1600, 860)  # the view plus the road below it
+
+
+def test_a_sun_to_the_south_hints_at_the_northern_hemisphere():
+    street_view = TurningStreetView(sun_heading=180.0)
+    settings = BotSettings(rounds=1, record_answers=False, read_text=False, debug_dir=None)
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
+
+    evidence, _ = bot.notice(bot.look_around())
+
+    assert any(note.startswith("sun to the south") for note in evidence.notes)
+    assert evidence.latitude(45) > 3 * evidence.latitude(-35)
 
 
 def test_signs_become_clues_for_the_model(tmp_path):

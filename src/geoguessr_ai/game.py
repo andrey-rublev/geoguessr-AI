@@ -18,6 +18,7 @@ from .config import Layout, Region
 from .controls import StopRequested
 from .geo import haversine_km
 from .knowledge.evidence import Evidence
+from .knowledge.sun import find_sun, latitude_likelihood, sun_azimuth
 from .knowledge.text import TextLine, text_clues
 from .minimap import GuessMap, Placement
 from .model.predictor import Guess
@@ -180,13 +181,21 @@ class OpenGuessrBot:
         return look
 
     def notice(self, look: Look) -> tuple[Evidence, list[TextLine]]:
-        """Read the signs in every direction, for clues the model can't see."""
+        """Read the signs every way and look for the sun: clues the model can't see."""
         lines: list[TextLine] = []
         if self.signs is not None:
             for scene in look.scenes:
                 lines.extend(self.signs.read(scene))
         clues = text_clues(lines)
-        return Evidence(countries=clues.likelihood, notes=clues.notes), lines
+        evidence = Evidence(countries=clues.likelihood, notes=clues.notes)
+        for view, heading in zip(look.views, look.headings, strict=True):
+            spot = None if heading is None else find_sun(np.asarray(view.convert("RGB")))
+            if spot is not None:
+                azimuth = sun_azimuth(spot[0], view.width, heading)
+                evidence.latitude = latitude_likelihood(azimuth)
+                evidence.notes.append(f"sun to the {_compass_point(azimuth)} ({azimuth:.0f} deg)")
+                break
+        return evidence, lines
 
     def _drag_around(self) -> Look:
         """Without the compass: drag the panorama right-to-left between shots."""
@@ -277,6 +286,11 @@ def _describe(guess: Guess) -> str:
     side = "left" if guess.drives_left >= 0.5 else "right"
     sure = max(guess.drives_left, 1 - guess.drives_left)
     return f" ({places}; driving on the {side} {sure:.0%})"
+
+
+def _compass_point(degrees: float) -> str:
+    points = ("north", "north-east", "east", "south-east", "south", "south-west", "west")
+    return (*points, "north-west")[round(degrees / 45) % 8]
 
 
 def _is_blank(image: Image.Image) -> bool:

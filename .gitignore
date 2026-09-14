@@ -12,3 +12,4 @@ models/
 runs/
 layout.json
 calibration_preview.png
+.playwright-mcp/

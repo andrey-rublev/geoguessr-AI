@@ -26,6 +26,9 @@ LANGUAGE_FLOORS = (0.5, 0.3, 0.15)
 """For a country that doesn't speak a language, after one, two, or three or more signs of it."""
 ENGLISH_FLOOR = 0.7
 """English is on signs everywhere, so it barely counts."""
+CUT_OFF_LETTERS, CUT_OFF_MISSING = 5, 3
+"""A word at the end of a line of text may be cut off by the frame: count it as a sign word
+when it has at least this many letters and the sign word only this many more."""
 DOMAIN_FLOOR = 0.1
 PHONE_FLOOR = 0.1
 
@@ -272,7 +275,7 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
     for brand in sorted(set(_TOKEN.findall(everything)) & BRANDS.keys()):
         weigh(lambda c, b=brand: c.code in BRANDS[b], BRAND_FLOOR, f"brand {brand}")
 
-    latin = " ".join(line.text for line in lines if line.script == "latin").lower()
+    latin = [line.text.lower() for line in lines if line.script == "latin"]
     for languages, signs in sorted(_language_signs(latin).items(), key=lambda kv: sorted(kv[0])):
         floor = ENGLISH_FLOOR if languages == {"en"} else LANGUAGE_FLOORS[min(len(signs), 3) - 1]
         names = "/".join(LANGUAGES[code][0] for code in sorted(languages))
@@ -319,10 +322,23 @@ def _without_accents(word: str) -> str:
     )
 
 
-def _language_signs(text: str) -> dict[frozenset[str], set[str]]:
-    """Telling letters, words and phrases in lowercase Latin text, grouped by who uses them."""
+def _language_signs(lines: Sequence[str]) -> dict[frozenset[str], set[str]]:
+    """Telling letters, words and phrases in lowercase lines of Latin text, grouped by who uses
+    them. Words cut off at either end of a line are marked with an ellipsis."""
     letters, words = _indexes()
     found: dict[frozenset[str], set[str]] = {}
+    text = " ".join(lines)
+    ends = set()
+    for line in lines:
+        if line_tokens := _WORD.findall(line):
+            ends.update((line_tokens[0], line_tokens[-1]))
+    for token in ends - words.keys():
+        if len(token) < CUT_OFF_LETTERS:
+            continue
+        for word, languages in words.items():
+            cut_from = word.startswith(token) and len(word) - len(token) <= CUT_OFF_MISSING
+            if cut_from and _WORD.fullmatch(word):
+                found.setdefault(languages, set()).add(token + "…")
     tokens = set(_WORD.findall(text))
     for token in tokens:
         if token in words:

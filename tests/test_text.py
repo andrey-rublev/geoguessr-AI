@@ -34,6 +34,13 @@ def test_words_read_without_their_accents_still_count():
     assert ratio(pharmacy, "BR", "FR") >= 2 and ratio(pharmacy, "BR", "MX") == 1
 
 
+def test_words_cut_off_at_the_edge_of_a_sign_still_count():
+    cut = text_clues([TextLine("DE DESCONT", "latin", 0.9)])  # desconto, past the frame
+    assert ratio(cut, "BR", "MX") >= 2 and cut.notes == ["Portuguese: descont…"]
+    assert not text_clues([TextLine("BIG DESCONT SALE", "latin", 0.9)]).notes  # a whole word
+    assert not text_clues([TextLine("ANCIA", "latin", 0.9)]).notes
+
+
 def test_shop_signs_in_swahili_and_spanish():
     kenya = text_clues([TextLine("LAST CUT KINYOZI", "latin", 0.9)])  # a barber in Nairobi
     assert ratio(kenya, "KE", "BD") >= 2 and kenya.notes == ["Swahili: kinyozi"]

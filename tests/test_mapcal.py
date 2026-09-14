@@ -57,6 +57,20 @@ def test_projection_roundtrip_and_wrapping():
     assert (lat, lon) == pytest.approx((10.0, 170.0), abs=1e-6)
 
 
+def test_zooming_keeps_the_point_under_the_cursor():
+    proj = MapProjection(world_px=1536, origin_x=-293, origin_y=-394)
+    lat, lon = proj.to_latlon(400, 250)
+    zoomed = proj.zoomed(400, 250, 8)
+    assert zoomed.world_px == 1536 * 8
+    assert zoomed.to_pixel(lat, lon) == pytest.approx((400, 250))
+
+
+def test_panning_moves_every_place_by_the_drag():
+    proj = MapProjection(world_px=1536, origin_x=-293, origin_y=-394)
+    x, y = proj.to_pixel(35.7, 139.7)
+    assert proj.panned(-300, 40).to_pixel(35.7, 139.7) == pytest.approx((x - 300, y + 40))
+
+
 @pytest.mark.parametrize(
     "width,height,truth",
     [

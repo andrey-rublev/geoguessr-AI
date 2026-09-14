@@ -59,6 +59,22 @@ class MapProjection:
             mx %= 1.0
         return inverse_mercator(mx, (y - self.origin_y) / self.world_px)
 
+    def panned(self, dx: float, dy: float) -> MapProjection:
+        """This map after it is dragged ``dx``, ``dy`` pixels."""
+        return MapProjection(
+            self.world_px, self.origin_x + dx, self.origin_y + dy, self.wraps, self.score
+        )
+
+    def zoomed(self, x: float, y: float, factor: float) -> MapProjection:
+        """This map after zooming by ``factor`` around pixel (``x``, ``y``), which stays put."""
+        return MapProjection(
+            self.world_px * factor,
+            x + (self.origin_x - x) * factor,
+            y + (self.origin_y - y) * factor,
+            self.wraps,
+            self.score,
+        )
+
 
 def water_mask(rgb: np.ndarray) -> np.ndarray:
     """+1 where a map screenshot shows water, -1 elsewhere (land, borders, labels, off-world)."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -13,38 +13,66 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from .config import Layout
+from .compass import CompassReader, compass_region
+from .config import Layout, Region
 from .controls import StopRequested
 from .geo import haversine_km
+from .knowledge.evidence import Evidence
+from .knowledge.text import TextLine, text_clues
 from .minimap import GuessMap, Placement
 from .model.predictor import Guess
+from .ocr import SignReader
 from .result import Reading, ResultReader, result_region
 
 
 class Predictor(Protocol):
-    def predict(self, images: Sequence[Image.Image]) -> Guess: ...
+    def predict(self, images: Sequence[Image.Image], evidence: Evidence | None = None) -> Guess: ...
 
 
 @dataclass
 class BotSettings:
     rounds: int = 5
     views: int = 4
-    """Screenshots per round; the camera is rotated between them."""
+    """Screenshots per round. With the compass they face north, east, south and west (so at
+    most four); without it the camera is dragged round between them."""
     drag_fraction: float = 0.6
-    """How far to drag per rotation, as a fraction of the view width."""
+    """Without the compass, how far to drag per turn, as a fraction of the view width."""
     round_load_wait: float = 3.0
     view_settle_wait: float = 0.8
     view_load_timeout: float = 10.0
     """How long to wait for Street View while it is still a black screen."""
+    turn_wait: float = 1.0
+    """How long the view takes to turn after pressing the compass."""
     map_expand_wait: float = 1.0
     zoom_levels: int = 3
     """Wheel notches to zoom the minimap in by before clicking the guess."""
     result_wait: float = 3.5
     min_map_score: float = 0.6
+    read_text: bool = True
+    """Read signs and road names (needs RapidOCR)."""
     record_answers: bool = True
     """Read the real location off each result screen and save it with the round."""
     dry_run: bool = False
     debug_dir: Path | None = Path("runs")
+
+
+@dataclass
+class Look:
+    """Everything the bot saw in one round."""
+
+    views: list[Image.Image] = field(default_factory=list)
+    """What the model looks at."""
+    scenes: list[Image.Image] = field(default_factory=list)
+    """Each view with the road below it, where Street View writes road names, for reading."""
+    headings: list[float | None] = field(default_factory=list)
+    """Degrees clockwise from north that each view faces, when the compass was read."""
+
+
+def scene_region(layout: Layout) -> Region:
+    """The view plus the road below it, down to just above the game's buttons and adverts."""
+    view = layout.view
+    bottom = min(layout.guess_button.y, layout.continue_button.y) - 80
+    return Region(view.left, view.top, view.width, max(bottom - view.top, view.height))
 
 
 class OpenGuessrBot:
@@ -56,6 +84,8 @@ class OpenGuessrBot:
         self.settings = settings
         self.screen = screen
         self.controls = controls
+        self.scene = scene_region(layout)
+        self.compass = CompassReader(screen, compass_region(layout, screen.virtual_desktop()))
         self.guess_map = GuessMap(
             screen,
             controls,
@@ -66,6 +96,12 @@ class OpenGuessrBot:
             expand_wait=settings.map_expand_wait,
             dry_run=settings.dry_run,
         )
+        self.signs = None
+        if settings.read_text:
+            try:
+                self.signs = SignReader()
+            except ImportError:
+                print("Not reading signs: install RapidOCR with `pip install rapidocr onnxruntime`")
         self.reader = None
         if settings.record_answers:
             self.reader = ResultReader(screen, controls, result_region(layout))
@@ -91,10 +127,13 @@ class OpenGuessrBot:
         print(f"\nRound {number}")
         self.controls.sleep(s.round_load_wait)
 
-        views = self.look_around()
-        guess = self.predictor.predict(views)
+        look = self.look_around()
+        evidence, lines = self.notice(look)
+        guess = self.predictor.predict(look.views, evidence)
+        for note in evidence.notes:
+            print(f"  clue: {note}")
         print(
-            f"  guess {guess.lat:.3f}, {guess.lon:.3f} "
+            f"  guess {guess.lat:.3f}, {guess.lon:.3f}{_describe(guess)} "
             f"(model expects ~{guess.expected_score:,.0f} points)"
         )
 
@@ -105,7 +144,7 @@ class OpenGuessrBot:
         folder = None
         if run_dir is not None:
             folder = run_dir / f"round_{number:02d}"
-            self._save_round(folder, views, guess, placement)
+            self._save_round(folder, look, lines, evidence, guess, placement)
 
         self.controls.sleep(0.4)
         self.controls.click(self.layout.guess_button)
@@ -121,33 +160,62 @@ class OpenGuessrBot:
             self.controls.click(self.layout.continue_button)
         return placement
 
-    def look_around(self) -> list[Image.Image]:
-        """Capture several headings by dragging the panorama right-to-left between shots."""
-        view = self.layout.view
+    def look_around(self) -> Look:
+        """See every direction: north, east, south and west by the compass, if it can be found."""
         s = self.settings
-        # Moving onto the panorama also collapses the minimap if it was open.
-        self.controls.move(view.center)
+        self.controls.move(self.layout.view.center)  # also collapses the minimap if it was open
         self.controls.sleep(s.view_settle_wait)
-        views = [self._loaded_view()]
+        self._wait_for_street_view()
+        compass = None if s.dry_run else self.compass.read()
+        if compass is None:
+            return self._drag_around()
+        look = Look()
+        self.controls.click(compass.center)  # the compass itself turns the view north
+        for turn in range(min(s.views, 4)):
+            if turn:
+                self.controls.click(compass.clockwise)
+            self.controls.sleep(s.turn_wait)
+            reading = self.compass.read()
+            self._capture(look, reading.heading if reading else 90.0 * turn)
+        return look
+
+    def notice(self, look: Look) -> tuple[Evidence, list[TextLine]]:
+        """Read the signs in every direction, for clues the model can't see."""
+        lines: list[TextLine] = []
+        if self.signs is not None:
+            for scene in look.scenes:
+                lines.extend(self.signs.read(scene))
+        clues = text_clues(lines)
+        return Evidence(countries=clues.likelihood, notes=clues.notes), lines
+
+    def _drag_around(self) -> Look:
+        """Without the compass: drag the panorama right-to-left between shots."""
+        view, s = self.layout.view, self.settings
+        look = Look()
+        self._capture(look, None)
         distance = round(view.width * s.drag_fraction)
         start = view.center.offset(distance // 2, 0)
         for _ in range(s.views - 1):
             self.controls.drag(start, -distance)
             self.controls.sleep(s.view_settle_wait)
-            views.append(self.screen.grab(view))
-        return views
+            self._capture(look, None)
+        return look
 
-    def _loaded_view(self) -> Image.Image:
-        """Grab the view, waiting while Street View is still a black screen."""
-        image = self.screen.grab(self.layout.view)
+    def _capture(self, look: Look, heading: float | None) -> None:
+        scene = self.screen.grab(self.scene)
+        look.scenes.append(scene)
+        look.views.append(scene.crop((0, 0, self.layout.view.width, self.layout.view.height)))
+        look.headings.append(heading)
+
+    def _wait_for_street_view(self) -> None:
+        """Wait while Street View is still a black screen."""
         waited = 0.0
-        while _is_blank(image) and waited < self.settings.view_load_timeout:
+        while _is_blank(self.screen.grab(self.layout.view)):
+            if waited >= self.settings.view_load_timeout:
+                print("  Street View still looks blank; guessing anyway")
+                return
             self.controls.sleep(0.5)
             waited += 0.5
-            image = self.screen.grab(self.layout.view)
-        if _is_blank(image):
-            print("  Street View still looks blank; guessing from it anyway")
-        return image
 
     @staticmethod
     def _report(reading: Reading, placed: tuple[float, float]) -> None:
@@ -160,10 +228,15 @@ class OpenGuessrBot:
 
     @staticmethod
     def _save_round(
-        folder: Path, views: Sequence[Image.Image], guess: Guess, placement: Placement
+        folder: Path,
+        look: Look,
+        lines: Sequence[TextLine],
+        evidence: Evidence,
+        guess: Guess,
+        placement: Placement,
     ) -> None:
         folder.mkdir(parents=True, exist_ok=True)
-        for i, view in enumerate(views):
+        for i, view in enumerate(look.views):
             view.save(folder / f"view_{i}.jpg", quality=90)
         marked = np.array(placement.image.convert("RGB"))
         x, y = (round(v) for v in placement.map_xy)
@@ -171,12 +244,17 @@ class OpenGuessrBot:
         Image.fromarray(marked).save(folder / "map.png")
         info = {
             "guess": asdict(guess),
+            "headings": look.headings,
+            "text": [asdict(line) for line in lines],
+            "clues": evidence.notes,
             "projection": asdict(placement.projection),
             "pin": asdict(placement.click),
             "placed": {"lat": placement.lat, "lon": placement.lon},
             "pin_seen": placement.confirmed,
         }
-        (folder / "round.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
+        (folder / "round.json").write_text(
+            json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
     @staticmethod
     def _save_reading(folder: Path, reading: Reading) -> None:
@@ -188,7 +266,17 @@ class OpenGuessrBot:
         info["answer"] = None if reading.answer is None else asdict(reading.answer)
         if reading.problem:
             info["answer_problem"] = reading.problem
-        path.write_text(json.dumps(info, indent=2), encoding="utf-8")
+        path.write_text(json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _describe(guess: Guess) -> str:
+    """Where the model thinks it is, by country, and which side cars drive on there."""
+    if not guess.countries:
+        return ""
+    places = ", ".join(f"{code} {share:.0%}" for code, share in guess.countries)
+    side = "left" if guess.drives_left >= 0.5 else "right"
+    sure = max(guess.drives_left, 1 - guess.drives_left)
+    return f" ({places}; driving on the {side} {sure:.0%})"
 
 
 def _is_blank(image: Image.Image) -> bool:

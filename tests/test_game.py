@@ -3,10 +3,12 @@ import json
 import numpy as np
 import pytest
 from PIL import Image
+from test_compass import draw_compass
 
 from geoguessr_ai import game as game_module
 from geoguessr_ai.config import Layout, Point, Region
 from geoguessr_ai.game import BotSettings, OpenGuessrBot
+from geoguessr_ai.knowledge.text import TextLine
 from geoguessr_ai.mapcal import MapProjection
 from geoguessr_ai.minimap import Placement
 from geoguessr_ai.model.predictor import Guess
@@ -19,17 +21,22 @@ LAYOUT = Layout(
     guess_button=Point(1800, 1040),
     continue_button=Point(960, 1040),
 )
+DESKTOP = Region(0, 0, 2000, 1200)
 LAGOS = (6.45, 3.39)
 
 
 class FakeScreen:
-    """Street View that stays black for the first ``blank_grabs`` grabs."""
+    """Street View that stays black for the first ``blank_grabs`` looks. No compass shows."""
 
     def __init__(self, blank_grabs=0):
         self.blank_grabs, self.grabs = blank_grabs, 0
 
+    def virtual_desktop(self):
+        return DESKTOP
+
     def grab(self, region):
-        assert region == LAYOUT.view
+        if region.left != LAYOUT.view.left:  # where the compass would be
+            return Image.new("RGB", (region.width, region.height), (90, 110, 70))
         self.grabs += 1
         if self.blank_grabs:
             self.blank_grabs -= 1
@@ -55,13 +62,38 @@ class FakeControls:
         self.drags.append((start, dx))
 
 
+class TurningStreetView(FakeScreen, FakeControls):
+    """Street View with Google's compass: pressing it faces north, its arrow turns 90 degrees."""
+
+    def __init__(self):
+        FakeScreen.__init__(self)
+        FakeControls.__init__(self)
+        self.heading = 37.0
+
+    def grab(self, region):
+        if region.left == LAYOUT.view.left:
+            return super().grab(region)
+        self.compass_at = Point(region.left + 90, region.top + 355)
+        rgb = np.full((region.height, region.width, 3), (90, 110, 70), np.uint8)
+        rgb[300:420, :160] = draw_compass(self.heading)
+        return Image.fromarray(rgb)
+
+    def click(self, p):
+        super().click(p)
+        if abs(p.x - self.compass_at.x) <= 3 and abs(p.y - self.compass_at.y) <= 3:
+            self.heading = 0.0
+        elif self.compass_at.x + 15 < p.x < self.compass_at.x + 40:
+            self.heading = (self.heading + 90) % 360
+
+
 class FakePredictor:
     def __init__(self):
-        self.view_counts = []
+        self.view_counts, self.evidence = [], []
 
-    def predict(self, images):
+    def predict(self, images, evidence=None):
         self.view_counts.append(len(images))
-        return Guess(*LAGOS, expected_score=2500.0, top_cells=[])
+        self.evidence.append(evidence)
+        return Guess(*LAGOS, expected_score=2500.0, top_cells=[], countries=[("NG", 0.8)])
 
 
 class FakeGuessMap:
@@ -79,6 +111,17 @@ class FakeGuessMap:
         return Placement(lat + 0.01, lon, click, image, projection, (400.0, 300.0), True)
 
 
+class FakeSignReader:
+    """Reads one Portuguese street sign in the first direction it looks."""
+
+    def __init__(self):
+        self.scenes = []
+
+    def read(self, image):
+        self.scenes.append(image.size)
+        return [TextLine("Rua Augusta 12", "latin", 0.93)] if len(self.scenes) == 1 else []
+
+
 class FakeReader:
     """Stands in for the result-screen reader, which has its own tests."""
 
@@ -91,8 +134,9 @@ class FakeReader:
 
 
 @pytest.fixture(autouse=True)
-def fake_guess_map(monkeypatch):
+def fakes(monkeypatch):
     monkeypatch.setattr(game_module, "GuessMap", FakeGuessMap)
+    monkeypatch.setattr(game_module, "SignReader", FakeSignReader)
 
 
 def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monkeypatch):
@@ -104,7 +148,7 @@ def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monke
     bot.play()
 
     assert predictor.view_counts == [4, 4]
-    assert len(controls.drags) == 6 and all(dx < 0 for _, dx in controls.drags)
+    assert len(controls.drags) == 6 and all(dx < 0 for _, dx in controls.drags)  # no compass
     assert bot.guess_map.guesses == [LAGOS, LAGOS]
     assert controls.clicks[1:3] == [LAYOUT.guess_button, LAYOUT.continue_button]
 
@@ -112,12 +156,39 @@ def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monke
     assert bot.reader.placed[0] == pytest.approx((6.46, 3.39))  # where the pin really went
     assert bot.reader.scale == 1.5  # the minimap already showed how big pins are drawn
     folder = next(tmp_path.glob("*/round_01"))
-    saved = json.loads((folder / "round.json").read_text())
-    assert saved["guess"]["lat"] == 6.45
+    saved = json.loads((folder / "round.json").read_text(encoding="utf-8"))
+    assert saved["guess"]["lat"] == 6.45 and saved["headings"] == [None] * 4
     assert (saved["placed"]["lat"], saved["placed"]["lon"]) == pytest.approx((6.46, 3.39))
     assert saved["answer"] == {"lat": 6.52, "lon": 3.38, "zoom_outs": 2}
     assert saved["pin_seen"] is True
     assert (folder / "result.png").exists() and (folder / "map.png").exists()
+    assert Image.open(folder / "view_0.jpg").size == (1600, 700)
+
+
+def test_turns_north_east_south_and_west_with_the_compass():
+    street_view, predictor = TurningStreetView(), FakePredictor()
+    settings = BotSettings(rounds=1, views=4, record_answers=False, debug_dir=None)
+
+    bot = OpenGuessrBot(LAYOUT, predictor, settings, street_view, street_view)
+    look = bot.look_around()
+
+    assert [round(h) % 360 for h in look.headings] == [0, 90, 180, 270]
+    assert len(look.views) == 4 and not street_view.drags
+    assert look.scenes[0].size == (1600, 860)  # the view plus the road below it
+
+
+def test_signs_become_clues_for_the_model(tmp_path):
+    predictor = FakePredictor()
+    settings = BotSettings(rounds=1, record_answers=False, debug_dir=tmp_path)
+
+    bot = OpenGuessrBot(LAYOUT, predictor, settings, FakeScreen(), FakeControls())
+    bot.play()
+
+    evidence = predictor.evidence[0]
+    assert any(note.startswith("Portuguese") for note in evidence.notes)
+    assert len(bot.signs.scenes) == 4
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    assert saved["clues"] == evidence.notes and saved["text"][0]["text"] == "Rua Augusta 12"
 
 
 def test_unreadable_answer_is_saved_as_missing(tmp_path, monkeypatch):
@@ -131,7 +202,7 @@ def test_unreadable_answer_is_saved_as_missing(tmp_path, monkeypatch):
 
     OpenGuessrBot(LAYOUT, FakePredictor(), settings, FakeScreen(), controls).play()
 
-    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text())
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
     assert saved["answer"] is None and "flag" in saved["answer_problem"]
     assert controls.clicks[-1] == LAYOUT.continue_button
 
@@ -142,10 +213,10 @@ def test_waits_for_street_view_to_stop_being_black():
 
     OpenGuessrBot(LAYOUT, FakePredictor(), settings, screen, FakeControls()).play()
 
-    assert screen.grabs == 3 + 4
+    assert screen.grabs == 3 + 1 + 4  # three black frames, the first good one, four views
 
 
-def test_dry_run_plays_one_round_without_continuing(tmp_path):
+def test_dry_run_plays_one_round_without_continuing():
     controls = FakeControls()
     settings = BotSettings(rounds=5, dry_run=True, debug_dir=None)
     OpenGuessrBot(LAYOUT, FakePredictor(), settings, FakeScreen(), controls).play()

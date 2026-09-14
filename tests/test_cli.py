@@ -2,8 +2,10 @@ import pytest
 from PIL import Image
 from test_mapcal import render_map
 
+from geoguessr_ai import cli
 from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
 from geoguessr_ai.mapcal import MapProjection
+from geoguessr_ai.model import evaluate, rounds, train
 from geoguessr_ai.model.rounds import ROUNDS_FILE
 
 
@@ -20,7 +22,8 @@ from geoguessr_ai.model.rounds import ROUNDS_FILE
         ["evaluate", "--embeddings", "data/embeddings/x/osv5m-test-04.npz"],
         ["evaluate", "--images", "photos", "--labels", "photos/labels.csv"],
         ["play", "--dry-run", "--rounds", "1"],
-        ["play", "--no-answers"],
+        ["learn", "--rounds", "20"],
+        ["learn", "--no-train"],
     ],
 )
 def test_every_command_parses(argv):
@@ -28,7 +31,7 @@ def test_every_command_parses(argv):
     assert callable(args.func)
 
 
-@pytest.mark.parametrize("command", [["predict", "a.jpg"], ["evaluate"], ["play"]])
+@pytest.mark.parametrize("command", [["predict", "a.jpg"], ["evaluate"], ["play"], ["learn"]])
 def test_model_commands_take_prior_strength(command):
     assert build_parser().parse_args(command).prior_strength == 1.0
     assert build_parser().parse_args([*command, "--prior-strength", "0"]).prior_strength == 0.0
@@ -42,8 +45,46 @@ def test_round_options():
     assert parser.parse_args(["evaluate", "--rounds"]).rounds == DEFAULT_ROUNDS
     assert DEFAULT_ROUNDS.name == ROUNDS_FILE
     assert parser.parse_args(["evaluate"]).rounds is None
-    train = parser.parse_args(["train", "--real-fraction", "0.3"])
-    assert train.real_fraction == 0.3 and train.rounds is None
+    train_args = parser.parse_args(["train", "--real-fraction", "0.3"])
+    assert train_args.real_fraction == 0.3 and train_args.rounds is None
+
+
+@pytest.mark.parametrize("retrained_score,switched", [(2100.0, True), (1900.0, False)])
+def test_learn_switches_to_the_retrained_model_unless_it_scores_worse(
+    tmp_path, monkeypatch, retrained_score, switched
+):
+    model = tmp_path / "geoguessr.pt"
+    model.write_text("old")
+    retrained = tmp_path / "geoguessr-retrained.pt"
+
+    class Encoder:
+        name = "clip"
+
+    class Split(list):
+        round_ids = property(lambda self: self)
+
+    class Rounds:
+        def split(self):
+            return Split(["a", "b", "c"]), Split(["d"])
+
+    monkeypatch.setattr(rounds, "embed_rounds", lambda encoder, root, out: Rounds())
+    monkeypatch.setattr(train, "resolve_embedding_files", lambda patterns: ["photos.npz"])
+    monkeypatch.setattr(
+        train, "train", lambda files, out, cfg, rounds_path, device: out.write_text("new")
+    )
+    scores = {model: 2000.0, retrained: retrained_score}
+    monkeypatch.setattr(
+        evaluate, "evaluate_rounds", lambda path, *rest: ({"mean_score": scores[path]}, [])
+    )
+    args = build_parser().parse_args(
+        ["learn", "--model", str(model), "--embeddings", str(tmp_path)]
+    )
+
+    cli.learn_from_rounds(args, Encoder())
+
+    assert model.read_text() == ("new" if switched else "old")
+    if switched:
+        assert (tmp_path / "geoguessr-previous.pt").read_text() == "old"
 
 
 def test_locate_map_command(tmp_path, capsys):

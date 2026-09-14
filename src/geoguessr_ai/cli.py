@@ -14,6 +14,7 @@ DEFAULT_MODEL = Path("models/geoguessr.pt")
 DEFAULT_DATA = Path("data/osv5m")
 DEFAULT_EMBEDDINGS = Path("data/embeddings")
 DEFAULT_ROUNDS = DEFAULT_EMBEDDINGS / DEFAULT_BACKBONE.replace("/", "__") / "openguessr-rounds.npz"
+DEFAULT_RUNS = Path("runs")
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
@@ -159,10 +160,11 @@ def cmd_locate_map(args: argparse.Namespace) -> None:
         print(f"({lat}, {lon}) is at pixel ({x:.1f}, {y:.1f})")
 
 
-def cmd_play(args: argparse.Namespace) -> None:
+def _run_bot(args: argparse.Namespace, settings):
+    """Load the model and play. Returns the predictor, whose encoder learning can reuse."""
     from .config import Layout
     from .controls import Controls
-    from .game import BotSettings, OpenGuessrBot
+    from .game import OpenGuessrBot
     from .model.predictor import GeoPredictor
     from .screen import Screen
 
@@ -170,17 +172,74 @@ def cmd_play(args: argparse.Namespace) -> None:
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Train a model first (see README).")
     predictor = GeoPredictor(args.model, args.device, args.prior_strength, args.game_prior_strength)
+    with Screen() as screen, Controls(dry_run=settings.dry_run, stop_key=args.stop_key) as controls:
+        print(f"Starting in {args.start_delay:g}s - switch to the OpenGuessr window.")
+        controls.sleep(args.start_delay)
+        OpenGuessrBot(layout, predictor, settings, screen, controls).play()
+    return predictor
+
+
+def cmd_play(args: argparse.Namespace) -> None:
+    from .game import BotSettings
+
     settings = BotSettings(
         rounds=args.rounds,
         views=args.views,
         dry_run=args.dry_run,
-        record_answers=not args.no_answers,
+        record_answers=False,
         debug_dir=None if args.no_debug else args.debug_dir,
     )
-    with Screen() as screen, Controls(dry_run=args.dry_run, stop_key=args.stop_key) as controls:
-        print(f"Starting in {args.start_delay:g}s - switch to the OpenGuessr window.")
-        controls.sleep(args.start_delay)
-        OpenGuessrBot(layout, predictor, settings, screen, controls).play()
+    _run_bot(args, settings)
+
+
+def cmd_learn(args: argparse.Namespace) -> None:
+    from .game import BotSettings
+
+    settings = BotSettings(
+        rounds=args.rounds, views=args.views, record_answers=True, debug_dir=args.runs
+    )
+    predictor = _run_bot(args, settings)
+    if not args.no_train:
+        learn_from_rounds(args, predictor.encoder)
+
+
+def learn_from_rounds(args: argparse.Namespace, encoder) -> None:
+    """Embed new rounds, retrain, and switch to the retrained model unless it scores worse."""
+    import shutil
+
+    from .model.evaluate import evaluate_rounds
+    from .model.rounds import ROUNDS_FILE, embed_rounds
+    from .model.train import TrainConfig, resolve_embedding_files, train
+
+    folder = _embedding_dir(args.embeddings, encoder.name)
+    rounds_path = folder / ROUNDS_FILE
+    print("\nLearning from your rounds...")
+    try:
+        data = embed_rounds(encoder, args.runs, rounds_path)
+        photos = resolve_embedding_files([folder])
+    except FileNotFoundError as exc:
+        print(f"Nothing to retrain on: {exc}")
+        return
+    learn, held_out = data.split()
+    print(
+        f"{len(learn.round_ids):,} rounds to learn from, "
+        f"{len(held_out.round_ids):,} held out to test on"
+    )
+    retrained = args.model.with_name(f"{args.model.stem}-retrained.pt")
+    train(photos, retrained, TrainConfig(), rounds_path=rounds_path, device=args.device)
+
+    if len(held_out):
+        strengths = (args.device, args.prior_strength, args.game_prior_strength)
+        before = evaluate_rounds(args.model, rounds_path, *strengths)[0]["mean_score"]
+        after = evaluate_rounds(retrained, rounds_path, *strengths)[0]["mean_score"]
+        print(f"Mean score on held-out rounds: {before:,.0f} before retraining, {after:,.0f} after")
+        if after < before:
+            print(f"Keeping {args.model}. The retrained model is saved as {retrained}")
+            return
+    backup = args.model.with_name(f"{args.model.stem}-previous.pt")
+    shutil.copy2(args.model, backup)
+    retrained.replace(args.model)
+    print(f"Now using the retrained model. The previous one is saved as {backup}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -212,6 +271,16 @@ def build_parser() -> argparse.ArgumentParser:
             help="how much to favour places your training rounds came from (0 = off)",
         )
 
+    def add_game_options(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+        add_prior_strength(p)
+        p.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT_PATH)
+        p.add_argument("--rounds", type=int, default=5)
+        p.add_argument("--views", type=int, default=4, help="screenshots per round")
+        p.add_argument("--start-delay", type=float, default=5.0)
+        p.add_argument("--stop-key", default="f8")
+        add_device(p)
+
     p = add("calibrate", cmd_calibrate, "Record where the OpenGuessr UI is on your screen.")
     p.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT_PATH)
 
@@ -231,8 +300,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--rounds",
         type=Path,
         nargs="?",
-        const=Path("runs"),
-        help="embed the OpenGuessr rounds saved by play instead (default folder: runs)",
+        const=DEFAULT_RUNS,
+        help="embed the OpenGuessr rounds saved by learn instead (default folder: runs)",
     )
     p.add_argument("--backbone", default=DEFAULT_BACKBONE)
     p.add_argument("--out", type=Path, default=DEFAULT_EMBEDDINGS)
@@ -290,23 +359,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("screenshot", type=Path)
     p.add_argument("--at", type=float, nargs=2, metavar=("LAT", "LON"), help="report this pixel")
 
-    p = add("play", cmd_play, "Play OpenGuessr using the trained model.")
-    p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
-    add_prior_strength(p)
-    p.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT_PATH)
-    p.add_argument("--rounds", type=int, default=5)
-    p.add_argument("--views", type=int, default=4, help="screenshots per round")
+    p = add("play", cmd_play, "Play OpenGuessr as well and as fast as it can. Learns nothing.")
+    add_game_options(p)
     p.add_argument("--dry-run", action="store_true", help="one round, never clicks")
-    p.add_argument("--start-delay", type=float, default=5.0)
-    p.add_argument("--stop-key", default="f8")
-    p.add_argument("--debug-dir", type=Path, default=Path("runs"))
+    p.add_argument("--debug-dir", type=Path, default=DEFAULT_RUNS)
     p.add_argument("--no-debug", action="store_true", help="don't save screenshots per round")
-    p.add_argument(
-        "--no-answers",
-        action="store_true",
-        help="don't read the real location off result screens (faster; rounds can't train)",
+
+    p = add(
+        "learn",
+        cmd_learn,
+        "Play OpenGuessr reading every round's answer, then retrain on your rounds. Slower.",
     )
-    add_device(p)
+    add_game_options(p)
+    p.add_argument("--runs", type=Path, default=DEFAULT_RUNS, help="where rounds are saved")
+    p.add_argument("--embeddings", type=Path, default=DEFAULT_EMBEDDINGS)
+    p.add_argument("--no-train", action="store_true", help="only play and save the rounds")
 
     return parser
 

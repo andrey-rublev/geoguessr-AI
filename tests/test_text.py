@@ -27,6 +27,13 @@ def test_portuguese_street_words_point_to_brazil_and_portugal():
     assert ratio(clues, "BR", "ES") >= 3 and ratio(clues, "PT", "BR") == 1
 
 
+def test_shop_signs_in_swahili_and_spanish():
+    kenya = text_clues([TextLine("LAST CUT KINYOZI", "latin", 0.9)])  # a barber in Nairobi
+    assert ratio(kenya, "KE", "BD") >= 2 and kenya.notes == ["Swahili: kinyozi"]
+    mexico = text_clues([TextLine("Vulcanizadora y Llantera", "latin", 0.9)])
+    assert ratio(mexico, "MX", "BR") >= 3
+
+
 def test_indonesian_road_label():
     clues = text_clues([TextLine("Jl. Lintas Selatan", "latin", 0.9)])
     assert ratio(clues, "ID", "TH") >= 2

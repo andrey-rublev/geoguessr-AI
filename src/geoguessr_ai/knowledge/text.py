@@ -60,14 +60,16 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "Portuguese",
         "ãõ",
         "rua,avenida,estrada,rodovia,travessa,praça,largo,alameda,saída,proibido,farmácia,"
-        "padaria,loja,aluga-se,vende-se,oficina,correios,prefeitura,freguesia",
+        "padaria,loja,aluga-se,vende-se,oficina,correios,prefeitura,freguesia,desconto,promoção,"
+        "aluguel,lanchonete,borracharia,açougue,sorveteria,mercearia,drogaria",
     ),
     "es": (
         "Spanish",
         "ñ",
         "calle,avenida,carretera,camino,paseo,calzada,carrera,jirón,pasaje,salida,prohibido,"
         "farmacia,panadería,tienda,ferretería,alquiler,gasolinera,municipalidad,ayuntamiento,"
-        "colonia,ruta,oficina,se vende",
+        "colonia,ruta,oficina,se vende,se renta,descuento,vulcanizadora,llantera,abarrotes,"
+        "tortillería,carnicería,papelería,refaccionaria,licorería,cerrajería",
     ),
     "fr": (
         "French",
@@ -142,7 +144,12 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
     ),
     "ms": ("Malay", "", "jalan,lorong,lebuh,persiaran,kedai,dijual,masjid,sekolah,kampung"),
     "tl": ("Filipino", "", "barangay,kalye,tindahan,salamat,mabuhay,sari-sari"),
-    "sw": ("Swahili", "", "barabara,mtaa,duka,hoteli,karibu,shule,kanisa,kituo"),
+    "sw": (
+        "Swahili",
+        "",
+        "barabara,mtaa,duka,hoteli,karibu,shule,kanisa,kituo,kinyozi,dawa,nyama,choma,maziwa,"
+        "mboga,chakula,huduma,pesa,soko,jumla,wakala",
+    ),
     "af": ("Afrikaans", "", "straat,weg,rylaan,winkel,kerk"),
     "ca": ("Catalan", "", "carrer,avinguda,plaça,passeig,camí,sortida"),
     "eu": ("Basque", "", "kalea,etorbidea,irteera"),

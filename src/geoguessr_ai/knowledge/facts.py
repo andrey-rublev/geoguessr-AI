@@ -4,6 +4,7 @@ Google Street View it has, phone codes, web domains, and the writing on its sign
 Coverage is Google's official Street View as of 2025, roughly: ``full`` where cars have
 driven most roads, ``some`` for a few roads, towns or trekker paths, ``none`` otherwise.
 It is approximate; the game prior that ``learn`` estimates from your rounds refines it.
+Belize and Kosovo count as ``some``: OpenGuessr has sent real rounds there.
 """
 
 from __future__ import annotations
@@ -58,7 +59,7 @@ BS L some 1 bs latin en
 BT L full 975 bt tibetan,latin dz,en
 BW L full 267 bw latin en,tn
 BY R none 375 by cyrillic be,ru
-BZ R none 501 bz latin en,es
+BZ R some 501 bz latin en,es
 CA R full 1 ca latin en,fr
 CD R none 243 cd latin fr
 CF R none 236 cf latin fr
@@ -258,7 +259,7 @@ VN R some 84 vn latin vi
 VU R none 678 vu latin fr,en
 WF R none 681 wf latin fr
 WS L some 685 ws latin en
-XK R none 383 - latin sq,sr
+XK R some 383 - latin sq,sr
 YE R none 967 ye arabic ar
 ZA L full 27 za latin en,af
 ZM L none 260 zm latin en

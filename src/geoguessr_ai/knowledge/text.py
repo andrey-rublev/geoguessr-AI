@@ -132,7 +132,7 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
     "vi": (
         "Vietnamese",
         "ăđơưãõạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ",
-        "đường,phố,ngõ,hẻm,quốc lộ,cà phê,nhà hàng",
+        "đường,phố,ngõ,hẻm,quốc lộ,cà phê,nhà hàng,nguyen,nguyễn,huynh,phuong,truong,hoang",
     ),
     "id": (
         "Indonesian",

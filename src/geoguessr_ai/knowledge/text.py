@@ -189,48 +189,111 @@ _PHONE = re.compile(r"\+\s?(\d[\d\s().-]{7,})")
 _TOKEN = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*")
 
 BRAND_FLOOR = 0.3
-# Chains found in only one or a few countries: fuel stations, shops and phone networks.
+BRAND_INSIDE_LETTERS = 6
+"""Brand names this long also count run together with other words, as in OBOTICARIO."""
+# Chains found in only one or a few countries: fuel stations, shops, banks and phone networks.
 BRANDS: dict[str, tuple[str, ...]] = {
     "pemex": ("MX",),
     "oxxo": ("MX", "CO", "CL", "PE"),
+    "telcel": ("MX",),
+    "coppel": ("MX",),
+    "soriana": ("MX",),
+    "chedraui": ("MX",),
+    "walmart": ("US", "MX", "CA"),
     "petrobras": ("BR",),
     "ipiranga": ("BR",),
+    "boticario": ("BR",),
+    "boticário": ("BR",),
+    "drogasil": ("BR",),
+    "bradesco": ("BR",),
+    "sicredi": ("BR",),
+    "sicoob": ("BR",),
+    "magalu": ("BR",),
     "ypf": ("AR",),
+    "axion": ("AR", "PY"),
     "copec": ("CL",),
     "ancap": ("UY",),
     "terpel": ("CO", "PA", "PE", "EC"),
+    "bancolombia": ("CO",),
+    "davivienda": ("CO",),
     "primax": ("PE", "EC"),
+    "inkafarma": ("PE",),
+    "walgreens": ("US",),
+    "kroger": ("US",),
+    "sheetz": ("US",),
+    "wawa": ("US",),
+    "petro-canada": ("CA",),
+    "petrocanada": ("CA",),
     "pertamina": ("ID",),
     "indomaret": ("ID",),
     "alfamart": ("ID", "PH"),
+    "alfamidi": ("ID",),
     "petronas": ("MY",),
     "ptt": ("TH", "TR"),
     "bangchak": ("TH",),
     "petron": ("PH", "MY"),
     "jollibee": ("PH",),
+    "puregold": ("PH",),
+    "cebuana": ("PH",),
+    "cellcard": ("KH",),
+    "jio": ("IN",),
     "lukoil": ("RU", "BG", "RO", "KZ"),
     "rosneft": ("RU",),
+    "пятёрочка": ("RU",),
+    "пятерочка": ("RU",),
+    "магнит": ("RU",),
+    "приватбанк": ("UA",),
+    "укрпошта": ("UA",),
+    "okko": ("UA",),
+    "wog": ("UA",),
     "orlen": ("PL", "CZ", "LT"),
     "żabka": ("PL",),
     "zabka": ("PL",),
     "biedronka": ("PL",),
     "omv": ("AT", "RO", "BG", "HU", "SK", "SI", "RS"),
+    "petrom": ("RO", "MD"),
+    "dedeman": ("RO",),
+    "opet": ("TR",),
+    "a101": ("TR",),
+    "migros": ("TR", "CH"),
     "repsol": ("ES", "PT", "PE"),
     "cepsa": ("ES", "PT"),
     "galp": ("PT", "ES"),
     "mercadona": ("ES",),
+    "leclerc": ("FR", "ES", "PT", "PL", "SI"),
+    "intermarché": ("FR", "BE", "PT", "PL"),
+    "intermarche": ("FR", "BE", "PT", "PL"),
     "esselunga": ("IT",),
+    "conad": ("IT",),
+    "edeka": ("DE",),
+    "rewe": ("DE",),
+    "aral": ("DE", "LU"),
+    "sparkasse": ("DE", "AT"),
+    "heijn": ("NL", "BE"),
     "neste": ("FI",),
     "preem": ("SE",),
     "okq8": ("SE",),
     "tesco": ("GB", "IE", "CZ", "SK", "HU"),
     "asda": ("GB",),
+    "sainsbury": ("GB",),
+    "applegreen": ("IE", "GB", "US"),
     "woolworths": ("AU", "NZ", "ZA"),
+    "ampol": ("AU",),
+    "bunnings": ("AU", "NZ"),
     "engen": ("ZA", "BW", "NA", "LS", "SZ", "KE", "GH"),
     "sasol": ("ZA",),
+    "shoprite": ("ZA", "BW", "NA", "LS", "SZ", "ZM", "GH", "MW"),
+    "vodacom": ("ZA", "LS", "TZ", "MZ", "CD"),
+    "mtn": ("NG", "GH", "UG", "ZA", "RW", "CM", "CI", "BJ", "ZM", "SZ", "LR", "GN", "SS"),
+    "airtel": ("KE", "UG", "TZ", "RW", "NG", "ZM", "MW", "MG", "IN"),
+    "glo": ("NG", "GH", "BJ"),
     "safaricom": ("KE",),
+    "m-pesa": ("KE", "TZ"),
+    "mpesa": ("KE", "TZ"),
+    "naivas": ("KE",),
     "lawson": ("JP",),
     "eneos": ("JP",),
+    "ministop": ("JP", "VN", "PH"),
     "gs25": ("KR",),
 }
 
@@ -272,7 +335,7 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
     for letters, places in LETTER_HINTS.items():
         if seen := sorted(set(letters) & set(everything)):
             weigh(lambda c, p=places: c.code in p, LETTER_FLOOR, f"letters {''.join(seen)}")
-    for brand in sorted(set(_TOKEN.findall(everything)) & BRANDS.keys()):
+    for brand in sorted(_brands(everything)):
         weigh(lambda c, b=brand: c.code in BRANDS[b], BRAND_FLOOR, f"brand {brand}")
 
     latin = [line.text.lower() for line in lines if line.script == "latin"]
@@ -352,6 +415,19 @@ def _language_signs(lines: Sequence[str]) -> dict[frozenset[str], set[str]]:
             if is_abbreviation or re.search(rf"{re.escape(phrase)}(?!\w)", text):
                 found.setdefault(languages, set()).add(phrase)
     return found
+
+
+def _brands(text: str) -> set[str]:
+    """Brands named in lowercase text, alone or, for long names, run together with other words.
+    A brand inside another one found, like petron in petronas, doesn't count again."""
+    tokens = set(_TOKEN.findall(text))
+    found = {
+        brand
+        for brand in BRANDS
+        if brand in tokens
+        or (len(brand) >= BRAND_INSIDE_LETTERS and any(brand in token for token in tokens))
+    }
+    return {brand for brand in found if not any(o != brand and brand in o for o in found)}
 
 
 def _domains(text: str) -> set[str]:

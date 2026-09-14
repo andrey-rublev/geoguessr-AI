@@ -71,6 +71,14 @@ def test_regional_brands():
     assert ratio(clues, "MX", "US") >= 3 and clues.notes == ["brand pemex"]
 
 
+def test_brands_run_together_with_other_words():
+    brazil = text_clues([TextLine("OBOTICARIO", "latin", 0.9)])  # O Boticário, read as one word
+    assert ratio(brazil, "BR", "MX") >= 3 and brazil.notes == ["brand boticario"]
+    assert ratio(text_clues([TextLine("M-PESA", "latin", 0.9)]), "KE", "BD") >= 3
+    assert text_clues([TextLine("PETRONAS", "latin", 0.9)]).notes == ["brand petronas"]
+    assert not text_clues([TextLine("COPTTER", "latin", 0.9)]).notes  # short names stand alone
+
+
 def test_english_barely_counts_and_no_text_changes_nothing():
     english = text_clues([TextLine("Main Street Parking", "latin", 0.9)])
     assert 1 < ratio(english, "US", "FR") < 2

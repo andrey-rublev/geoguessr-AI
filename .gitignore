@@ -11,5 +11,6 @@ data/
 models/
 runs/
 layout.json
+layout-continue.png
 calibration_preview.png
 .playwright-mcp/

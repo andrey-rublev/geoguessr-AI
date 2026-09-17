@@ -4,7 +4,7 @@ A self-trained geolocation AI that plays [OpenGuessr](https://openguessr.com) by
 
 ## How it works
 
-1. **Look:** presses Street View's compass to face north, then turns 90° at a time to capture north, east, south and west, pressing again if a turn didn't happen.
+1. **Look:** presses Street View's compass to face north, then turns 90° at a time to capture north, east, south and west, pressing again if a turn didn't happen. If the model is unsure after that (it expects under 1,500 points), the bot walks about 50 m on along the road and looks round again, as players do when a place gives nothing away.
 2. **Read:** reads signs and road names, and looks for the sun.
 3. **Guess:** a frozen CLIP image encoder plus a small classifier you train ranks regions of the world, then GeoGuessr knowledge reweighs them (see [What it knows](#what-it-knows)).
 4. **Place:** finds the world on the minimap by its coastlines, drags the map if the guess is off screen, zooms in, clicks, and checks the pin landed.
@@ -118,6 +118,7 @@ geoguessr-ai learn --rounds 20   # play, read every answer, then retrain on your
 - `play` learns nothing. `learn` is slower: reading each answer zooms the result map out (5 to 20 seconds a round), and retraining takes a few minutes at the end.
 - Each round prints its clues and likeliest countries, like `clue: Portuguese: farmácia, rua` and `guess -23.550, -46.630 (BR 81%, PT 6%, AR 3%; driving on the right 97%)`.
 - Reading signs adds about 3 seconds a round, and its models (about 100 MB) download the first time. `--no-text` skips it.
+- Walking on when unsure adds about 13 seconds to those rounds. `--no-walk` skips it. `--look-down` also tilts the camera down at the road and saves those views, for future use: nothing reads them yet.
 - Keep Street View's compass (right edge, above the zoom buttons) on screen. Without it the bot drags the view round instead, which doesn't cover every direction.
 - `calibrate` also snapshots the Continue button (`layout-continue.png`). If an advert covers the button, the bot waits up to 20 seconds, then stops rather than click the advert. Layouts from before this need `calibrate` again.
 
@@ -130,12 +131,12 @@ geoguessr-ai learn --rounds 20   # play, read every answer, then retrain on your
 | Street View coverage | Countries with no Google Street View (most of China, Central Asia, much of Africa and the Middle East) are 20× less likely; ones with only a little, 2× | The country list is approximate. `learn` also learns where the game really sends you. `--coverage-strength 0` turns it off. |
 | Script | Korean, Japanese, Chinese, Cyrillic, Greek, Thai, Devanagari (Arabic too after `pip install python-bidi`) | Hebrew, Georgian, Khmer, Lao and several Indian scripts can't be read. |
 | Language | Telling letters (ł, ř, ğ, ã, ß) and street and shop words (rua, calle, straße, jalan, kinyozi) in about 40 languages, even read without accents (PRACA) or cut off by the frame (DESCONT); letters that set Ukrainian, Serbian or Kazakh apart from Russian | English barely counts: it's on signs everywhere. |
-| Road names | Street View writes them along the road; they're read like any sign | Labels running steeply along the road often can't be read. |
+| Road names | Street View writes them along the road; they're read like any sign | Labels running steeply along the road often can't be read, and road numbers (A167, C-13) can't be read even looking down. |
 | Domains, phone numbers, brands | `.com.br`, `+48`, Brazil's `99983-2915`, PEMEX, M-PESA, O Boticário (even run together as OBOTICARIO) | About 100 regional chains and 15 local phone formats. |
 | Hemisphere | A low sun towards the south means north of the tropics, and the other way round | The sun seldom shows in a level view, and only a clear sun in open sky counts. |
 | Driving side | Printed with each guess, from the countries the model favours | A separate detector scored worse on test photos (2,467 vs 2,500), since the model already gets it right 88% of the time, so it isn't counted twice. |
 
-Bollards, poles and the Google car aren't looked for separately. The model only picks them up the way it learns anything else, from photos and your rounds.
+Road line colours (yellow centre lines in the Americas, yellow edges in southern Africa and the Middle East) aren't used either: a detector for yellow paint found it on cars, walls and dry grass as often as on roads, in level views of 104 saved rounds and looking down in 23 live ones, and many rounds are on unmarked roads anyway. Bollards, poles and the Google car aren't looked for separately. The model only picks them up the way it learns anything else, from photos and your rounds.
 
 On 83 saved rounds with known answers, pins used to land at the minimap's edge whenever the guess was off screen (Japan, the US west coast, Australia). Placing them where the model meant raises the mean score from 2,084 to 2,286. Coverage added 49 points (give or take 89, so not yet conclusive). Sign clues changed one round, by +378, but those rounds didn't capture the road below the view. Of 15 later rounds, two had readable signs: the clues now catch a Kenyan barber's KINYOZI and a Brazilian shop's brand, phone number and cut-off DESCONT (Brazil 43% → 94%), but neither guess moved.
 

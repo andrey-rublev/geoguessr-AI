@@ -30,6 +30,8 @@ PRESSES_PER_TURN = 3
 """Street View sometimes ignores a press on the compass; press again up to this many times."""
 HEADING_TOLERANCE = 30.0
 """How far from north, east, south or west a view may face and still count as that way."""
+LOOK_DOWN_DRAGS = 2
+"""Drags that tilt the camera down to look at the road (see ``BotSettings.look_down_drag``)."""
 
 
 class ContinueBlocked(Exception):
@@ -63,6 +65,13 @@ class BotSettings:
     min_map_score: float = 0.6
     read_text: bool = True
     """Read signs and road names (needs RapidOCR)."""
+    look_down: bool = True
+    """After the level views, tilt the camera down and look round again, as players do to see
+    the road's lines and the names Street View writes on it. Adds about 6 seconds a round."""
+    look_down_drag: float = 0.6
+    """How far each drag that tilts the camera moves, as a fraction of the view's height. Street
+    View tilts about 74 degrees per browser-window height, so where the view is half the window,
+    two of these tilt it about 45 degrees down."""
     record_answers: bool = True
     """Read the real location off each result screen and save it with the round."""
     dry_run: bool = False
@@ -79,6 +88,10 @@ class Look:
     """Each view with the road below it, where Street View writes road names, for reading."""
     headings: list[float | None] = field(default_factory=list)
     """Degrees clockwise from north that each view faces, when the compass was read."""
+    down_views: list[Image.Image] = field(default_factory=list)
+    """The road round the car, looking down, where its lines and names show best. Only read,
+    not shown to the model, which learned from level photos."""
+    down_headings: list[float | None] = field(default_factory=list)
 
 
 def scene_region(layout: Layout) -> Region:
@@ -197,13 +210,38 @@ class OpenGuessrBot:
         for turn in range(min(s.views, 4)):
             heading = self._face(compass, 90.0 * turn)
             self._capture(look, 90.0 * turn if heading is None else heading)
+        if s.look_down and len(look.views) == 4:
+            self._look_down(compass, look)
         return look
 
-    def _face(self, compass: Compass, target: float) -> float | None:
+    def _look_down(self, compass: Compass, look: Look) -> None:
+        """Tilt the camera down and look round again, from west (where the level views ended)
+        through north, east and south. Pressing the compass afterwards levels the camera."""
+        s, view = self.settings, self.layout.view
+        distance = round(view.height * s.look_down_drag)
+        for _ in range(LOOK_DOWN_DRAGS):
+            self.controls.drag(view.center.offset(0, distance // 2), 0, -distance)
+        self.controls.sleep(s.view_settle_wait)
+        for turn in range(4):
+            target = (270.0 + 90.0 * turn) % 360
+            if turn:
+                heading = self._face(compass, target, clockwise=True)
+            else:
+                reading = self.compass.read()
+                heading = None if reading is None else reading.heading
+            look.down_views.append(self.screen.grab(self.scene))
+            look.down_headings.append(target if heading is None else heading)
+        self.controls.click(compass.center)
+        self.controls.sleep(s.turn_wait)
+
+    def _face(self, compass: Compass, target: float, clockwise: bool | None = None) -> float | None:
         """Press the compass until the view faces ``target``, a quarter turn on from the last
-        view: pressing the compass itself faces north, its arrow turns to the next quarter.
+        view: pressing the compass itself faces north and levels the camera, its arrow turns to
+        the next quarter and keeps any tilt. ``clockwise`` uses the arrow even to face north.
         Returns the heading the compass shows, or None if it can't be read."""
-        button = compass.center if target == 0 else compass.clockwise
+        if clockwise is None:
+            clockwise = target != 0
+        button = compass.clockwise if clockwise else compass.center
         heading = None
         for _ in range(PRESSES_PER_TURN):
             self.controls.click(button)
@@ -215,13 +253,14 @@ class OpenGuessrBot:
             still_to_turn = (target - heading) % 360
             if min(still_to_turn, 360 - still_to_turn) <= HEADING_TOLERANCE:
                 break
-            if target and still_to_turn > 180:  # already past it: the arrow would go further
+            if clockwise and still_to_turn > 180:  # already past it: the arrow would go further
                 break
         return heading
 
     def notice(self, look: Look) -> tuple[Evidence, list[TextLine]]:
         """Read the signs every way and look for the sun: clues the model can't see."""
-        lines: list[TextLine] = [] if self.signs is None else self.signs.read(look.scenes)
+        scenes = [*look.scenes, *look.down_views]
+        lines: list[TextLine] = [] if self.signs is None else self.signs.read(scenes)
         clues = text_clues(lines)
         evidence = Evidence(countries=clues.likelihood, notes=clues.notes)
         for view, heading in zip(look.views, look.headings, strict=True):
@@ -308,6 +347,8 @@ class OpenGuessrBot:
         folder.mkdir(parents=True, exist_ok=True)
         for i, view in enumerate(look.views):
             view.save(folder / f"view_{i}.jpg", quality=90)
+        for i, view in enumerate(look.down_views):
+            view.save(folder / f"down_{i}.jpg", quality=90)
         marked = np.array(placement.image.convert("RGB"))
         x, y = (round(v) for v in placement.map_xy)
         cv2.drawMarker(marked, (x, y), (255, 0, 0), cv2.MARKER_TILTED_CROSS, 28, 3)
@@ -315,6 +356,7 @@ class OpenGuessrBot:
         info = {
             "guess": asdict(guess),
             "headings": look.headings,
+            "down_headings": look.down_headings,
             "text": [asdict(line) for line in lines],
             "clues": evidence.notes,
             "projection": asdict(placement.projection),

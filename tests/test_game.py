@@ -63,7 +63,7 @@ class FakeControls:
         self.clicks.append(p)
 
     def drag(self, start, dx, dy=0):
-        self.drags.append((start, dx))
+        self.drags.append((start, dx, dy))
 
 
 class TurningStreetView(FakeScreen, FakeControls):
@@ -163,7 +163,7 @@ def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monke
     bot.play()
 
     assert predictor.view_counts == [4, 4]
-    assert len(controls.drags) == 6 and all(dx < 0 for _, dx in controls.drags)  # no compass
+    assert len(controls.drags) == 6 and all(dx < 0 for _, dx, _ in controls.drags)  # no compass
     assert bot.guess_map.guesses == [LAGOS, LAGOS]
     assert controls.clicks[1:3] == [LAYOUT.guess_button, LAYOUT.continue_button]
 
@@ -188,14 +188,30 @@ def test_turns_north_east_south_and_west_with_the_compass():
     look = bot.look_around()
 
     assert [round(h) % 360 for h in look.headings] == [0, 90, 180, 270]
-    assert len(look.views) == 4 and not street_view.drags
+    assert len(look.views) == 4
     assert look.scenes[0].size == (1600, 860)  # the view plus the road below it
+
+
+def test_looks_down_at_the_road_all_the_way_round_then_levels_the_camera(tmp_path):
+    street_view = TurningStreetView()
+    settings = BotSettings(rounds=1, record_answers=False, read_text=False, debug_dir=tmp_path)
+
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
+    bot.play()
+
+    assert len(street_view.drags) == 2  # tilting down, straight up the screen
+    assert all(dx == 0 and dy < 0 for _, dx, dy in street_view.drags)
+    folder = next(tmp_path.glob("*/round_01"))
+    saved = json.loads((folder / "round.json").read_text(encoding="utf-8"))
+    assert [round(h) % 360 for h in saved["down_headings"]] == [270, 0, 90, 180]
+    assert (folder / "down_3.jpg").exists()
+    assert street_view.heading == 0  # the compass pressed at the end, which levels the camera
 
 
 @pytest.mark.parametrize("ignored", [(1,), (3,), (1, 2)])
 def test_presses_the_compass_again_when_street_view_ignores_it(ignored):
     street_view = TurningStreetView(ignored=ignored)
-    settings = BotSettings(rounds=1, views=4, record_answers=False, debug_dir=None)
+    settings = BotSettings(rounds=1, record_answers=False, look_down=False, debug_dir=None)
 
     bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
     look = bot.look_around()

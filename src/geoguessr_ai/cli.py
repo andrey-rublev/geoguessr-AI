@@ -208,6 +208,7 @@ def cmd_play(args: argparse.Namespace) -> None:
         views=args.views,
         dry_run=args.dry_run,
         read_text=not args.no_text,
+        look_down=not args.no_look_down,
         record_answers=False,
         debug_dir=None if args.no_debug else args.debug_dir,
     )
@@ -221,6 +222,7 @@ def cmd_learn(args: argparse.Namespace) -> None:
         rounds=args.rounds,
         views=args.views,
         read_text=not args.no_text,
+        look_down=not args.no_look_down,
         record_answers=True,
         debug_dir=args.runs,
     )
@@ -315,6 +317,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--rounds", type=int, default=5)
         p.add_argument("--views", type=int, default=4, help="screenshots per round")
         p.add_argument("--no-text", action="store_true", help="don't read signs (faster)")
+        p.add_argument(
+            "--no-look-down", action="store_true", help="don't also look down at the road (faster)"
+        )
         p.add_argument("--start-delay", type=float, default=5.0)
         p.add_argument("--stop-key", default="f8")
         add_device(p)

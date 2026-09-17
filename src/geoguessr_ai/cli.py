@@ -208,7 +208,8 @@ def cmd_play(args: argparse.Namespace) -> None:
         views=args.views,
         dry_run=args.dry_run,
         read_text=not args.no_text,
-        look_down=not args.no_look_down,
+        look_down=args.look_down,
+        walk_below=0.0 if args.no_walk else BotSettings.walk_below,
         record_answers=False,
         debug_dir=None if args.no_debug else args.debug_dir,
     )
@@ -222,7 +223,8 @@ def cmd_learn(args: argparse.Namespace) -> None:
         rounds=args.rounds,
         views=args.views,
         read_text=not args.no_text,
-        look_down=not args.no_look_down,
+        look_down=args.look_down,
+        walk_below=0.0 if args.no_walk else BotSettings.walk_below,
         record_answers=True,
         debug_dir=args.runs,
     )
@@ -318,7 +320,14 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--views", type=int, default=4, help="screenshots per round")
         p.add_argument("--no-text", action="store_true", help="don't read signs (faster)")
         p.add_argument(
-            "--no-look-down", action="store_true", help="don't also look down at the road (faster)"
+            "--no-walk",
+            action="store_true",
+            help="never walk on to look again when unsure (faster)",
+        )
+        p.add_argument(
+            "--look-down",
+            action="store_true",
+            help="also look down at the road and save those views (nothing uses them yet)",
         )
         p.add_argument("--start-delay", type=float, default=5.0)
         p.add_argument("--stop-key", default="f8")

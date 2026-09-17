@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -15,7 +15,7 @@ from PIL import Image
 
 from .buttons import MIN_SIMILARITY, button_region, similarity
 from .compass import Compass, CompassReader, compass_region
-from .config import Layout, Region
+from .config import Layout, Point, Region
 from .controls import StopRequested
 from .geo import haversine_km
 from .knowledge.evidence import Evidence
@@ -65,13 +65,24 @@ class BotSettings:
     min_map_score: float = 0.6
     read_text: bool = True
     """Read signs and road names (needs RapidOCR)."""
-    look_down: bool = True
-    """After the level views, tilt the camera down and look round again, as players do to see
-    the road's lines and the names Street View writes on it. Adds about 6 seconds a round."""
+    look_down: bool = False
+    """After the level views, tilt the camera down and look round again, as players do to see the
+    road's lines and the Google car, saving what it sees as down_*.jpg (about 6 seconds a round).
+    Nothing uses these views yet: a yellow-line detector on 23 live rounds mistook cars, walls
+    and grass for paint as often as it found lines, and road numbers written on the road are
+    too distorted to read."""
     look_down_drag: float = 0.6
     """How far each drag that tilts the camera moves, as a fraction of the view's height. Street
     View tilts about 74 degrees per browser-window height, so where the view is half the window,
     two of these tilt it about 45 degrees down."""
+    walk_below: float = 1500.0
+    """When the model expects fewer points than this, walk on along the road and look round again
+    before guessing, as players do when a place gives nothing away (0 = never). On 104 saved
+    rounds it expected under 1,500 in about a third, which really scored 1,560 on average
+    against 2,366 for the rest."""
+    walk_steps: int = 5
+    """Presses of the Up key when walking on: Street View moves about 10 metres each."""
+    step_wait: float = 0.8
     record_answers: bool = True
     """Read the real location off each result screen and save it with the round."""
     dry_run: bool = False
@@ -92,6 +103,11 @@ class Look:
     """The road round the car, looking down, where its lines and names show best. Only read,
     not shown to the model, which learned from level photos."""
     down_headings: list[float | None] = field(default_factory=list)
+
+    def extend(self, other: Look) -> None:
+        """Add what was seen from another spot."""
+        for name in (f.name for f in fields(self)):
+            getattr(self, name).extend(getattr(other, name))
 
 
 def scene_region(layout: Layout) -> Region:
@@ -167,6 +183,13 @@ class OpenGuessrBot:
         look = self.look_around()
         evidence, lines = self.notice(look)
         guess = self.predictor.predict(look.views, evidence)
+        walked = not s.dry_run and guess.expected_score < s.walk_below
+        if walked:
+            print(f"  unsure (~{guess.expected_score:,.0f} points): walking on to look again")
+            self._walk()
+            look.extend(self.look_around())
+            evidence, lines = self.notice(look)
+            guess = self.predictor.predict(look.views, evidence)
         for note in evidence.notes:
             print(f"  clue: {note}")
         print(
@@ -181,7 +204,7 @@ class OpenGuessrBot:
         folder = None
         if run_dir is not None:
             folder = run_dir / f"round_{number:02d}"
-            self._save_round(folder, look, lines, evidence, guess, placement)
+            self._save_round(folder, look, lines, evidence, guess, placement, walked)
 
         self.controls.sleep(0.4)
         self.controls.click(self.layout.guess_button)
@@ -213,6 +236,15 @@ class OpenGuessrBot:
         if s.look_down and len(look.views) == 4:
             self._look_down(compass, look)
         return look
+
+    def _walk(self) -> None:
+        """Walk on along the road: click the sky, which gives Street View the keyboard without
+        moving (pressing the compass keeps it), then press Up."""
+        view = self.layout.view
+        self.controls.click(Point(view.center.x, view.top + round(view.height * 0.05)))
+        for _ in range(self.settings.walk_steps):
+            self.controls.press("up")
+            self.controls.sleep(self.settings.step_wait)
 
     def _look_down(self, compass: Compass, look: Look) -> None:
         """Tilt the camera down and look round again, from west (where the level views ended)
@@ -259,8 +291,7 @@ class OpenGuessrBot:
 
     def notice(self, look: Look) -> tuple[Evidence, list[TextLine]]:
         """Read the signs every way and look for the sun: clues the model can't see."""
-        scenes = [*look.scenes, *look.down_views]
-        lines: list[TextLine] = [] if self.signs is None else self.signs.read(scenes)
+        lines: list[TextLine] = [] if self.signs is None else self.signs.read(look.scenes)
         clues = text_clues(lines)
         evidence = Evidence(countries=clues.likelihood, notes=clues.notes)
         for view, heading in zip(look.views, look.headings, strict=True):
@@ -343,6 +374,7 @@ class OpenGuessrBot:
         evidence: Evidence,
         guess: Guess,
         placement: Placement,
+        walked: bool = False,
     ) -> None:
         folder.mkdir(parents=True, exist_ok=True)
         for i, view in enumerate(look.views):
@@ -357,6 +389,7 @@ class OpenGuessrBot:
             "guess": asdict(guess),
             "headings": look.headings,
             "down_headings": look.down_headings,
+            "walked": walked,
             "text": [asdict(line) for line in lines],
             "clues": evidence.notes,
             "projection": asdict(placement.projection),

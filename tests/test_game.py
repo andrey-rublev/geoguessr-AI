@@ -51,10 +51,13 @@ class FakeScreen:
 
 class FakeControls:
     def __init__(self):
-        self.clicks, self.drags = [], []
+        self.clicks, self.drags, self.keys = [], [], []
 
     def sleep(self, seconds):
         pass
+
+    def press(self, key):
+        self.keys.append(key)
 
     def move(self, p):
         pass
@@ -102,13 +105,16 @@ class TurningStreetView(FakeScreen, FakeControls):
 
 
 class FakePredictor:
-    def __init__(self):
-        self.view_counts, self.evidence = [], []
+    """Guesses Lagos, expecting each of ``expected`` points in turn, then the last again."""
+
+    def __init__(self, expected=(2500.0,)):
+        self.view_counts, self.evidence, self.expected = [], [], list(expected)
 
     def predict(self, images, evidence=None):
         self.view_counts.append(len(images))
         self.evidence.append(evidence)
-        return Guess(*LAGOS, expected_score=2500.0, top_cells=[], countries=[("NG", 0.8)])
+        expected = self.expected.pop(0) if len(self.expected) > 1 else self.expected[0]
+        return Guess(*LAGOS, expected_score=expected, top_cells=[], countries=[("NG", 0.8)])
 
 
 class FakeGuessMap:
@@ -194,7 +200,9 @@ def test_turns_north_east_south_and_west_with_the_compass():
 
 def test_looks_down_at_the_road_all_the_way_round_then_levels_the_camera(tmp_path):
     street_view = TurningStreetView()
-    settings = BotSettings(rounds=1, record_answers=False, read_text=False, debug_dir=tmp_path)
+    settings = BotSettings(
+        rounds=1, record_answers=False, read_text=False, look_down=True, debug_dir=tmp_path
+    )
 
     bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
     bot.play()
@@ -218,6 +226,32 @@ def test_presses_the_compass_again_when_street_view_ignores_it(ignored):
 
     assert [round(h) % 360 for h in look.headings] == [0, 90, 180, 270]
     assert street_view.presses == 4 + len(ignored)
+
+
+def test_walks_on_and_looks_again_when_unsure(tmp_path):
+    controls, predictor = FakeControls(), FakePredictor(expected=(900.0, 3100.0))
+    settings = BotSettings(rounds=1, record_answers=False, debug_dir=tmp_path)
+
+    bot = OpenGuessrBot(LAYOUT, predictor, settings, FakeScreen(), controls)
+    bot.play()
+
+    assert controls.keys == ["up"] * settings.walk_steps
+    sky = controls.clicks[0]  # gives Street View the keyboard
+    assert LAYOUT.view.contains(sky) and sky.y < LAYOUT.view.top + LAYOUT.view.height // 10
+    assert predictor.view_counts == [4, 8]  # the guess uses both spots
+    assert len(bot.signs.scenes) == 4 + 8
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    assert saved["walked"] is True and len(saved["headings"]) == 8
+
+
+def test_sure_rounds_and_dry_runs_dont_walk():
+    for settings, expected in (
+        (BotSettings(rounds=1, record_answers=False, debug_dir=None), 1600.0),
+        (BotSettings(rounds=1, dry_run=True, debug_dir=None), 900.0),
+    ):
+        controls = FakeControls()
+        OpenGuessrBot(LAYOUT, FakePredictor((expected,)), settings, FakeScreen(), controls).play()
+        assert not controls.keys
 
 
 def test_a_sun_to_the_south_hints_at_the_northern_hemisphere():

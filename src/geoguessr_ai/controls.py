@@ -73,6 +73,14 @@ class Controls:
             return
         self._gui.click()
 
+    def press(self, key: str) -> None:
+        """Press a key, like ``"up"``. In dry-run mode nothing is pressed."""
+        self.check()
+        if self.dry_run:
+            print(f"    [dry-run] would press {key}")
+            return
+        self._gui.press(key)
+
     def drag(self, start: Point, dx: int, dy: int = 0, duration: float = 0.5) -> None:
         """Drag by (``dx``, ``dy``) from ``start``, pausing before release so maps don't glide."""
         self.move(start)

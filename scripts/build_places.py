@@ -50,7 +50,7 @@ def main() -> None:
             if key := place_key(spelling):
                 names.setdefault(key, set()).add(code)
     lines = [f"{name}\t{','.join(sorted(codes))}" for name, codes in sorted(names.items())]
-    OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    OUT.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"{len(lines):,} names -> {OUT}")
 
 

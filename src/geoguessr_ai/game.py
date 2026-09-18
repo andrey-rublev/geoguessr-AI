@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 
 from .buttons import MIN_SIMILARITY, button_region, similarity
-from .camera import Camera, default_camera, measure
+from .camera import Camera, default_camera, ground_view, measure
 from .compass import Compass, CompassReader, compass_region
 from .config import Layout, Point, Region
 from .controls import StopRequested
@@ -45,6 +45,9 @@ CAMERA_TRIES = 3
 """Times per game to try measuring Street View's camera (see :mod:`.camera`)."""
 CAMERA_DRAG = 0.35
 """How far to drag the view sideways to measure the camera, as a fraction of its width."""
+GROUND_BOX_SCORE = 0.5
+"""Road names seen from above are found less surely than signs: a Paraguayan one scored 0.52
+and 0.55, under the 0.6 that signs need."""
 
 
 class ContinueBlocked(Exception):
@@ -373,8 +376,12 @@ class OpenGuessrBot:
         return heading
 
     def notice(self, look: Look) -> tuple[Evidence, list[TextLine]]:
-        """Read the signs every way and look for the sun: clues the model can't see."""
-        lines: list[TextLine] = [] if self.signs is None else self.signs.read(look.scenes)
+        """Read the signs every way, and the road's name from above, and look for the sun:
+        clues the model can't see."""
+        lines: list[TextLine] = []
+        if self.signs is not None:
+            lines = self.signs.read(look.scenes)
+            lines += self.signs.read(self._ground_views(look), min_box_score=GROUND_BOX_SCORE)
         clues = text_clues(lines)
         evidence = Evidence(countries=clues.likelihood, notes=clues.notes)
         level = [
@@ -396,6 +403,16 @@ class OpenGuessrBot:
                 )
                 break
         return evidence, lines
+
+    def _ground_views(self, look: Look) -> list[Image.Image]:
+        """The road round the car from above in each level view, where Street View's road names
+        come out straight for reading (see :func:`.camera.ground_view`). Only once the camera
+        has been measured, since a guessed one bends them."""
+        if not self.camera.measured:
+            return []
+        corner = Point(self.scene.left, self.scene.top)
+        grounds = (ground_view(scene, corner, self.camera) for scene in look.scenes)
+        return [ground for ground in grounds if ground is not None]
 
     def _drag_around(self) -> Look:
         """Without the compass: drag the panorama right-to-left between shots."""

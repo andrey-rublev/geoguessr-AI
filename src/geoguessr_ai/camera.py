@@ -19,8 +19,9 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
+from PIL import Image
 
-from .config import Region
+from .config import Point, Region
 
 DEFAULT_VIEW_FOV = 105.0
 """Degrees across the calibrated view, assumed until the camera has been measured."""
@@ -28,6 +29,12 @@ DRAG_SCALE = 1.15
 """A drag turns the camera as if the picture were this much bigger than it is: dragging 100,
 200 and 400 pixels from the centre of a frame 875 pixels high turned it 11.6, 22.0 and 37.2
 degrees, against 12.9, 24.6 and 42.4 for keeping the spot under the mouse."""
+GROUND_SIDE, GROUND_FAR = 6.0, 10.0
+"""How far to the side and ahead :func:`ground_view` shows the road, in camera heights (the
+Google car's camera is about 2.5 metres up), where Street View writes the road's name."""
+GROUND_SCALE = 60
+"""Pixels per camera height in :func:`ground_view`, which makes road names 30 to 50 pixels
+tall."""
 MIN_MATCHES = 40
 MAX_ERROR = 2.5
 """Pixels: how far details may typically stray from where a measured camera says they moved."""
@@ -119,3 +126,25 @@ def measure(
     if error > MAX_ERROR or not 0.2 * view.height < f < 5 * view.height:
         return None
     return Camera(float(cx), float(cy), float(f), measured=True), float(yaw)
+
+
+def ground_view(image: Image.Image, origin: Point, camera: Camera) -> Image.Image | None:
+    """The road round the car as if seen from straight above, from a level view whose top-left
+    corner is at ``origin`` on screen. Street View writes road names flat on the road, so seen
+    along it they are squashed and slanted; from above they come out straight, running along
+    the road. ``None`` if the view doesn't reach below the horizon."""
+    bottom = origin.y + image.height - 1
+    if bottom <= camera.cy + 1:
+        return None
+    near = camera.f / (bottom - camera.cy)
+    if near >= GROUND_FAR:
+        return None
+    width = round(2 * GROUND_SIDE * GROUND_SCALE)
+    height = round((GROUND_FAR - near) * GROUND_SCALE)
+    side = np.arange(width, dtype=np.float32) / GROUND_SCALE - GROUND_SIDE
+    ahead = GROUND_FAR - np.arange(height, dtype=np.float32) / GROUND_SCALE  # far at the top
+    xs = camera.cx - origin.x + camera.f * side[None, :] / ahead[:, None]
+    ys = np.repeat((camera.cy - origin.y + camera.f / ahead)[:, None], width, axis=1)
+    rgb = np.asarray(image.convert("RGB"))
+    top_down = cv2.remap(rgb, xs.astype(np.float32), ys.astype(np.float32), cv2.INTER_LINEAR)
+    return Image.fromarray(top_down)

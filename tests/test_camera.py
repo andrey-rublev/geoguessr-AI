@@ -3,9 +3,18 @@ import math
 import cv2
 import numpy as np
 import pytest
+from PIL import Image
 
-from geoguessr_ai.camera import Camera, default_camera, measure
-from geoguessr_ai.config import Region
+from geoguessr_ai.camera import (
+    GROUND_FAR,
+    GROUND_SCALE,
+    GROUND_SIDE,
+    Camera,
+    default_camera,
+    ground_view,
+    measure,
+)
+from geoguessr_ai.config import Point, Region
 
 VIEW = Region(20, 120, 900, 420)
 TRUE = Camera(cx=640.0, cy=300.0, f=440.0)
@@ -34,6 +43,30 @@ def test_default_camera_centres_the_view():
     camera = default_camera(VIEW)
     assert (camera.cx, camera.cy) == (470, 330) and not camera.measured
     assert camera.direction(VIEW.left, 330, heading=0)[0] == pytest.approx(360 - 52.5)
+
+
+def test_the_road_seen_from_above_comes_out_square():
+    """A patch painted on the road, 1 to 2 camera heights right and 4 to 6 ahead, is drawn
+    squashed in the view but comes out as a rectangle from above."""
+    ys, xs = np.mgrid[VIEW.top : VIEW.top + VIEW.height, VIEW.left : VIEW.left + VIEW.width]
+    below = np.maximum(ys - TRUE.cy, 1e-6)
+    ahead, side = TRUE.f / below, (xs - TRUE.cx) / below
+    painted = (ys > TRUE.cy) & (1 <= side) & (side <= 2) & (4 <= ahead) & (ahead <= 6)
+    view = np.zeros((VIEW.height, VIEW.width, 3), np.uint8)
+    view[painted] = 255
+
+    above = np.asarray(ground_view(Image.fromarray(view), Point(VIEW.left, VIEW.top), TRUE))
+
+    rows, cols = np.nonzero(above[..., 0] > 128)
+    expected_cols = ((1 + GROUND_SIDE) * GROUND_SCALE, (2 + GROUND_SIDE) * GROUND_SCALE)
+    expected_rows = ((GROUND_FAR - 6) * GROUND_SCALE, (GROUND_FAR - 4) * GROUND_SCALE)
+    assert (cols.min(), cols.max()) == pytest.approx(expected_cols, abs=3)
+    assert (rows.min(), rows.max()) == pytest.approx(expected_rows, abs=3)
+
+
+def test_no_road_from_above_in_a_view_of_the_sky():
+    sky = Image.new("RGB", (VIEW.width, 100))
+    assert ground_view(sky, Point(VIEW.left, 100), TRUE) is None
 
 
 def panorama(seed=0):

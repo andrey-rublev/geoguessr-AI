@@ -150,12 +150,16 @@ class FakeGuessMap:
 
 
 class FakeSignReader:
-    """Reads one Portuguese street sign among everything it is shown."""
+    """Reads one Portuguese street sign among the scenes it is shown, and a road's name from
+    above among ground views, which it's shown with a lower bar for finding text."""
 
     def __init__(self):
-        self.scenes = []
+        self.scenes, self.grounds = [], []
 
-    def read(self, images):
+    def read(self, images, min_box_score=None):
+        if min_box_score is not None:
+            self.grounds.extend(image.size for image in images)
+            return [TextLine("Avenida Paulista", "latin", 0.9)] if images else []
         self.scenes.extend(image.size for image in images)
         return [TextLine("Rua Augusta 12", "latin", 0.93)]
 
@@ -343,6 +347,20 @@ def test_measures_the_camera_once_by_dragging_sideways(monkeypatch):
     assert len(calls) == 2 and bot.camera == measured  # tried again after failing once
     sideways = [(start, dx) for start, dx, dy in street_view.drags if dy == 0]
     assert len(sideways) == 2 and all(dx < 0 and LAYOUT.view.contains(s) for s, dx in sideways)
+
+
+def test_reads_road_names_from_above_once_the_camera_is_measured(monkeypatch):
+    measured = Camera(800.0, 400.0, 600.0, measured=True)
+    monkeypatch.setattr(game_module, "measure", lambda *args: (measured, 30.0))
+    street_view = TurningStreetView()
+    settings = BotSettings(rounds=1, record_answers=False, debug_dir=None)
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
+
+    evidence, lines = bot.notice(bot.look_around())
+
+    assert len(bot.signs.grounds) == 4  # the road round the car in each view, from above
+    assert "Avenida Paulista" in [line.text for line in lines]
+    assert any(note.startswith("Portuguese") for note in evidence.notes)
 
 
 def test_signs_become_clues_for_the_model(tmp_path):

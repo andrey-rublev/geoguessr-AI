@@ -97,6 +97,13 @@ def test_prices_speeds_postcodes_and_road_numbers():
     assert text_clues([TextLine("1500 km", "latin", 0.9)]).notes == []
 
 
+def test_towns_on_signs_but_not_streets_and_shops_named_after_them():
+    sign = text_clues([TextLine("Culiacán 210 km", "latin", 0.9)])
+    assert ratio(sign, "MX", "US") >= 3 and sign.notes == ["town culiacan (MX)"]
+    named = text_clues([TextLine("Farmácia Curitiba", "latin", 0.9)])
+    assert not any(note.startswith("town") for note in named.notes)
+
+
 def test_regional_brands():
     clues = text_clues([TextLine("PEMEX", "latin", 0.95)])
     assert ratio(clues, "MX", "US") >= 3 and clues.notes == ["brand pemex"]

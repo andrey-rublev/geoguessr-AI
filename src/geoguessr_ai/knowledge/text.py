@@ -1,5 +1,5 @@
 """What the writing on screen gives away: scripts, languages, web domains, phone numbers,
-brands, prices, speed limits, postcodes and road numbers.
+brands, prices, speed limits, postcodes, road numbers and the names of towns.
 
 Lines of text read off the screen become a likelihood for every country. Each kind of clue
 counts once however many signs show it, and no clue rules a country out completely: text can
@@ -18,6 +18,7 @@ import numpy as np
 
 from .countries import country_codes
 from .facts import Country, countries, per_country
+from .places import place_key, places_in
 
 SCRIPT_FLOOR = 0.03
 """Likelihood for a country whose signs don't use a script that was clearly read."""
@@ -36,6 +37,9 @@ LOCAL_PHONE_FLOOR = 0.3
 """For a phone number written the local way, which neighbours and misreadings can share."""
 TELLING_FLOOR = 0.3
 """For a country that doesn't write a price, speed, postcode or road number the way one was."""
+PLACE_FLOOR, MAX_PLACES = 0.3, 3
+"""For a country without a town of a name read, of which at most this many count (the longest):
+a sign may point across a border, and a shop may be named after a faraway city."""
 
 SCRIPT_NAMES = {
     "han": "Chinese characters",
@@ -430,6 +434,12 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
         if match := re.search(pattern, everything):
             note = f"{name}: {match.group(0).strip()}"
             weigh(lambda c, p=places: c.code in p, TELLING_FLOOR, note)
+    naming = {place_key(word) for word in _indexes()[1]}
+    towns = sorted(
+        places_in((line.text for line in lines), naming).items(), key=lambda kv: -len(kv[0])
+    )
+    for town, places in towns[:MAX_PLACES]:
+        weigh(lambda c, p=places: c.code in p, PLACE_FLOOR, f"town {town} ({', '.join(places)})")
     return clues
 
 

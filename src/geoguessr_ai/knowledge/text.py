@@ -1,4 +1,5 @@
-"""What the writing on screen gives away: scripts, languages, web domains and phone numbers.
+"""What the writing on screen gives away: scripts, languages, web domains, phone numbers,
+brands, prices, speed limits, postcodes and road numbers.
 
 Lines of text read off the screen become a likelihood for every country. Each kind of clue
 counts once however many signs show it, and no clue rules a country out completely: text can
@@ -33,6 +34,8 @@ DOMAIN_FLOOR = 0.1
 PHONE_FLOOR = 0.1
 LOCAL_PHONE_FLOOR = 0.3
 """For a phone number written the local way, which neighbours and misreadings can share."""
+TELLING_FLOOR = 0.3
+"""For a country that doesn't write a price, speed, postcode or road number the way one was."""
 
 SCRIPT_NAMES = {
     "han": "Chinese characters",
@@ -208,6 +211,53 @@ LOCAL_PHONES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (r"[69]\d{2}\s\d{3}\s\d{3}", ("ES", "PT")),  # 612 345 678
 )
 _TOKEN = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*")
+_EURO = ("AT", "BE", "CY", "DE", "EE", "ES", "FI", "FR", "GR", "HR", "IE", "IT", "LT", "LU", "LV")
+_EURO += ("MT", "NL", "PT", "SI", "SK", "AD", "MC", "ME", "SM", "VA", "XK", "RE", "GP", "MQ")
+_MPH = ("US", "GB", "IM", "JE", "GG", "PR", "GU", "AS", "MP", "VI", "LR", "BS", "BZ", "KY", "VG")
+_MPH += ("AG", "DM", "GD", "KN", "LC", "VC", "TC", "AI", "FK")
+_BRAZIL_STATES = "sp|mg|rs|sc|go|ba|pe|ce|pa|mt|ms|es|rj|al|se|pb|rn|pi|ma|to|ro|ac|am|rr|ap|df"
+# Prices, speed limits, postcodes and road numbers as some countries write them, in lowercase:
+# what to look for, a short name for it, and where it is written so.
+TELLING_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (r"r\$\s?\d", "price in reais", ("BR",)),
+    (r"\d\s?zł|\bpln\b", "price in złoty", ("PL",)),
+    (r"\d\s?kč", "price in koruny", ("CZ",)),
+    (r"\d\s?(?:lei|ron)\b", "price in lei", ("RO", "MD")),
+    (r"\d\s?лв", "price in leva", ("BG",)),
+    (r"₽|\d\s?руб", "price in roubles", ("RU", "BY")),
+    (r"₴|\d\s?грн", "price in hryvnias", ("UA",)),
+    (r"₸|\d\s?тг", "price in tenge", ("KZ",)),
+    (r"₺|\d\s?tl\b", "price in lira", ("TR",)),
+    (r"₹|\brs\.?\s?\d", "price in rupees", ("IN", "PK", "LK", "NP")),
+    (r"৳|\btk\.?\s?\d", "price in taka", ("BD",)),
+    (r"₱|\bphp\s?\d", "price in pesos", ("PH",)),
+    (r"₩", "price in won", ("KR",)),
+    (r"₫|\d\s?(?:vnđ|vnd)\b", "price in dong", ("VN",)),
+    (r"฿|\d\s?บาท", "price in baht", ("TH",)),
+    (r"\brp\.?\s?\d", "price in rupiah", ("ID",)),
+    (r"\brm\s?\d", "price in ringgit", ("MY",)),
+    (r"\b(?:k|u|t)shs?\.?\s?\d|\b(?:kes|ugx|tzs)\s?\d", "price in shillings", ("KE", "UG", "TZ")),
+    (r"₦", "price in naira", ("NG",)),
+    (r"₵|\bghs\s?\d", "price in cedis", ("GH",)),
+    (r"\bs/\.?\s?\d", "price in soles", ("PE",)),
+    (r"\bchf\s?\d|\d\s?chf\b", "price in francs", ("CH", "LI")),
+    (r"\d\s?kr\b|\bkr\.?\s?\d", "price in kronor", ("SE", "NO", "DK", "IS", "FO", "GL")),
+    (r"€", "price in euros", _EURO),
+    (r"£", "price in pounds", ("GB", "IM", "JE", "GG", "GI", "FK")),
+    (r"\bmph\b", "speed in mph", _MPH),
+    (r"\b[a-z]{1,2}\d[a-z\d]?\s\d[a-z]{2}\b", "British postcode", ("GB", "IM", "JE", "GG")),
+    (r"\b[a-z]\d[a-z]\s?\d[a-z]\d\b", "Canadian postcode", ("CA",)),
+    (r"(?<![\d-])\d{5}-\d{3}(?![\d-])", "Brazilian postcode", ("BR",)),
+    (r"(?<![\d-])\d{4}-\d{3}(?![\d-])", "Portuguese postcode", ("PT",)),
+    (r"(?<![\d-])\d{2}-\d{3}(?![\d-])", "Polish postcode", ("PL",)),
+    (r"〒", "Japanese postcode", ("JP",)),
+    (rf"\b(?:br|{_BRAZIL_STATES})-\d{{3}}\b", "Brazilian road", ("BR",)),
+    (r"\bi-\d{1,3}\b", "Interstate", ("US",)),
+    (r"\bdn\s?\d{1,3}[a-z]?\b", "Romanian national road", ("RO",)),
+    (r"\bss\s?\d{1,3}\b", "Italian state road", ("IT",)),
+    (r"\bnh\s?\d{1,3}\b", "Indian national highway", ("IN",)),
+    (r"\bsh\s?\d{1,2}\b", "state highway", ("NZ", "AL")),
+)
 
 BRAND_FLOOR = 0.3
 BRAND_INSIDE_LETTERS = 6
@@ -376,6 +426,10 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
         weigh(lambda c, k=code: k in c.calling_codes, PHONE_FLOOR, f"phone number +{code}")
     for number, places in _local_numbers(_PHONE.sub(" ", everything)):
         weigh(lambda c, p=places: c.code in p, LOCAL_PHONE_FLOOR, f"phone number {number}")
+    for pattern, name, places in TELLING_TEXT:
+        if match := re.search(pattern, everything):
+            note = f"{name}: {match.group(0).strip()}"
+            weigh(lambda c, p=places: c.code in p, TELLING_FLOOR, note)
     return clues
 
 

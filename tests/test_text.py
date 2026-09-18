@@ -74,7 +74,27 @@ def test_local_phone_numbers_without_a_country_code():
     assert ratio(text_clues([TextLine("8 (495) 123-45-67", "latin", 0.9)]), "RU", "PL") >= 3
     both = text_clues([TextLine("+55 (11) 99983-2915", "latin", 0.9)])
     assert both.notes == ["phone number +55"]  # the same number counts once
-    assert not text_clues([TextLine("2024-05-12 R$ 1.299,90 KM 12", "latin", 0.9)]).notes
+    price = text_clues([TextLine("2024-05-12 R$ 1.299,90 KM 12", "latin", 0.9)])
+    assert price.notes == ["price in reais: r$ 1"]  # no phone number in a date or a price
+
+
+def test_prices_speeds_postcodes_and_road_numbers():
+    for text, here, elsewhere in (
+        ("Promoção R$ 9,99", "BR", "PT"),
+        ("Pizza 25 zł", "PL", "CZ"),
+        ("SPEED LIMIT 35 MPH", "US", "CA"),
+        ("London SW1A 1AA", "GB", "US"),
+        ("Toronto ON M5V 3L9", "CA", "US"),
+        ("CEP 01310-100", "BR", "AR"),
+        ("BR-116", "BR", "AR"),
+        ("I-95 North", "US", "CA"),
+        ("DN1 Brasov", "RO", "BG"),
+        ("Rs. 250", "IN", "BD"),
+        ("Ksh 100", "KE", "NG"),
+    ):
+        clues = text_clues([TextLine(text, "latin", 0.9)])
+        assert ratio(clues, here, elsewhere) >= 3, text
+    assert text_clues([TextLine("1500 km", "latin", 0.9)]).notes == []
 
 
 def test_regional_brands():

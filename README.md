@@ -5,7 +5,7 @@ A self-trained geolocation AI that plays [OpenGuessr](https://openguessr.com) by
 ## How it works
 
 1. **Look:** presses Street View's compass to face north, then turns 90° at a time to capture north, east, south and west, pressing again if a turn didn't happen. If the sky is clear it then tilts up and looks round for the sun, which a level view seldom shows. If the model is unsure after that (it expects under 1,500 points), the bot walks about 50 m on along the road and looks round again, as players do when a place gives nothing away.
-2. **Read:** reads signs and road names, and looks for the sun.
+2. **Read:** reads signs, and road names also as if looking down on the road, where they come out straight, and looks for the sun.
 3. **Guess:** a frozen CLIP image encoder plus a small classifier you train ranks regions of the world, then GeoGuessr knowledge reweighs them (see [What it knows](#what-it-knows)).
 4. **Place:** finds the world on the minimap by its coastlines, drags the map if the guess is off screen, zooms in, clicks, and checks the pin landed.
 5. **Learn** (`learn` only): reads the real location off the result screen, then retrains on your rounds.
@@ -117,7 +117,7 @@ geoguessr-ai learn --rounds 20   # play, read every answer, then retrain on your
 
 - `play` learns nothing. `learn` is slower: reading each answer zooms the result map out (5 to 20 seconds a round), and retraining takes a few minutes at the end.
 - Each round prints its clues and likeliest countries, like `clue: Portuguese: farmácia, rua` and `guess -23.550, -46.630 (BR 81%, PT 6%, AR 3%; driving on the right 97%)`.
-- Reading signs adds about 3 seconds a round, and its models (about 100 MB) download the first time. `--no-text` skips it.
+- Reading signs adds about 3 to 5 seconds a round, and its models (about 100 MB) download the first time. `--no-text` skips it.
 - Looking up for the sun adds up to 7 seconds to rounds with blue sky. `--no-look-up` skips it.
 - In the first round the bot drags the view sideways once to measure Street View's camera, so it knows which way each pixel looks.
 - Walking on when unsure adds about 13 seconds to those rounds. `--no-walk` skips it. `--look-down` also tilts the camera down at the road and saves those views, for future use: nothing reads them yet.
@@ -133,8 +133,10 @@ geoguessr-ai learn --rounds 20   # play, read every answer, then retrain on your
 | Street View coverage | Countries with no Google Street View (most of China, Central Asia, much of Africa and the Middle East) are 20× less likely; ones with only a little, 2× | The country list is approximate. `learn` also learns where the game really sends you. `--coverage-strength 0` turns it off. |
 | Script | Korean, Japanese, Chinese, Cyrillic, Greek, Thai, Devanagari (Arabic too after `pip install python-bidi`) | Hebrew, Georgian, Khmer, Lao and several Indian scripts can't be read. |
 | Language | Telling letters (ł, ř, ğ, ã, ß) and street and shop words (rua, calle, straße, jalan, kinyozi) in about 40 languages, even read without accents (PRACA) or cut off by the frame (DESCONT); letters that set Ukrainian, Serbian or Kazakh apart from Russian | English barely counts: it's on signs everywhere. |
-| Road names | Street View writes them along the road; they're read like any sign | Labels running steeply along the road often can't be read, and road numbers (A167, C-13) can't be read even looking down. |
+| Road names | Street View writes them flat on the road. Each view is also turned into a picture of the road from above, where they come out straight: in 6 of 40 saved rounds it read road names the level views missed, like Mazatlán-Culiacán and Gaspar Rodríguez de Francia | Only once the camera is measured. Road numbers painted on the road (A167, C-13) still can't be read. |
+| Towns | 46,000 town and city names (all over 15,000 people), in local scripts too (Москва, 東京): towns on a direction sign are usually near | Names that are everyday words (Victoria), short (Lima) or found in more than 4 countries don't count, nor ones after a street or shop word (Rua São João). |
 | Domains, phone numbers, brands | `.com.br`, `+48`, Brazil's `99983-2915`, PEMEX, M-PESA, O Boticário (even run together as OBOTICARIO) | About 100 regional chains and 15 local phone formats. |
+| Prices, speeds, postcodes, road numbers | `R$ 9,99`, `25 zł`, `Ksh 100`, `35 MPH`, `SW1A 1AA`, `01310-100`, `BR-116`, `I-95`, `DN1` | About 40 patterns. The euro and pound signs only narrow it to their regions. |
 | Sun | Its direction and height: low in the south means well north of the tropics, high in the north means south of them, overhead means the tropics | Only a whole, round sun glowing into open sky counts, not one cut off by the view's edge, behind a roof or in haze. In 15 live test rounds it found the sun in 4 of the 7 where it showed, and all 4 pointed the right way. |
 | Driving side | Printed with each guess, from the countries the model favours | A separate detector scored worse on test photos (2,467 vs 2,500), since the model already gets it right 88% of the time, so it isn't counted twice. |
 
@@ -173,6 +175,6 @@ Run `geoguessr-ai <command> --help` for options.
 
 ## Credits
 
-Data: OpenStreetView-5M (CC-BY-SA 4.0). Borders: Natural Earth (public domain). Land mask: `global-land-mask`. Encoder: OpenAI CLIP. Text reading: RapidOCR with PaddleOCR models (Apache 2.0).
+Data: OpenStreetView-5M (CC-BY-SA 4.0). Borders: Natural Earth (public domain). Land mask: `global-land-mask`. Encoder: OpenAI CLIP. Text reading: RapidOCR with PaddleOCR models (Apache 2.0). Town names: GeoNames (CC BY 4.0).
 
 For fun and learning; please don't use it against real players.

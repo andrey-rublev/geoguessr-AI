@@ -1,7 +1,7 @@
 import numpy as np
 
 from geoguessr_ai.knowledge.text import TextLine
-from geoguessr_ai.ocr import _pad_width, pick_reading, script_of
+from geoguessr_ai.ocr import _pad_width, _steep, pick_reading, script_of
 
 
 def test_lines_are_padded_to_a_few_widths():
@@ -42,3 +42,9 @@ def test_drops_unsure_letterless_or_mixed_up_readings():
     assert pick_reading([("latin", "Rua", 0.5)], 0.8) is None
     assert pick_reading([("hangul", "5", 0.99)], 0.8) is None
     assert pick_reading([("latin", "+44 20 7946 0958", 0.9)], 0.8).text.startswith("+44")
+
+
+def test_text_running_up_or_down_the_picture_is_steep():
+    across = np.float32([[0, 0], [100, 10], [100, 40], [0, 30]])
+    up = np.float32([[0, 100], [10, 0], [40, 0], [30, 100]])
+    assert not _steep(across) and _steep(up) and _steep(up[[1, 2, 3, 0]])

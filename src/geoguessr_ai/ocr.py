@@ -113,6 +113,17 @@ def _pad_width(crop: np.ndarray) -> np.ndarray:
     return np.concatenate([crop, padding], axis=1)
 
 
+def _bgr(image: Image.Image) -> np.ndarray:
+    return np.ascontiguousarray(np.asarray(image.convert("RGB"))[:, :, ::-1])
+
+
+def _steep(corners: np.ndarray) -> bool:
+    """A line of text running more up or down the picture than across it, like a road's name
+    seen from above. Its crop may come out upside down, depending on which way it reads."""
+    along = max(corners[1] - corners[0], corners[3] - corners[0], key=np.linalg.norm)
+    return abs(along[1]) > abs(along[0])
+
+
 class SignReader:
     def __init__(self, models: Sequence[str] | None = None, min_score: float = 0.8) -> None:
         import importlib.util
@@ -143,15 +154,25 @@ class SignReader:
         self._recognisers = {model: e.text_rec for model, e in engines.items()}
         self.min_score = min_score
 
-    def read(self, images: Sequence[Image.Image]) -> list[TextLine]:
-        """Every line of text confidently read in ``images``."""
+    def read(
+        self, images: Sequence[Image.Image], min_box_score: float = MIN_BOX_SCORE
+    ) -> list[TextLine]:
+        """Every line of text confidently read in ``images``, looking for it with at least
+        ``min_box_score`` confidence."""
         from rapidocr.ch_ppocr_rec import TextRecInput
         from rapidocr.utils.process_img import get_rotate_crop_image
 
-        crops = []
-        for image in images:
-            bgr = np.ascontiguousarray(np.asarray(image.convert("RGB"))[:, :, ::-1])
-            crops += [_pad_width(get_rotate_crop_image(bgr, b)) for b in self._find_lines(bgr)]
+        crops, owners = [], []  # a line of text running up the picture gets two crops
+        boxes = [
+            (image, box)
+            for image in map(_bgr, images)
+            for box in self._find_lines(image, min_box_score)
+        ]
+        for line, (bgr, box) in enumerate(boxes):
+            crop = get_rotate_crop_image(bgr, box)
+            turns = [crop, np.ascontiguousarray(np.rot90(crop, 2))] if _steep(box) else [crop]
+            crops += [_pad_width(turned) for turned in turns]
+            owners += [line] * len(turns)
         readings: list[list[tuple[str, str, float]]] = [[] for _ in crops]
         pending = list(range(len(crops)))
         for model, recognise in self._recognisers.items():
@@ -162,10 +183,13 @@ class SignReader:
                 readings[i].append((RECOGNISERS[model], text, float(score)))
             if model == "latin":  # most signs are Latin; only puzzle over the rest
                 pending = [i for i in pending if not _plainly_latin(*readings[i][-1][1:])]
-        lines = (pick_reading(r, self.min_score) for r in readings)
+        per_line: dict[int, list[tuple[str, str, float]]] = {}
+        for owner, reading in zip(owners, readings, strict=True):
+            per_line.setdefault(owner, []).extend(reading)
+        lines = (pick_reading(r, self.min_score) for r in per_line.values())
         return [line for line in lines if line and not _NOT_A_SIGN.search(line.text)]
 
-    def _find_lines(self, bgr: np.ndarray) -> list[np.ndarray]:
+    def _find_lines(self, bgr: np.ndarray, min_box_score: float) -> list[np.ndarray]:
         """Corners of the biggest confidently detected lines of text, in full-size pixels."""
         h, w = bgr.shape[:2]
         scale = min(1.0, DETECT_WIDTH / w)
@@ -177,7 +201,7 @@ class SignReader:
         for box, score in zip(found.boxes, found.scores, strict=True):
             corners = np.asarray(box, dtype=np.float32) / scale
             sides = np.linalg.norm(corners - np.roll(corners, -1, axis=0), axis=1)
-            if score >= MIN_BOX_SCORE and sides.min() >= MIN_TEXT_HEIGHT:
+            if score >= min_box_score and sides.min() >= MIN_TEXT_HEIGHT:
                 boxes.append(corners)
         boxes.sort(key=lambda corners: -cv2.contourArea(corners))
         return boxes[:MAX_LINES]

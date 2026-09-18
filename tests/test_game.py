@@ -10,6 +10,7 @@ from test_sun import sky
 
 from geoguessr_ai import game as game_module
 from geoguessr_ai.buttons import button_region
+from geoguessr_ai.camera import Camera
 from geoguessr_ai.config import Layout, Point, Region
 from geoguessr_ai.game import BotSettings, OpenGuessrBot
 from geoguessr_ai.knowledge.text import TextLine
@@ -45,7 +46,8 @@ class FakeScreen:
         if self.blank_grabs:
             self.blank_grabs -= 1
             return Image.new("RGB", (region.width, region.height))
-        noise = np.random.default_rng(self.grabs).integers(0, 256, (region.height, region.width, 3))
+        rng = np.random.default_rng(self.grabs)  # grey, so no blue sky to look up at
+        noise = rng.integers(0, 256, (region.height, region.width, 1)).repeat(3, axis=2)
         return Image.fromarray(noise.astype(np.uint8))
 
 
@@ -70,14 +72,17 @@ class FakeControls:
 
 
 class TurningStreetView(FakeScreen, FakeControls):
-    """Street View with Google's compass: pressing it faces north, its arrow turns 90 degrees.
-    The sun shows low in the sky when facing ``sun_heading``. The presses numbered in
+    """Street View with Google's compass: pressing it faces north and levels the camera, its
+    arrow turns 90 degrees and keeps the tilt, and dragging straight down tilts the camera up.
+    The sun shows when facing ``sun_heading``: low in a level view, or with ``sun_high`` only
+    once tilted up. With ``clear``, blue sky shows all round. The presses numbered in
     ``ignored`` (counting from 1) do nothing, as when Street View is busy."""
 
-    def __init__(self, sun_heading=None, ignored=()):
+    def __init__(self, sun_heading=None, ignored=(), sun_high=False, clear=False):
         FakeScreen.__init__(self)
         FakeControls.__init__(self)
-        self.heading, self.sun_heading = 260.0, sun_heading
+        self.heading, self.sun_heading, self.sun_high = 260.0, sun_heading, sun_high
+        self.clear, self.looking_up = clear, False
         self.ignored, self.presses = set(ignored), 0
 
     def grab(self, region):
@@ -86,12 +91,24 @@ class TurningStreetView(FakeScreen, FakeControls):
             rgb = np.full((region.height, region.width, 3), (90, 110, 70), np.uint8)
             rgb[300:420, :160] = draw_compass(self.heading)
             return Image.fromarray(rgb)
-        if self.heading != self.sun_heading:
+        sun = self.heading == self.sun_heading and self.looking_up == self.sun_high
+        if not (sun or self.clear):
             return super().grab(region)
+        if not sun:
+            picture = sky()
+        elif self.sun_high:  # glaring in the middle of the view
+            picture = sky(sun_at=(700, 250), sun_radius=40, glow=90, ground=1.0)
+        else:
+            picture = sky(sun_at=(700, 150))
         rgb = np.full((region.height, region.width, 3), (70, 110, 60), np.uint8)
         rows = min(region.height, LAYOUT.view.height)
-        rgb[:rows] = cv2.resize(sky(sun_at=(700, 150)), (region.width, LAYOUT.view.height))[:rows]
+        rgb[:rows] = cv2.resize(picture, (region.width, LAYOUT.view.height))[:rows]
         return Image.fromarray(rgb)
+
+    def drag(self, start, dx, dy=0):
+        super().drag(start, dx, dy)
+        if dx == 0 and dy:
+            self.looking_up = dy > 0
 
     def click(self, p):
         super().click(p)
@@ -99,7 +116,7 @@ class TurningStreetView(FakeScreen, FakeControls):
         if self.presses in self.ignored:
             return
         if abs(p.x - self.compass_at.x) <= 3 and abs(p.y - self.compass_at.y) <= 3:
-            self.heading = 0.0
+            self.heading, self.looking_up = 0.0, False
         elif self.compass_at.x + 15 < p.x < self.compass_at.x + 40:
             self.heading = (self.heading // 90 + 1) * 90 % 360  # on to the next quarter
 
@@ -207,11 +224,12 @@ def test_looks_down_at_the_road_all_the_way_round_then_levels_the_camera(tmp_pat
     bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
     bot.play()
 
-    assert len(street_view.drags) == 2  # tilting down, straight up the screen
-    assert all(dx == 0 and dy < 0 for _, dx, dy in street_view.drags)
+    tilts = [(start, dy) for start, dx, dy in street_view.drags if dx == 0]
+    assert tilts and all(dy < 0 for _, dy in tilts)  # dragging up the screen looks down
+    assert all(LAYOUT.view.contains(start) for start, _ in tilts)
     folder = next(tmp_path.glob("*/round_01"))
     saved = json.loads((folder / "round.json").read_text(encoding="utf-8"))
-    assert [round(h) % 360 for h in saved["down_headings"]] == [270, 0, 90, 180]
+    assert [round(h) % 360 for h in saved["down_headings"]] == [0, 90, 180, 270]
     assert (folder / "down_3.jpg").exists()
     assert street_view.heading == 0  # the compass pressed at the end, which levels the camera
 
@@ -263,6 +281,68 @@ def test_a_sun_to_the_south_hints_at_the_northern_hemisphere():
 
     assert any(note.startswith("sun to the south") for note in evidence.notes)
     assert evidence.latitude(45) > 3 * evidence.latitude(-35)
+
+
+def test_looks_up_at_a_clear_sky_and_finds_the_sun(tmp_path):
+    street_view = TurningStreetView(sun_heading=90.0, sun_high=True, clear=True)
+    settings = BotSettings(rounds=1, record_answers=False, read_text=False, debug_dir=tmp_path)
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
+
+    look = bot.look_around()
+
+    ups = [(start, dy) for start, dx, dy in street_view.drags if dx == 0]
+    assert ups and all(dy > 0 and LAYOUT.view.contains(start) for start, dy in ups)
+    assert [round(h) for h in look.up_headings] == [0, 90]  # stopped once it saw the sun
+    assert look.up_pitches[0] == pytest.approx(45, abs=5)
+    assert not street_view.looking_up and street_view.heading == 0  # levelled again
+    evidence, _ = bot.notice(look)
+    note = next(note for note in evidence.notes if note.startswith("sun"))
+    assert note.startswith("sun to the east") and "45 deg up" in note
+
+
+def test_a_high_sun_to_the_north_hints_at_the_southern_hemisphere(tmp_path):
+    street_view = TurningStreetView(sun_heading=0.0, sun_high=True, clear=True)
+    predictor = FakePredictor()
+    settings = BotSettings(rounds=1, record_answers=False, read_text=False, debug_dir=tmp_path)
+
+    OpenGuessrBot(LAYOUT, predictor, settings, street_view, street_view).play()
+
+    evidence = predictor.evidence[0]
+    assert evidence.latitude(-30) > 3 * evidence.latitude(45)
+    folder = next(tmp_path.glob("*/round_01"))
+    saved = json.loads((folder / "round.json").read_text(encoding="utf-8"))
+    assert saved["up_headings"] == [0.0] and (folder / "up_0.jpg").exists()
+    assert saved["camera"]["measured"] is False
+
+
+@pytest.mark.parametrize("street_view, look_up", [(TurningStreetView, True), (None, False)])
+def test_doesnt_look_up_under_grey_skies_or_when_told_not_to(street_view, look_up):
+    street_view = street_view() if street_view else TurningStreetView(clear=True)
+    settings = BotSettings(rounds=1, record_answers=False, look_up=look_up, debug_dir=None)
+
+    look = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view).look_around()
+
+    assert not look.up_views and not any(dx == 0 for _, dx, _ in street_view.drags)
+
+
+def test_measures_the_camera_once_by_dragging_sideways(monkeypatch):
+    measured = Camera(700.0, 380.0, 500.0, measured=True)
+    calls = []
+
+    def fake_measure(before, after, view, guess):
+        calls.append(guess)
+        return None if len(calls) == 1 else (measured, 30.0)
+
+    monkeypatch.setattr(game_module, "measure", fake_measure)
+    street_view = TurningStreetView()
+    settings = BotSettings(rounds=4, record_answers=False, read_text=False, debug_dir=None)
+
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view)
+    bot.play()
+
+    assert len(calls) == 2 and bot.camera == measured  # tried again after failing once
+    sideways = [(start, dx) for start, dx, dy in street_view.drags if dy == 0]
+    assert len(sideways) == 2 and all(dx < 0 and LAYOUT.view.contains(s) for s, dx in sideways)
 
 
 def test_signs_become_clues_for_the_model(tmp_path):

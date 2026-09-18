@@ -208,6 +208,7 @@ def cmd_play(args: argparse.Namespace) -> None:
         views=args.views,
         dry_run=args.dry_run,
         read_text=not args.no_text,
+        look_up=not args.no_look_up,
         look_down=args.look_down,
         walk_below=0.0 if args.no_walk else BotSettings.walk_below,
         record_answers=False,
@@ -223,6 +224,7 @@ def cmd_learn(args: argparse.Namespace) -> None:
         rounds=args.rounds,
         views=args.views,
         read_text=not args.no_text,
+        look_up=not args.no_look_up,
         look_down=args.look_down,
         walk_below=0.0 if args.no_walk else BotSettings.walk_below,
         record_answers=True,
@@ -323,6 +325,11 @@ def build_parser() -> argparse.ArgumentParser:
             "--no-walk",
             action="store_true",
             help="never walk on to look again when unsure (faster)",
+        )
+        p.add_argument(
+            "--no-look-up",
+            action="store_true",
+            help="don't look up for the sun when the sky is clear (faster)",
         )
         p.add_argument(
             "--look-down",

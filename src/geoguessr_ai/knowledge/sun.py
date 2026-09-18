@@ -1,9 +1,12 @@
 """Which hemisphere the sun says we're in.
 
 Street View is filmed in daylight. North of the tropics the sun then stands in the southern
-half of the sky, south of them in the northern half, and near the equator it can be either.
-With views that face north, east, south and west (see :mod:`..compass`), a sun low enough to
-show in one gives its compass direction, which shifts belief between latitudes.
+half of the sky, south of them in the northern half, and near the equator it can be either;
+how high it climbs says more. A sun seen in a view whose heading and tilt are known gives its
+compass direction and height (see :mod:`..camera`), which shift belief between latitudes.
+
+In a level view the sun seldom shows: on 150 saved rounds it never did, since from the height
+it usually stands at it is above the picture. Looking up at a clear sky usually finds it.
 """
 
 from __future__ import annotations
@@ -13,63 +16,82 @@ import functools
 import cv2
 import numpy as np
 
-VIEW_FOV = 105.0
-"""Degrees across the calibrated view (Street View's whole picture spans about 130)."""
 FLOOR = 0.2
 """Latitudes where such a sun would be rare keep this much weight, in case it was misjudged."""
 BIN_DEGREES = 5
+AZIMUTH_BLUR, HEIGHT_BLUR = 15.0, 8.0
+"""Degrees: how roughly the sun's direction and height are judged."""
 
 
-def find_sun(rgb: np.ndarray) -> tuple[float, float] | None:
-    """Where the sun is in a view, if it plainly shows: one small blown-out disc glowing into
-    open sky all round.
+def find_sun(rgb: np.ndarray, sky_share: float = 1.0) -> tuple[float, float] | None:
+    """Where the sun is in a view, if it plainly shows: one round blown-out disc, whole and
+    in the top ``sky_share`` of the view, glowing into the sky all round and fading outwards.
 
-    Blown-out patches that are big (overcast skies, white walls), several, or not ringed by
-    glowing sky (lamps, reflections, the edges of clouds and roofs) don't count.
+    White clouds end sharply or run into more cloud, overcast and hazy skies are white all
+    over, and lamps and reflections don't glow into open sky, so none of them count.
     """
     h, w = rgb.shape[:2]
-    sky = rgb[: int(h * 0.6), :, :3].astype(np.int16)
-    blown = (sky.min(axis=2) >= 245).astype(np.uint8)
-    count, _, stats, centroids = cv2.connectedComponentsWithStats(blown)
-    least, most = 0.0002 * h * w, 0.02 * h * w
-    patches = [i for i in range(1, count) if stats[i, cv2.CC_STAT_AREA] >= least]
-    if len(patches) != 1:
+    sky = rgb[: max(1, int(h * sky_share)), :, :3]
+    darkest = sky.min(axis=2).astype(np.float32)
+    blown = (darkest >= 250).astype(np.uint8)
+    count, _, stats, centroids = cv2.connectedComponentsWithStats(blown, connectivity=8)
+    found = [
+        centroids[i]
+        for i in range(1, count)
+        if stats[i, cv2.CC_STAT_AREA] >= 0.0002 * h * w and _glows(darkest, blown, stats[i])
+    ]
+    if len(found) != 1:
         return None
-    i = patches[0]
-    _, _, bw, bh, area = stats[i]
-    if area > most or area < 0.45 * bw * bh or max(bw, bh) > 2.5 * min(bw, bh):
-        return None
-    cx, cy = centroids[i]
-    radius = np.sqrt(area / np.pi)
-    brightness = sky.mean(axis=2)
-    ys, xs = np.mgrid[0 : sky.shape[0], 0:w]
+    return float(found[0][0]), float(found[0][1])
+
+
+def clear_sky(rgb: np.ndarray) -> float:
+    """Share of the top third of a view that is clear blue sky, where the sun may be out."""
+    top = rgb[: max(1, rgb.shape[0] // 3), :, :3].astype(np.int16)
+    red, green, blue = top[..., 0], top[..., 1], top[..., 2]
+    return float(((blue > 120) & (blue > red + 25) & (blue >= green)).mean())
+
+
+def _glows(darkest: np.ndarray, blown: np.ndarray, stats: np.ndarray) -> bool:
+    """Whether a blown-out patch looks like the sun: round, and ringed by a glow that fades
+    outwards in every direction not hidden by something dark, like a tree or a roof."""
+    h, w = darkest.shape
+    x, y, bw, bh, area = stats
+    if x == 0 or y == 0 or x + bw >= w or y + bh >= h:
+        return False  # cut off, so its middle is unknown
+    if area < 0.6 * bw * bh or max(bw, bh) > 1.35 * min(bw, bh):
+        return False
+    cx, cy, radius = x + bw / 2, y + bh / 2, np.sqrt(area / np.pi)
+    ys, xs = np.ogrid[:h, :w]
     distance = np.hypot(xs - cx, ys - cy)
-    near = (distance >= 1.2 * radius) & (distance <= 2 * radius)
-    far = (distance >= 3 * radius) & (distance <= 5 * radius)
     sector = ((np.arctan2(ys - cy, xs - cx) + np.pi) // (np.pi / 4)).astype(int) % 8
-    glow = [brightness[near & (sector == s)] for s in range(8)]
-    if any(g.size < 5 for g in glow) or far.sum() < 100:
-        return None  # too near the edge of the view to judge
-    around = brightness[far]
-    # The sun lights the sky evenly all round, brightest close in...
-    if min(g.mean() for g in glow) < np.median(brightness) + 30:
-        return None
-    if around.mean() > 235 or brightness[near].mean() < around.mean() + 25:
-        return None
-    # ...and hangs in open sky, not against a wall or roof.
-    if (around < 120).mean() > 0.2:
-        return None
-    return float(cx), float(cy)
-
-
-def sun_azimuth(x: float, width: int, heading: float) -> float:
-    """Compass direction of a point ``x`` pixels across a view facing ``heading``."""
-    return (heading + (x / width - 0.5) * VIEW_FOV) % 360.0
+    near = (distance >= 1.3 * radius) & (distance <= 1.8 * radius)
+    far = (distance >= 2.5 * radius) & (distance <= 3.5 * radius)
+    seen, glows = 0, []
+    for s in range(8):
+        close, away = near & (sector == s), far & (sector == s)
+        if close.sum() < 10 or away.sum() < 10:
+            continue
+        seen += 1
+        if darkest[close].mean() >= 120:  # not hidden
+            glows.append((darkest[close].mean(), darkest[away].mean(), blown[close].mean()))
+    if seen < 5 or len(glows) < 4:
+        return False  # too near the edge, or mostly hidden
+    halo = np.array(glows)
+    return bool(
+        (halo[:, 2] <= 0.5).all()  # ends, rather than running into more white
+        and (halo[:, 0] >= halo[:, 1] + 8).all()  # fades outwards
+        and (halo[:, 0] >= 150).all()  # glows
+        and np.median(halo[:, 0]) < 245  # in a sky that isn't white all over
+    )
 
 
 @functools.lru_cache(maxsize=1)
-def _azimuth_table() -> tuple[np.ndarray, np.ndarray]:
-    """How often, at each latitude, a sun low enough to see stands in each direction."""
+def _sky_table() -> tuple[np.ndarray, np.ndarray]:
+    """``(latitudes, table)``: how often, at each latitude, the daytime sun stands in each
+    direction (bins of :data:`BIN_DEGREES` round the compass) at each height above the horizon."""
+    from scipy.ndimage import gaussian_filter1d
+
     lats = np.arange(-60.0, 76.0)
     days = np.arange(0, 365, 3)
     hours = np.arange(7.0, 18.01, 0.25)
@@ -86,23 +108,25 @@ def _azimuth_table() -> tuple[np.ndarray, np.ndarray]:
         )
     )
     azimuth = np.broadcast_to(azimuth % 360.0, height.shape)
-    bins = np.arange(0, 360 + BIN_DEGREES, BIN_DEGREES)
-    visible = (height > 2) & (height < 40)  # in a level view, not overhead
-    table = np.stack([np.histogram(a[v], bins)[0] for a, v in zip(azimuth, visible, strict=True)])
-    # Blur around the compass, since the sun's direction is only judged roughly.
-    offsets = np.arange(-6, 7)
-    kernel = np.exp(-0.5 * (offsets * BIN_DEGREES / 20.0) ** 2)
-    table = sum(k * np.roll(table, o, axis=1) for o, k in zip(offsets, kernel, strict=True))
-    return lats, table / table.sum(axis=1, keepdims=True)
+    bins = [np.arange(0, top + BIN_DEGREES, BIN_DEGREES) for top in (360, 90)]
+    up = height > 2
+    table = np.stack(
+        [np.histogram2d(a[v], e[v], bins)[0] for a, e, v in zip(azimuth, height, up, strict=True)]
+    )
+    table = gaussian_filter1d(table, AZIMUTH_BLUR / BIN_DEGREES, axis=1, mode="wrap")
+    table = gaussian_filter1d(table, HEIGHT_BLUR / BIN_DEGREES, axis=2, mode="nearest")
+    return lats, table / table.sum(axis=(1, 2), keepdims=True)
 
 
-def latitude_likelihood(azimuth: float):
-    """A function giving how well each latitude fits a sun seen towards ``azimuth``.
+def latitude_likelihood(azimuth: float, height: float):
+    """A function giving how well each latitude fits a sun seen towards ``azimuth``, ``height``
+    degrees above the horizon.
 
-    Latitudes where a low sun stands that way at least as often as on average get 1; rarer
-    ones get less, down to :data:`FLOOR`.
+    Latitudes where the sun stands there at least as often as on average get 1; rarer ones get
+    less, down to :data:`FLOOR`.
     """
-    lats, table = _azimuth_table()
-    fit = table[:, int(azimuth % 360 // BIN_DEGREES)]
+    lats, table = _sky_table()
+    column = min(int(np.clip(height, 0, 89.9) // BIN_DEGREES), table.shape[2] - 1)
+    fit = table[:, int(azimuth % 360 // BIN_DEGREES), column]
     weights = np.clip(fit / fit.mean(), FLOOR, 1.0)
     return lambda lat: np.interp(lat, lats, weights)

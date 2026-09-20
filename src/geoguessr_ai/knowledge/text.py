@@ -308,6 +308,31 @@ TELLING_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"\bss\s?\d{1,3}\b", "Italian state road", ("IT",)),
     (r"\bnh\s?\d{1,3}\b", "Indian national highway", ("IN",)),
     (r"\bsh\s?\d{1,3}\b", "state highway", ("IN", "NZ", "AL")),
+    (r"\bco(?:unty)?\s?(?:rd|road|hwy|highway)\s?\d{1,4}", "county road", ("US",)),
+    (r"\b(?:range|twp|township)\s?rd\b", "range road", ("CA", "US")),
+    (r"\bfm[-\s]?\d{2,4}\b", "farm-to-market road", ("US",)),
+    (r"\bdw\s?\d{3}\b", "Polish regional road", ("PL",)),
+    (r"\brp\s?\d{1,3}\b", "Argentine provincial route", ("AR",)),
+    (r"\bcra\.?\s?\d{1,3}[a-z]?", "carrera", ("CO",)),
+    (r"\bmarg\b", "marg", ("IN", "NP")),
+    # Street View labels roads in Russia and Central Asia in Latin letters as well.
+    (
+        r"\b(?:ulitsa|shosse|prospekt|pereulok|proyezd|naberezhnaya)\b",
+        "Russian road word in Latin letters",
+        ("RU", "BY", "KZ", "KG", "UZ", "TJ"),
+    ),
+    # American road names carry the compass point and number the streets: S Triple X Rd, 14th St.
+    (
+        r"\b(?:n|s|e|w|n[ew]|s[ew])\s(?:\w+\s){1,3}(?:rd|st|ave|dr|ln|blvd|hwy|way)\b"
+        r"|\b(?:rd|st|ave|dr|ln|blvd|hwy|way)\s(?:n|s|e|w|n[ew]|s[ew])\b",
+        "compass point in a road name",
+        ("US", "CA"),
+    ),
+    (
+        r"\b\d{1,3}(?:st|nd|rd|th)\s(?:st|ave|pl|ter|blvd|street|avenue|terrace)\b",
+        "numbered street",
+        ("US", "CA", "PH", "NG"),
+    ),
 )
 
 BRAND_FLOOR = 0.3

@@ -16,6 +16,7 @@ def test_finds_towns_in_any_script():
 def test_ignores_everyday_words_short_names_and_names_after_street_words():
     assert "victoria" not in places() and "lima" not in places()
     assert places_in(["Hotel Victoria", "Main Street Parking"]) == {}
+    assert places_in(["JEEVAN TOYOTA", "NW 191st Terrace"]) == {}  # a make and a road word
     assert places_in(["Rua Curitiba"], naming_words={"rua"}) == {}
     assert places_in(["Curitiba 12"], naming_words={"rua"}) == {"curitiba": ("BR",)}
 

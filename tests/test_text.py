@@ -120,6 +120,8 @@ def test_towns_on_signs_but_not_streets_and_shops_named_after_them():
     assert ratio(sign, "MX", "US") >= 3 and sign.notes == ["town culiacan (MX)"]
     named = text_clues([TextLine("Farmácia Curitiba", "latin", 0.9)])
     assert not any(note.startswith("town") for note in named.notes)
+    shortened = text_clues([TextLine("Tv. Pinheiro Chagas", "latin", 0.9)])  # travessa
+    assert shortened.notes == ["Portuguese: tv."]
 
 
 def test_regional_brands():

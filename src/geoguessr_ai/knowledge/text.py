@@ -218,9 +218,15 @@ ROAD_ENDING_INSIDE = 5
 """Endings this long also count with a word run on after them, as in Bárðardalsvegurvest."""
 ABBREVIATIONS = {  # counted only when written with a dot, as on street signs
     "jl": "id",
+    "ji": "id",  # how Street View's Jl. usually comes out when read
+    "gg": "id",
     "jln": "ms",
     "brgy": "tl",
     "av": "pt,es,fr,ca",
+    "tv": "pt",
+    "rte": "fr",
+    "c": "es",
+    "cam": "es",
     "str": "de,ro",
     "ul": "pl",
     "cd": "tr",

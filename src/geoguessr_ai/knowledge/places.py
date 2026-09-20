@@ -24,22 +24,25 @@ MAX_COUNTRIES = 4
 """A name shared by more countries than this, like San Jose, says too little."""
 MAX_WORDS = 4
 # Place names that are also everyday words on signs, in English or the languages whose street
-# words the bot knows, or common first names.
+# words the bot knows, common first names, road words like Terrace, or makes like Toyota:
+# JEEVAN TOYOTA on an Indian sign used to point to Toyota in Japan.
 EVERYDAY = set(
     """
     about after alameda alexandria amazonas america arena aurora avenida bahia banco bella bonito
     bridge brighton buena bueno campo canal canto carmen casino castle catalina central centro
-    chester church clara colon colonia concordia constitucion cristal cruces del dolores dorado
-    eagle esperanza estrella fatima florida fortuna frontera garden general grande granada green
-    guadalupe hampton heights hills hotel independence industrial isabel jardim jardin jesus
-    kingston lagos laguna lakewood libertad liberty lincoln linden lourdes madison maria marina
-    market mercedes middleton milton mirador mission mobile monte montana monterey mountain
-    nazareth newport nueva nuevo olympia orange oriental palma palmas paradise paraiso park
-    patria pilar plata plaza porto posadas pozos premier princeton progreso providence pueblo
-    puerto reading regina reforma remedios republica richmond rio rivera rosario rosas royal
-    salem salud salvador santa santana santiago santo santos sao senhor sol springfield split
-    station stuart sucre sunrise sunset tabernacle terra torres trinidad triunfo union valle
-    valley vega venus victoria villa vista vitoria washington water wellington westminster
+    chester church clara colon colonia concordia constitucion cristal cruces del delta dolores
+    dorado eagle esperanza estrella fatima flores florida forest fortuna frontera garden general
+    granada grande green guadalupe hampton heights hercules hills honda hotel imperial
+    independence industrial isabel jardim jardin jesus jupiter kingston lagos laguna lakewood
+    libertad liberty lincoln linden lourdes madison march maria marina market mercedes middleton
+    milton mirador mission mobile montana monte monterey mountain mustang nazareth newport nokia
+    nueva nuevo olympia orange oriental palma palmas paradise paraiso park patria phoenix pilar
+    plata plaza porto posadas pozos premier princeton progreso providence pueblo puerto reading
+    reforma regina remedios republica richmond rio rivera rosario rosas royal salem salud salvador
+    santa santana santiago santo santos sao senhor sol split springfield springs station stuart
+    sucre summit sunrise sunset superior tabernacle terra terrace torres toyota trinidad triunfo
+    union valle valley vega venus victoria villa vista vitoria washington water wellington
+    westminster
     """.split()
 )
 _NOT_LETTERS = re.compile(r"[\W\d_]+")

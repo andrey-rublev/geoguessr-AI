@@ -106,10 +106,13 @@ def test_prices_speeds_postcodes_and_road_numbers():
         ("DN1 Brasov", "RO", "BG"),
         ("Rs. 250", "IN", "BD"),
         ("Ksh 100", "KE", "NG"),
+        ("Rp 15.000", "ID", "MY"),
+        ("SH58", "IN", "BD"),
     ):
         clues = text_clues([TextLine(text, "latin", 0.9)])
         assert ratio(clues, here, elsewhere) >= 3, text
     assert text_clues([TextLine("1500 km", "latin", 0.9)]).notes == []
+    assert text_clues([TextLine("RP51", "latin", 0.9)]).notes == []  # a road, not rupiah
 
 
 def test_towns_on_signs_but_not_streets_and_shops_named_after_them():

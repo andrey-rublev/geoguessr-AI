@@ -220,7 +220,7 @@ ABBREVIATIONS = {  # counted only when written with a dot, as on street signs
     "jl": "id",
     "jln": "ms",
     "brgy": "tl",
-    "av": "pt,es",
+    "av": "pt,es,fr,ca",
     "str": "de,ro",
     "ul": "pl",
     "cd": "tr",
@@ -278,7 +278,8 @@ TELLING_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"₩", "price in won", ("KR",)),
     (r"₫|\d\s?(?:vnđ|vnd)\b", "price in dong", ("VN",)),
     (r"฿|\d\s?บาท", "price in baht", ("TH",)),
-    (r"\brp\.?\s?\d", "price in rupiah", ("ID",)),
+    # Rupiah prices run to thousands, which keeps Argentina's RP 51 route out.
+    (r"\brp\.?\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{4,})", "price in rupiah", ("ID",)),
     (r"\brm\s?\d", "price in ringgit", ("MY",)),
     (r"\b(?:k|u|t)shs?\.?\s?\d|\b(?:kes|ugx|tzs)\s?\d", "price in shillings", ("KE", "UG", "TZ")),
     (r"₦", "price in naira", ("NG",)),
@@ -300,7 +301,7 @@ TELLING_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"\bdn\s?\d{1,3}[a-z]?\b", "Romanian national road", ("RO",)),
     (r"\bss\s?\d{1,3}\b", "Italian state road", ("IT",)),
     (r"\bnh\s?\d{1,3}\b", "Indian national highway", ("IN",)),
-    (r"\bsh\s?\d{1,2}\b", "state highway", ("NZ", "AL")),
+    (r"\bsh\s?\d{1,3}\b", "state highway", ("IN", "NZ", "AL")),
 )
 
 BRAND_FLOOR = 0.3

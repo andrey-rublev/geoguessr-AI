@@ -36,7 +36,11 @@ PHONE_FLOOR = 0.1
 LOCAL_PHONE_FLOOR = 0.3
 """For a phone number written the local way, which neighbours and misreadings can share."""
 TELLING_FLOOR = 0.3
-"""For a country that doesn't write a price, speed, postcode or road number the way one was."""
+"""For a country whose shops don't price the way a price was written: currencies travel."""
+OFFICIAL_FLOOR = 0.12
+"""For a country whose roads and post aren't numbered the way a sign was, which only a
+misreading should manage. Of 69 clues on the saved rounds one missed the country it was really
+in, and that was a French street sign 10 km inside Germany."""
 PLACE_FLOOR, MAX_PLACES = 0.3, 3
 """For a country without a town of a name read, of which at most this many count (the longest):
 a sign may point across a border, and a shop may be named after a faraway city."""
@@ -266,8 +270,8 @@ _EURO += ("MT", "NL", "PT", "SI", "SK", "AD", "MC", "ME", "SM", "VA", "XK", "RE"
 _MPH = ("US", "GB", "IM", "JE", "GG", "PR", "GU", "AS", "MP", "VI", "LR", "BS", "BZ", "KY", "VG")
 _MPH += ("AG", "DM", "GD", "KN", "LC", "VC", "TC", "AI", "FK")
 _BRAZIL_STATES = "sp|mg|rs|sc|go|ba|pe|ce|pa|mt|ms|es|rj|al|se|pb|rn|pi|ma|to|ro|ac|am|rr|ap|df"
-# Prices, speed limits, postcodes and road numbers as some countries write them, in lowercase:
-# what to look for, a short name for it, and where it is written so.
+# Prices as some countries write them, in lowercase: what to look for, a short name for it,
+# and where it is written so.
 TELLING_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"r\$\s?\d", "price in reais", ("BR",)),
     (r"\d\s?zł|\bpln\b", "price in złoty", ("PL",)),
@@ -295,6 +299,10 @@ TELLING_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"\d\s?kr\b|\bkr\.?\s?\d", "price in kronor", ("SE", "NO", "DK", "IS", "FO", "GL")),
     (r"€", "price in euros", _EURO),
     (r"£", "price in pounds", ("GB", "IM", "JE", "GG", "GI", "FK")),
+)
+# Speed limits, postcodes and road numbers, written the same way. These are what a country's
+# own road authority and post office write, which a tourist or a shop's prices can't be.
+OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"\bmph\b", "speed in mph", _MPH),
     (r"\b[a-z]{1,2}\d[a-z\d]?\s\d[a-z]{2}\b", "British postcode", ("GB", "IM", "JE", "GG")),
     (r"\b[a-z]\d[a-z]\s?\d[a-z]\d\b", "Canadian postcode", ("CA",)),
@@ -502,10 +510,11 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
         weigh(lambda c, k=code: k in c.calling_codes, PHONE_FLOOR, f"phone number +{code}")
     for number, places in _local_numbers(_PHONE.sub(" ", everything)):
         weigh(lambda c, p=places: c.code in p, LOCAL_PHONE_FLOOR, f"phone number {number}")
-    for pattern, name, places in TELLING_TEXT:
-        if match := re.search(pattern, everything):
-            note = f"{name}: {match.group(0).strip()}"
-            weigh(lambda c, p=places: c.code in p, TELLING_FLOOR, note)
+    for table, floor in ((TELLING_TEXT, TELLING_FLOOR), (OFFICIAL_TEXT, OFFICIAL_FLOOR)):
+        for pattern, name, places in table:
+            if match := re.search(pattern, everything):
+                note = f"{name}: {match.group(0).strip()}"
+                weigh(lambda c, p=places: c.code in p, floor, note)
     naming = {place_key(word) for word in _indexes()[1]}
     towns = sorted(
         places_in((line.text for line in lines), naming).items(), key=lambda kv: -len(kv[0])

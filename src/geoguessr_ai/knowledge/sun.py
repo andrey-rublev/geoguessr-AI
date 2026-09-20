@@ -16,8 +16,12 @@ import functools
 import cv2
 import numpy as np
 
-FLOOR = 0.2
-"""Latitudes where such a sun would be rare keep this much weight, in case it was misjudged."""
+FLOOR = 0.05
+"""Latitudes where such a sun would be rare keep this much weight, in case it was misjudged.
+
+A sun in the wrong half of the sky isn't unlikely there but impossible, so this only covers a
+misread sun or compass. On the 16 saved rounds where the sun was found it fitted the real
+latitude in 15; twice the model's guess was in the wrong hemisphere and only the sun said so."""
 BIN_DEGREES = 5
 AZIMUTH_BLUR, HEIGHT_BLUR = 15.0, 8.0
 """Degrees: how roughly the sun's direction and height are judged."""

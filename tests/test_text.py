@@ -53,6 +53,21 @@ def test_indonesian_road_label():
     assert ratio(clues, "ID", "TH") >= 2
 
 
+def test_road_words_written_onto_the_end_of_the_name():
+    finnish = text_clues([TextLine("Piipsannevantie", "latin", 0.9)])
+    assert ratio(finnish, "FI", "FR") >= 2 and finnish.notes == ["Finnish: …tie"]
+    assert ratio(text_clues([TextLine("Eindstraat", "latin", 0.9)]), "NL", "FR") >= 2
+    assert ratio(text_clues([TextLine("Ivalontie", "latin", 0.9)]), "FI", "SE") >= 2
+    run_on = text_clues([TextLine("Bárðardalsvegurvest", "latin", 0.9)])  # words run together
+    assert ratio(run_on, "IS", "AR") >= 4 and "Icelandic: …vegur" in run_on.notes
+
+
+def test_a_short_road_ending_needs_a_name_before_it():
+    for word in ("SORTIE", "PARTIE"):  # French, not a Finnish road ending in -tie
+        notes = text_clues([TextLine(word, "latin", 0.9)]).notes
+        assert not any("Finnish" in note for note in notes)
+
+
 def test_ukrainian_letters_tell_ukraine_from_russia():
     clues = text_clues([TextLine("вулиця Київська", "cyrillic", 0.9)])
     assert ratio(clues, "UA", "RU") > 2 and ratio(clues, "RU", "FR") > 5

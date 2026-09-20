@@ -176,6 +176,46 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "street,road,avenue,lane,drive,highway,boulevard,parking,pharmacy,chemist",
     ),
 }
+# Road words written onto the end of the name, as Ivalontie, Eindstraat and Storgatan are,
+# rather than beside it. Street View writes road names on the road itself, so these turn up
+# whenever the bot looks down at one.
+ROAD_ENDINGS = {
+    "gatan": "sv",
+    "vägen": "sv",
+    "gränd": "sv",
+    "veien": "no",
+    "vegen": "no",
+    "gata": "no,is",
+    "vej": "da",
+    "gade": "da",
+    "vegur": "is",
+    "braut": "is",
+    "stígur": "is",
+    "gøta": "fo",
+    "tie": "fi",
+    "katu": "fi",
+    "polku": "fi",
+    "tänav": "et",
+    "maantee": "et",
+    "puiestee": "et",
+    "iela": "lv",
+    "gatvė": "lt",
+    "straat": "nl,af",
+    "laan": "nl,af",
+    "plein": "nl",
+    "gracht": "nl",
+    "straße": "de",
+    "strasse": "de",
+    "gasse": "de",
+    "platz": "de",
+    "allee": "de",
+    "weg": "de,nl,af",
+    "utca": "hu",
+}
+ROAD_ENDING_STEM = 4
+"""Letters a name must have before its road ending, so that French SORTIE isn't Finnish -tie."""
+ROAD_ENDING_INSIDE = 5
+"""Endings this long also count with a word run on after them, as in Bárðardalsvegurvest."""
 ABBREVIATIONS = {  # counted only when written with a dot, as on street signs
     "jl": "id",
     "jln": "ms",
@@ -464,6 +504,26 @@ def _indexes() -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
     )
 
 
+@functools.lru_cache(maxsize=1)
+def _endings() -> dict[str, frozenset[str]]:
+    """Which languages write each road ending, also without its accents, as capitals lose them."""
+    found: dict[str, set[str]] = {}
+    for ending, codes in ROAD_ENDINGS.items():
+        for spelling in {ending, _without_accents(ending)}:
+            found.setdefault(spelling, set()).update(codes.split(","))
+    return {k: frozenset(v) for k, v in found.items()}
+
+
+def _ends_road(token: str, ending: str) -> bool:
+    """Whether a name is built on a road ending: enough name before it, and nothing after it
+    unless the ending is long enough to be sure of even with a word run on."""
+    if len(token) < len(ending) + ROAD_ENDING_STEM:
+        return False
+    if len(ending) >= ROAD_ENDING_INSIDE:
+        return ending in token[ROAD_ENDING_STEM:]
+    return token.endswith(ending)
+
+
 def _without_accents(word: str) -> str:
     """``praça`` as ``praca``. Letters that aren't accented forms, like ß and đ, stay."""
     decomposed = unicodedata.normalize("NFD", word)
@@ -490,12 +550,16 @@ def _language_signs(lines: Sequence[str]) -> dict[frozenset[str], set[str]]:
             if cut_from and _WORD.fullmatch(word):
                 found.setdefault(languages, set()).add(token + "…")
     tokens = set(_WORD.findall(text))
+    endings = _endings()
     for token in tokens:
         if token in words:
             found.setdefault(words[token], set()).add(token)
         if len(token) >= 3:  # a lone letter is too easily a misreading
             for letter in set(token) & letters.keys():
                 found.setdefault(letters[letter], set()).add(letter)
+        for ending, languages in endings.items():
+            if _ends_road(token, ending):
+                found.setdefault(languages, set()).add("…" + ending)
     for phrase, languages in words.items():
         is_phrase, is_abbreviation = " " in phrase, phrase.endswith(".")
         if (is_phrase or is_abbreviation) and re.search(rf"(?<!\w){re.escape(phrase)}", text):

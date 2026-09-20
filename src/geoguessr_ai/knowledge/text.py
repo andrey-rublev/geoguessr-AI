@@ -20,11 +20,15 @@ from .countries import country_codes
 from .facts import Country, countries, per_country
 from .places import place_key, places_in
 
+# How little weight a country keeps when a clue points away from it. These were timid: on the
+# saved rounds a clue named the country the round was really in 69 times out of 70, and clues
+# counted this much more sharply would have gained about 36 points a round (give or take 26)
+# over all of them, and 120 (give or take 86) over the ones the model was never trained on.
 SCRIPT_FLOOR = 0.03
 """Likelihood for a country whose signs don't use a script that was clearly read."""
-LETTER_FLOOR = 0.3
+LETTER_FLOOR = 0.15
 """For a country that doesn't use a telling letter that was read, like Ukrainian ї."""
-LANGUAGE_FLOORS = (0.5, 0.3, 0.15)
+LANGUAGE_FLOORS = (0.2, 0.1, 0.05)
 """For a country that doesn't speak a language, after one, two, or three or more signs of it."""
 ENGLISH_FLOOR = 0.7
 """English is on signs everywhere, so it barely counts."""
@@ -33,15 +37,15 @@ CUT_OFF_LETTERS, CUT_OFF_MISSING = 5, 3
 when it has at least this many letters and the sign word only this many more."""
 DOMAIN_FLOOR = 0.1
 PHONE_FLOOR = 0.1
-LOCAL_PHONE_FLOOR = 0.3
+LOCAL_PHONE_FLOOR = 0.15
 """For a phone number written the local way, which neighbours and misreadings can share."""
-TELLING_FLOOR = 0.3
+TELLING_FLOOR = 0.15
 """For a country whose shops don't price the way a price was written: currencies travel."""
-OFFICIAL_FLOOR = 0.12
+OFFICIAL_FLOOR = 0.04
 """For a country whose roads and post aren't numbered the way a sign was, which only a
-misreading should manage. Of 69 clues on the saved rounds one missed the country it was really
-in, and that was a French street sign 10 km inside Germany."""
-PLACE_FLOOR, MAX_PLACES = 0.3, 3
+misreading should manage. The one clue on the saved rounds that missed the country it was
+really in was a French street sign 10 km inside Germany, not a road number."""
+PLACE_FLOOR, MAX_PLACES = 0.2, 3
 """For a country without a town of a name read, of which at most this many count (the longest):
 a sign may point across a border, and a shop may be named after a faraway city."""
 
@@ -343,7 +347,7 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ),
 )
 
-BRAND_FLOOR = 0.3
+BRAND_FLOOR = 0.15
 BRAND_INSIDE_LETTERS = 6
 """Brand names this long also count run together with other words, as in OBOTICARIO."""
 # Chains found in only one or a few countries: fuel stations, shops, banks and phone networks.

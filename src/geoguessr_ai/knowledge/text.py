@@ -160,10 +160,15 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
     "id": (
         "Indonesian",
         "",
-        "jalan,toko,warung,dijual,kantor,desa,kecamatan,kabupaten,masjid,sekolah,apotek,"
-        "rumah makan",
+        "jalan,raya,selatan,utara,timur,barat,toko,warung,dijual,kantor,desa,kecamatan,"
+        "kabupaten,masjid,sekolah,apotek,rumah makan",
     ),
-    "ms": ("Malay", "", "jalan,lorong,lebuh,persiaran,kedai,dijual,masjid,sekolah,kampung"),
+    "ms": (
+        "Malay",
+        "",
+        "jalan,lorong,lebuh,persiaran,selatan,utara,timur,barat,kedai,dijual,masjid,sekolah,"
+        "kampung",
+    ),
     "tl": ("Filipino", "", "barangay,kalye,tindahan,salamat,mabuhay,sari-sari"),
     "sw": (
         "Swahili",
@@ -171,7 +176,7 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "barabara,mtaa,duka,hoteli,karibu,shule,kanisa,kituo,kinyozi,dawa,nyama,choma,maziwa,"
         "mboga,chakula,huduma,pesa,soko,jumla,wakala",
     ),
-    "af": ("Afrikaans", "", "straat,weg,rylaan,winkel,kerk"),
+    "af": ("Afrikaans", "", "straat,weg,rylaan,laan,dorp,fabriek,winkel,kerk,apteek,sentrum"),
     "ca": ("Catalan", "", "carrer,avinguda,plaça,passeig,camí,sortida"),
     "eu": ("Basque", "", "kalea,etorbidea,irteera"),
     "gl": ("Galician", "", "rúa,praza,saída"),

@@ -195,6 +195,8 @@ class OpenGuessrBot:
                 self.play_round(number, run_dir)
         except StopRequested:
             print("Stopped by user.")
+        except self.controls.failsafe:
+            print("Stopped: the mouse hit a screen corner.")
         except ContinueBlocked as blocked:
             print(f"Stopped: {blocked}")
 

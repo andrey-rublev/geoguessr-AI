@@ -51,9 +51,16 @@ class FakeScreen:
         return Image.fromarray(noise.astype(np.uint8))
 
 
+class CornerSlam(Exception):
+    """Stands in for what pyautogui raises when the mouse is slammed into a screen corner."""
+
+
 class FakeControls:
-    def __init__(self):
+    failsafe = CornerSlam
+
+    def __init__(self, slam_on_click=None):
         self.clicks, self.drags, self.keys = [], [], []
+        self.slam_on_click = slam_on_click
 
     def sleep(self, seconds):
         pass
@@ -65,6 +72,8 @@ class FakeControls:
         pass
 
     def click(self, p):
+        if self.slam_on_click is not None and len(self.clicks) == self.slam_on_click:
+            raise CornerSlam("mouse in a corner")
         self.clicks.append(p)
 
     def drag(self, start, dx, dy=0):
@@ -429,6 +438,16 @@ def test_stops_rather_than_click_an_advert_covering_continue(tmp_path, capsys):
     assert "Continue button stayed covered" in capsys.readouterr().out
     assert [p.name for p in tmp_path.glob("*/round_*")] == ["round_01"]
     assert next(tmp_path.glob("*/round_01/continue_blocked.png")).exists()
+
+
+def test_a_corner_slam_ends_the_run_like_the_stop_key(tmp_path, capsys):
+    controls = FakeControls(slam_on_click=3)  # part-way into the second round
+    settings = BotSettings(rounds=3, record_answers=False, read_text=False, debug_dir=tmp_path)
+
+    OpenGuessrBot(LAYOUT, FakePredictor(), settings, FakeScreen(), controls).play()
+
+    assert "screen corner" in capsys.readouterr().out  # and no traceback: learning still follows
+    assert [p.name for p in tmp_path.glob("*/round_*")] == ["round_01"]
 
 
 def test_waits_for_street_view_to_stop_being_black():

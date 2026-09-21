@@ -3,6 +3,9 @@
 * Press the stop key (F8 by default) at any time: the bot finishes its current
   micro-action and exits.
 * Slam the mouse into any screen corner: pyautogui's fail-safe aborts immediately.
+
+Either way the run ends the same way, so whatever was going to happen afterwards, like
+learning from the rounds just played, still happens.
 """
 
 from __future__ import annotations
@@ -45,6 +48,11 @@ class Controls:
 
         self._listener = keyboard.Listener(on_press=on_press, daemon=True)
         self._listener.start()
+
+    @property
+    def failsafe(self) -> type[BaseException]:
+        """What a corner slam raises, out of whichever mouse call was running at the time."""
+        return self._gui.FailSafeException
 
     def check(self) -> None:
         if self._stop.is_set():

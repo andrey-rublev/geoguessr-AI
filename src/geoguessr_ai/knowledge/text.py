@@ -326,7 +326,7 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"(?<![\d-])\d{4}-\d{3}(?![\d-])", "Portuguese postcode", ("PT",)),
     (r"(?<![\d-])\d{2}-\d{3}(?![\d-])", "Polish postcode", ("PL",)),
     (r"〒", "Japanese postcode", ("JP",)),
-    (rf"\b(?:br|{_BRAZIL_STATES})-\d{{3}}\b", "Brazilian road", ("BR",)),
+    (rf"\b(?:br|{_BRAZIL_STATES})[a-z]?-\d{{3}}\b", "Brazilian road", ("BR",)),
     (r"\bi-\d{1,3}\b", "Interstate", ("US",)),
     (r"\bdn\s?\d{1,3}[a-z]?\b", "Romanian national road", ("RO",)),
     (r"\bss\s?\d{1,3}\b", "Italian state road", ("IT",)),
@@ -617,9 +617,12 @@ def _language_signs(lines: Sequence[str]) -> dict[frozenset[str], set[str]]:
         if len(token) < CUT_OFF_LETTERS:
             continue
         for word, languages in words.items():
-            cut_from = word.startswith(token) and len(word) - len(token) <= CUT_OFF_MISSING
-            if cut_from and _WORD.fullmatch(word):
+            if len(word) - len(token) > CUT_OFF_MISSING or not _WORD.fullmatch(word):
+                continue
+            if word.startswith(token):  # the frame cut the end off, as in DESCONT
                 found.setdefault(languages, set()).add(token + "…")
+            elif word.endswith(token):  # or the start, as in ravessa for Travessa
+                found.setdefault(languages, set()).add("…" + token)
     tokens = set(_WORD.findall(text))
     endings = _endings()
     for token in tokens:

@@ -37,6 +37,8 @@ def test_words_read_without_their_accents_still_count():
 def test_words_cut_off_at_the_edge_of_a_sign_still_count():
     cut = text_clues([TextLine("DE DESCONT", "latin", 0.9)])  # desconto, past the frame
     assert ratio(cut, "BR", "MX") >= 2 and cut.notes == ["Portuguese: descont…"]
+    start = text_clues([TextLine("ravessa Cinco", "latin", 0.9)])  # travessa, cut the other way
+    assert ratio(start, "BR", "MX") >= 2 and start.notes == ["Portuguese: …ravessa"]
     assert not text_clues([TextLine("BIG DESCONT SALE", "latin", 0.9)]).notes  # a whole word
     assert not text_clues([TextLine("ANCIA", "latin", 0.9)]).notes
 
@@ -109,6 +111,7 @@ def test_prices_speeds_postcodes_and_road_numbers():
         ("Toronto ON M5V 3L9", "CA", "US"),
         ("CEP 01310-100", "BR", "AR"),
         ("BR-116", "BR", "AR"),
+        ("RSC-473", "BR", "AR"),
         ("I-95 North", "US", "CA"),
         ("DN1 Brasov", "RO", "BG"),
         ("Rs. 250", "IN", "BD"),

@@ -194,7 +194,7 @@ PA R full 507 pa latin es
 PE R full 51 pe latin es
 PF R some 689 pf latin fr
 PG L none 675 pg latin en
-PH R full 63 ph latin tl,en
+PH R full 63 ph latin tl,en,es
 PK L none 92 pk arabic,latin ur,en
 PL R full 48 pl latin pl
 PM R full 508 pm latin fr

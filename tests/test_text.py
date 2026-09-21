@@ -128,6 +128,8 @@ def test_prices_speeds_postcodes_and_road_numbers():
         clues = text_clues([TextLine(text, "latin", 0.9)])
         assert ratio(clues, here, elsewhere) >= 3, text
     assert text_clues([TextLine("1500 km", "latin", 0.9)]).notes == []
+    two_signs = [TextLine("811.SH", "latin", 0.9), TextLine("247.Sk.", "latin", 0.98)]
+    assert text_clues(two_signs).notes == ["Turkish: sk."]  # not the state highway SH 247
     rp51 = text_clues([TextLine("RP51", "latin", 0.9)]).notes  # a road, not a rupiah price
     assert not any("rupiah" in note for note in rp51)
 

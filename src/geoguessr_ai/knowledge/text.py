@@ -526,9 +526,13 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
         weigh(lambda c, k=code: k in c.calling_codes, PHONE_FLOOR, f"phone number +{code}")
     for number, places in _local_numbers(_PHONE.sub(" ", everything)):
         weigh(lambda c, p=places: c.code in p, LOCAL_PHONE_FLOOR, f"phone number {number}")
+    # Within a line, since two signs side by side are not one: a Turkish 811.SH above a
+    # 247.Sk. read as the state highway SH 247, which Turkey doesn't have.
+    written = [line.text.lower() for line in lines]
     for table, floor in ((TELLING_TEXT, TELLING_FLOOR), (OFFICIAL_TEXT, OFFICIAL_FLOOR)):
         for pattern, name, places in table:
-            if match := re.search(pattern, everything):
+            found = (re.search(pattern, text) for text in written)
+            if match := next((m for m in found if m), None):
                 note = f"{name}: {match.group(0).strip()}"
                 weigh(lambda c, p=places: c.code in p, floor, note)
     naming = {place_key(word) for word in _indexes()[1]}

@@ -68,6 +68,13 @@ def test_a_short_road_ending_needs_a_name_before_it():
         assert not any("Finnish" in note for note in notes)
 
 
+def test_latin_misread_as_cyrillic_doesnt_count():
+    misread = [TextLine("Francisco Bocanegra", "latin", 0.98), TextLine("со", "cyrillic", 0.91)]
+    assert not any("Cyrillic" in note for note in text_clues(misread).notes)
+    real = text_clues([TextLine("К СТОЛУ!", "cyrillic", 0.9)])  # Л couldn't be Latin
+    assert ratio(real, "RU", "FR") > 5
+
+
 def test_ukrainian_letters_tell_ukraine_from_russia():
     clues = text_clues([TextLine("вулиця Київська", "cyrillic", 0.9)])
     assert ratio(clues, "UA", "RU") > 2 and ratio(clues, "RU", "FR") > 5

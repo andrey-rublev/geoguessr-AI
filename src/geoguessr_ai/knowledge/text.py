@@ -49,6 +49,13 @@ PLACE_FLOOR, MAX_PLACES = 0.2, 3
 """For a country without a town of a name read, of which at most this many count (the longest):
 a sign may point across a border, and a shop may be named after a faraway city."""
 
+# Letters that look like Latin ones. A word in one of these scripts made of nothing else is a
+# misreading: со read from Francisco once sent a Mexican round to North Macedonia.
+LATIN_LOOKALIKES = {
+    "cyrillic": set("АВЕЅІЈКМНОРСТУХаеіјорѕсух"),
+    "greek": set("ΑΒΕΖΗΙΚΜΝΟΡΤΥΧαικνορτυχ"),
+}
+
 SCRIPT_NAMES = {
     "han": "Chinese characters",
     "kana": "Japanese kana",
@@ -486,7 +493,7 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
         clues.likelihood *= np.where(fits, 1.0, floor)
         clues.notes.append(note)
 
-    scripts = {line.script for line in lines}
+    scripts = {line.script for line in lines if _really_written_in(line.script, lines)}
     for script in sorted(scripts - {"latin"}):
         example = next(line.text for line in lines if line.script == script)
         weigh(
@@ -552,6 +559,16 @@ def _indexes() -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
         {k: frozenset(v) for k, v in letters.items()},
         {k: frozenset(v) for k, v in words.items()},
     )
+
+
+def _really_written_in(script: str, lines: Sequence[TextLine]) -> bool:
+    """Whether text read in a script is really in it. Everything read in a script has to show
+    at least one letter that couldn't be a misread Latin one, somewhere across the lines."""
+    lookalikes = LATIN_LOOKALIKES.get(script)
+    if lookalikes is None:
+        return True
+    letters = {c for line in lines if line.script == script for c in line.text if c.isalpha()}
+    return bool(letters - lookalikes)
 
 
 @functools.lru_cache(maxsize=1)

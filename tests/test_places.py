@@ -17,6 +17,12 @@ def test_ignores_everyday_words_short_names_and_names_after_street_words():
     assert "victoria" not in places() and "lima" not in places()
     assert places_in(["Hotel Victoria", "Main Street Parking"]) == {}
     assert places_in(["JEEVAN TOYOTA", "NW 191st Terrace"]) == {}  # a make and a road word
+
+
+def test_a_road_or_feature_word_after_a_name_makes_it_one():
+    assert places_in(["Lucas Paddock Rd"]) == {}  # a road in Queensland, not Lucas in Brazil
+    assert places_in(["Monroe Lake"]) == {} and places_in(["Monroe Lak"]) == {}  # cut off
+    assert places_in(["Culiacán 210 km"]) == {"culiacan": ("MX",)}  # a sign pointing there
     assert places_in(["Rua Curitiba"], naming_words={"rua"}) == {}
     assert places_in(["Curitiba 12"], naming_words={"rua"}) == {"curitiba": ("BR",)}
 

@@ -651,7 +651,9 @@ def _language_signs(lines: Sequence[str]) -> dict[frozenset[str], set[str]]:
     tokens = set(_WORD.findall(text))
     endings = _endings()
     for token in tokens:
-        if token in words:
+        # A word that is the tail of a longer one read elsewhere is the same sign with its
+        # first letters cut off: alle beside Calle Benito Juárez is Spanish, not a Danish allé.
+        if token in words and not any(other != token and other.endswith(token) for other in tokens):
             found.setdefault(words[token], set()).add(token)
         if len(token) >= 3:  # a lone letter is too easily a misreading
             for letter in set(token) & letters.keys():

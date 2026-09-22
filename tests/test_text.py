@@ -45,6 +45,12 @@ def test_words_cut_off_at_the_edge_of_a_sign_still_count():
     assert not text_clues([TextLine("ANCIA", "latin", 0.9)]).notes
 
 
+def test_a_word_inside_a_longer_one_read_nearby_is_the_same_sign_cut_off():
+    twice = [TextLine("Calle Benito Juare", "latin", 0.94), TextLine("alle", "latin", 0.96)]
+    assert text_clues(twice).notes == ["Spanish: calle"]  # not a Danish allé as well
+    assert text_clues([TextLine("Solvej Allé 12", "latin", 0.9)]).notes == ["Danish: allé"]
+
+
 def test_shop_signs_in_swahili_and_spanish():
     kenya = text_clues([TextLine("LAST CUT KINYOZI", "latin", 0.9)])  # a barber in Nairobi
     assert ratio(kenya, "KE", "BD") >= 2 and kenya.notes == ["Swahili: kinyozi"]

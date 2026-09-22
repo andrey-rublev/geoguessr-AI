@@ -49,6 +49,9 @@ PLACE_FLOOR, MAX_PLACES = 0.2, 3
 """For a country without a town of a name read, of which at most this many count (the longest):
 a sign may point across a border, and a shop may be named after a faraway city."""
 
+SCRIPT_WORD_LETTERS = 4
+"""Letters in a row an alphabet needs somewhere: по read from a Spanish no is not Russian."""
+
 # Letters that look like Latin ones. A word in one of these scripts made of nothing else is a
 # misreading: со read from Francisco once sent a Mexican round to North Macedonia.
 LATIN_LOOKALIKES = {
@@ -257,6 +260,8 @@ ABBREVIATIONS = {  # counted only when written with a dot, as on street signs
 _AMBIGUOUS_DOMAINS = {"at", "be", "do", "go", "id", "in", "is", "it", "me", "my", "no", "so"}
 _SECOND_LEVEL = {"com", "co", "org", "net", "gov", "gob", "gouv", "edu", "ac", "or", "ne", "go"}
 _WORD = re.compile(r"[^\W\d_]+(?:['’-][^\W\d_]+)*")
+_OWN_LETTERS = re.compile(r"[^\W\dA-Za-z_]+")
+"""A run of letters outside the Latin alphabet, as one word of Cyrillic or Greek."""
 _DOMAIN = re.compile(
     r"(?<![\w.-])((?:https?://)?(?:www\.)?)((?:[a-z0-9-]+\.)+)([a-z]{2,3})(?![\w])"
 )
@@ -285,7 +290,10 @@ _EURO = ("AT", "BE", "CY", "DE", "EE", "ES", "FI", "FR", "GR", "HR", "IE", "IT",
 _EURO += ("MT", "NL", "PT", "SI", "SK", "AD", "MC", "ME", "SM", "VA", "XK", "RE", "GP", "MQ")
 _MPH = ("US", "GB", "IM", "JE", "GG", "PR", "GU", "AS", "MP", "VI", "LR", "BS", "BZ", "KY", "VG")
 _MPH += ("AG", "DM", "GD", "KN", "LC", "VC", "TC", "AI", "FK")
-_BRAZIL_STATES = "sp|mg|rs|sc|go|ba|pe|ce|pa|mt|ms|es|rj|al|se|pb|rn|pi|ma|to|ro|ac|am|rr|ap|df"
+_BRAZIL_STATES = "sp|mg|rs|go|ba|pe|ce|es|rj|se|pb|rn|pi|to|ro|ac|am|rr|ap|df"
+# States whose letters the United States and Puerto Rico also number roads with: MS-465 is in
+# Mississippi, not Mato Grosso do Sul, and PR-2 is in Puerto Rico, not Paraná.
+_SHARED_STATES = "al|ma|ms|mt|pa|pr|sc"
 # Prices as some countries write them, in lowercase: what to look for, a short name for it,
 # and where it is written so.
 TELLING_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -327,6 +335,7 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"(?<![\d-])\d{2}-\d{3}(?![\d-])", "Polish postcode", ("PL",)),
     (r"〒", "Japanese postcode", ("JP",)),
     (rf"\b(?:br|{_BRAZIL_STATES})[a-z]?-\d{{3}}\b", "Brazilian road", ("BR",)),
+    (rf"\b(?:{_SHARED_STATES})[a-z]?-\d{{2,3}}\b", "state road", ("BR", "US", "PR")),
     (r"\bi-\d{1,3}\b", "Interstate", ("US",)),
     (r"\bdn\s?\d{1,3}[a-z]?\b", "Romanian national road", ("RO",)),
     (r"\bss\s?\d{1,3}\b", "Italian state road", ("IT",)),
@@ -519,8 +528,11 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
             f"{names}: {', '.join(sorted(signs)[:3])}",
         )
 
+    # Signs break an address across lines, so dots are closed up; but a dot written with a space
+    # only joins an address when the rest looks like one. Ctra. de la Rabassa is a road in
+    # Andorra, Chem. de Montigny a French one, and neither is a German .de domain.
     compact = re.sub(r"\s*\.\s*", ".", everything)
-    for tld in sorted(_domains(compact)):
+    for tld in sorted(_domains(everything) | _domains(compact, web_only=True)):
         weigh(lambda c, t=tld: t in c.domains, DOMAIN_FLOOR, f"web domain .{tld}")
     for code in sorted(_calling_codes(everything)):
         weigh(lambda c, k=code: k in c.calling_codes, PHONE_FLOOR, f"phone number +{code}")
@@ -566,12 +578,24 @@ def _indexes() -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
 
 
 def _really_written_in(script: str, lines: Sequence[TextLine]) -> bool:
-    """Whether text read in a script is really in it. Everything read in a script has to show
-    at least one letter that couldn't be a misread Latin one, somewhere across the lines."""
+    """Whether text read in a script is really in it, rather than a misreading of another.
+
+    Everything read in an alphabet that looks like Latin has to show one word of a few letters,
+    since misreadings come out short, and one letter that couldn't be a misread Latin one.
+    Greek doesn't count beside Cyrillic at all: the two look alike, and the game goes to
+    Cyrillic-writing countries far more often, so ΣΥΠΕΡΜΑΡΚΕΤ was Russian СУПЕРМАРКЕТ.
+    """
     lookalikes = LATIN_LOOKALIKES.get(script)
     if lookalikes is None:
         return True
-    letters = {c for line in lines if line.script == script for c in line.text if c.isalpha()}
+    if script == "greek" and any(line.script == "cyrillic" for line in lines):
+        return False
+    written = [line.text for line in lines if line.script == script]
+    if max((len(word) for text in written for word in _OWN_LETTERS.findall(text)), default=0) < (
+        SCRIPT_WORD_LETTERS
+    ):
+        return False
+    letters = {c for text in written for c in text if c.isalpha()}
     return bool(letters - lookalikes)
 
 
@@ -655,8 +679,9 @@ def _brands(text: str) -> set[str]:
     return {brand for brand in found if not any(o != brand and brand in o for o in found)}
 
 
-def _domains(text: str) -> set[str]:
-    """Country domains in web addresses, like .br in www.lojas.com.br."""
+def _domains(text: str, *, web_only: bool = False) -> set[str]:
+    """Country domains in web addresses, like .br in www.lojas.com.br. With ``web_only``, only
+    addresses that say so, by an http, a www or a name like .com before the country."""
     tlds = {tld for c in countries().values() for tld in c.domains}
     found = set()
     for match in _DOMAIN.finditer(text):
@@ -665,7 +690,7 @@ def _domains(text: str) -> set[str]:
         if tld not in tlds:
             continue
         clearly_web = bool(prefix) or names[-1] in _SECOND_LEVEL
-        if clearly_web or (tld not in _AMBIGUOUS_DOMAINS and len(names[-1]) >= 4):
+        if clearly_web or (not web_only and tld not in _AMBIGUOUS_DOMAINS and len(names[-1]) >= 4):
             found.add(tld)
     return found
 

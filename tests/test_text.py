@@ -70,11 +70,33 @@ def test_a_short_road_ending_needs_a_name_before_it():
         assert not any("Finnish" in note for note in notes)
 
 
+def test_a_road_word_before_a_preposition_isnt_a_web_address():
+    for words in ("Ctra. de la Rabassa", "Chem. de Montigny", "CONSTRL . la Cierva"):
+        assert not text_clues([TextLine(words, "latin", 0.9)]).notes, words
+    spread = [TextLine("www.", "latin", 0.9), TextLine("lojas.com.br", "latin", 0.9)]
+    assert text_clues(spread).notes == ["web domain .br"]  # an address split across lines
+
+
+def test_state_letters_brazil_shares_with_the_united_states():
+    shared = text_clues([TextLine("MS-465", "latin", 0.9)])  # Mississippi, or Mato Grosso do Sul
+    assert shared.notes == ["state road: ms-465"] and ratio(shared, "US", "AR") >= 3
+    assert ratio(shared, "BR", "US") == 1
+    assert ratio(text_clues([TextLine("RSC-473", "latin", 0.9)]), "BR", "US") >= 3
+
+
 def test_latin_misread_as_cyrillic_doesnt_count():
     misread = [TextLine("Francisco Bocanegra", "latin", 0.98), TextLine("со", "cyrillic", 0.91)]
     assert not any("Cyrillic" in note for note in text_clues(misread).notes)
     real = text_clues([TextLine("К СТОЛУ!", "cyrillic", 0.9)])  # Л couldn't be Latin
     assert ratio(real, "RU", "FR") > 5
+
+
+def test_a_short_misreading_isnt_a_script_and_greek_yields_to_cyrillic():
+    assert not text_clues([TextLine("по", "cyrillic", 0.99)]).notes  # Spanish no, read as Cyrillic
+    assert not text_clues([TextLine("Μ ριό", "greek", 0.89)]).notes  # four letters of nothing
+    both = [TextLine("ΣΥΠΕΡΜΑΡΚΕΤ", "greek", 0.99), TextLine("ул.Адмиральског", "cyrillic", 0.93)]
+    assert text_clues(both).notes == ["Cyrillic: ул.Адмиральског"]  # Russian СУПЕРМАРКЕТ
+    assert text_clues([TextLine("Ευδόξου", "greek", 0.98)]).notes == ["Greek: Ευδόξου"]
 
 
 def test_ukrainian_letters_tell_ukraine_from_russia():
@@ -85,6 +107,7 @@ def test_ukrainian_letters_tell_ukraine_from_russia():
 def test_web_domains_and_phone_codes():
     brazil = text_clues([TextLine("www.lojas.com.br", "latin", 0.9)])
     assert ratio(brazil, "BR", "US") >= 10
+    assert text_clues([TextLine("autohaus-mueller.de", "latin", 0.9)]).notes == ["web domain .de"]
     russia = text_clues([TextLine("тел. +7 (495) 123-45-67", "cyrillic", 0.9)])
     assert ratio(russia, "RU", "DE") >= 10 and ratio(russia, "KZ", "RU") == 1
     assert not text_clues([TextLine("St.No 5", "latin", 0.9)]).notes  # not a domain

@@ -502,14 +502,15 @@ def text_clues(lines: Sequence[TextLine]) -> TextClues:
         clues.likelihood *= np.where(fits, 1.0, floor)
         clues.notes.append(note)
 
+    # Japan used to count for less without kana beside the Chinese characters. It shouldn't:
+    # across the saved rounds the reader picked out kana in none of them, Japanese ones included,
+    # because what it reads are short shop names, written in kanji alone.
     scripts = {line.script for line in lines if _really_written_in(line.script, lines)}
     for script in sorted(scripts - {"latin"}):
         example = next(line.text for line in lines if line.script == script)
         weigh(
             lambda c, s=script: s in c.scripts, SCRIPT_FLOOR, f"{SCRIPT_NAMES[script]}: {example}"
         )
-        if script == "han" and "kana" not in scripts:  # Japanese signs would usually show kana
-            clues.likelihood[country_codes().index("JP")] *= 0.3
 
     everything = " ".join(line.text for line in lines).lower()
     for letters, places in LETTER_HINTS.items():

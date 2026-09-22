@@ -14,10 +14,12 @@ def test_hangul_points_to_korea():
     assert ratio(clues, "KR", "JP") > 20 and "Hangul" in clues.notes[0]
 
 
-def test_kana_means_japan_and_chinese_characters_alone_mean_chinese_speaking_places():
+def test_kana_means_japan_and_chinese_characters_mean_places_that_write_them():
     assert ratio(text_clues([TextLine("とうきょう", "kana", 0.9)]), "JP", "CN") > 20
-    han = text_clues([TextLine("台北車站", "han", 0.9)])
-    assert ratio(han, "TW", "KR") > 20 and ratio(han, "TW", "JP") > 2
+    han = text_clues([TextLine("海鮮燒鵝食家", "han", 0.9)])  # a shop, naming no town
+    assert ratio(han, "TW", "KR") > 20 and ratio(han, "TW", "JP") == 1  # 岡崎酒店 is Japanese
+    named = text_clues([TextLine("台北車站", "han", 0.9)])  # Taipei, so not Japan after all
+    assert ratio(named, "TW", "JP") >= 3
 
 
 def test_portuguese_street_words_point_to_brazil_and_portugal():

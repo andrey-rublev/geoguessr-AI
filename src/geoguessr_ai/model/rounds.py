@@ -37,10 +37,18 @@ class Round:
 
 
 def find_rounds(root: Path) -> list[Round]:
-    """Every saved round under ``root`` whose real location was recorded."""
+    """Every saved round under ``root`` whose real location was recorded.
+
+    A round that can't be read is skipped rather than raising, so one unreadable file, as a
+    power cut mid-write would leave behind, can't cost a whole session its learning.
+    """
     rounds = []
     for info_path in sorted(Path(root).rglob("round.json")):
-        answer = json.loads(info_path.read_text(encoding="utf-8")).get("answer")
+        try:
+            answer = json.loads(info_path.read_text(encoding="utf-8")).get("answer")
+        except (OSError, ValueError) as broken:
+            print(f"Skipping {info_path}: {broken}")
+            continue
         views = tuple(sorted(info_path.parent.glob("view_*.jpg")))
         if answer and views:
             folder = info_path.parent

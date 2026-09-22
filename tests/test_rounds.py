@@ -44,6 +44,18 @@ def test_find_rounds_needs_a_recorded_answer(tmp_path):
     assert [r.id for r in find_rounds(tmp_path / "s2")] == ["s2/round_01"]
 
 
+def test_a_round_left_half_written_is_skipped_not_raised_over(tmp_path, capsys):
+    save_round(tmp_path, "s1", 1)
+    broken = save_round(tmp_path, "s1", 2)  # as a power cut mid-write would leave it
+    (broken / "round.json").write_text('{"guess": {"lat": 0.0, "lo')
+    save_round(tmp_path, "s2", 1)
+
+    rounds = find_rounds(tmp_path)
+
+    assert [r.id for r in rounds] == ["s1/round_01", "s2/round_01"]
+    assert "round_02" in capsys.readouterr().out
+
+
 def test_test_split_is_stable_and_about_the_requested_size():
     ids = [f"20260913-1616{i:02d}/round_{j:02d}" for i in range(40) for j in range(1, 26)]
     held_out = [is_test_round(i, 0.3) for i in ids]

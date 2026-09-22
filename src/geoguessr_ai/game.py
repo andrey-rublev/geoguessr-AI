@@ -516,9 +516,7 @@ class OpenGuessrBot:
             "placed": {"lat": placement.lat, "lon": placement.lon},
             "pin_seen": placement.confirmed,
         }
-        (folder / "round.json").write_text(
-            json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        _write_round(folder / "round.json", info)
 
     @staticmethod
     def _save_reading(folder: Path, reading: Reading) -> None:
@@ -530,7 +528,15 @@ class OpenGuessrBot:
         info["answer"] = None if reading.answer is None else asdict(reading.answer)
         if reading.problem:
             info["answer_problem"] = reading.problem
-        path.write_text(json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8")
+        _write_round(path, info)
+
+
+def _write_round(path: Path, info: dict) -> None:
+    """Write a round's record through a temporary file, so that the answer being added to it
+    can't leave half a file behind if the machine goes down mid-write."""
+    tmp = path.with_suffix(".partial")
+    tmp.write_text(json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
 
 
 def _describe(guess: Guess) -> str:

@@ -96,11 +96,11 @@ def test_street_view_coverage_and_clues_reweigh_places(tmp_path, monkeypatch):
     french_signs = Evidence(countries=np.where(np.array(country_codes()) == "FR", 1.0, 0.05))
 
     anywhere = predictor_module.GeoPredictor(path, coverage_strength=0.0).predict(view)
-    covered = predictor_module.GeoPredictor(path).predict(view)
+    covered = predictor_module.GeoPredictor(path, coverage_strength=1.0).predict(view)
     clued = predictor_module.GeoPredictor(path).predict(view, french_signs)
 
     assert (anywhere.lat, anywhere.lon) == pytest.approx(tuple(centroids[2]))
-    # China has no Street View, so the bet moves to Tokyo.
+    # China has no Street View, so leaning on coverage moves the bet to Tokyo.
     assert (covered.lat, covered.lon) == pytest.approx(tuple(centroids[1]))
     assert covered.countries[0][0] == "JP" and covered.drives_left > 0.5
     assert (clued.lat, clued.lon) == pytest.approx(tuple(centroids[0]))

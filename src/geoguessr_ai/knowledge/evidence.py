@@ -20,7 +20,10 @@ from ..geo import EARTH_RADIUS_KM, to_unit_vectors
 from .countries import country_codes, country_index
 from .facts import COVERAGE_WEIGHTS, per_country
 
-DEFAULT_COVERAGE_STRENGTH = 1.0
+DEFAULT_COVERAGE_STRENGTH = 0.25
+"""How hard to favour countries with more Street View. Low, because where the game has really
+sent you (the prior from played rounds) says the same thing and says it from experience; see
+``scripts/check_strengths.py``."""
 KM_PER_DEGREE = 111.2
 
 

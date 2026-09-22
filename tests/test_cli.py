@@ -4,8 +4,10 @@ from test_mapcal import render_map
 
 from geoguessr_ai import cli
 from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
+from geoguessr_ai.knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
 from geoguessr_ai.mapcal import MapProjection
 from geoguessr_ai.model import evaluate, rounds, train
+from geoguessr_ai.model.geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
 from geoguessr_ai.model.rounds import ROUNDS_FILE
 
 
@@ -35,8 +37,11 @@ def test_every_command_parses(argv):
 def test_model_commands_take_prior_strengths(command):
     parser = build_parser()
     defaults = parser.parse_args(command)
-    assert (defaults.prior_strength, defaults.game_prior_strength) == (1.0, 1.0)
-    assert defaults.coverage_strength == 1.0
+    assert (defaults.prior_strength, defaults.game_prior_strength) == (
+        DEFAULT_PRIOR_STRENGTH,
+        DEFAULT_GAME_PRIOR_STRENGTH,
+    )
+    assert defaults.coverage_strength == DEFAULT_COVERAGE_STRENGTH
     changed = parser.parse_args(
         [*command, "--prior-strength", "0", "--game-prior-strength", "0.5"]
         + ["--coverage-strength", "0"]

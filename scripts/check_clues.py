@@ -24,10 +24,18 @@ import torch
 
 from geoguessr_ai.geo import geoguessr_score, haversine_km
 from geoguessr_ai.knowledge.countries import country_at, country_codes
-from geoguessr_ai.knowledge.evidence import Evidence, cell_weights
+from geoguessr_ai.knowledge.evidence import (
+    DEFAULT_COVERAGE_STRENGTH,
+    Evidence,
+    cell_weights,
+)
 from geoguessr_ai.knowledge.sun import latitude_likelihood
 from geoguessr_ai.knowledge.text import TextLine, text_clues
-from geoguessr_ai.model.geocells import debias
+from geoguessr_ai.model.geocells import (
+    DEFAULT_GAME_PRIOR_STRENGTH,
+    DEFAULT_PRIOR_STRENGTH,
+    debias,
+)
 from geoguessr_ai.model.head import Checkpoint
 from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings, is_test_round
 
@@ -58,7 +66,7 @@ def main() -> None:
     checkpoint = Checkpoint.load(args.model)
     cells, head = checkpoint.cells, checkpoint.head.eval()
     embedded = RoundEmbeddings.load(args.embeddings)
-    coverage_only = cell_weights(cells.centroids, None, 1.0)
+    coverage_only = cell_weights(cells.centroids, None, DEFAULT_COVERAGE_STRENGTH)
     codes = country_codes()
 
     fits: collections.Counter[str] = collections.Counter()
@@ -75,7 +83,13 @@ def main() -> None:
         crops = torch.as_tensor(embedded.embeddings[where], dtype=torch.float32)
         with torch.inference_mode():
             log_probs = torch.log_softmax(head(crops), dim=1).mean(dim=0).cpu().numpy()
-        belief = debias(log_probs, checkpoint.log_prior, 1.0, checkpoint.game_log_prior, 1.0)
+        belief = debias(
+            log_probs,
+            checkpoint.log_prior,
+            DEFAULT_PRIOR_STRENGTH,
+            checkpoint.game_log_prior,
+            DEFAULT_GAME_PRIOR_STRENGTH,
+        )
         lat, lon = float(embedded.lat[where][0]), float(embedded.lon[where][0])
 
         def points(
@@ -94,7 +108,7 @@ def main() -> None:
                 evidence.latitude = latitude_likelihood(azimuth, height)
 
         before = points(coverage_only)
-        after = points(cell_weights(cells.centroids, evidence, 1.0))
+        after = points(cell_weights(cells.centroids, evidence, DEFAULT_COVERAGE_STRENGTH))
         worth[is_test_round(round_id)].append((before, after))
 
         code = country_at(lat, lon)

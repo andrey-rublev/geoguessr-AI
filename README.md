@@ -182,7 +182,7 @@ On 83 earlier rounds, pins used to land at the minimap's edge whenever the guess
 
 `learn` saves every round in `runs/` with the real location read off the result screen. These are real game images, unlike OSV-5M's phone and dashcam photos. After playing it embeds the new rounds, retrains with them in up to 15% of each batch, and learns where the game tends to send you. It switches to the retrained model only if that scores at least as well on the 30% of rounds held out for testing, and keeps the old one as `models/geoguessr-previous.pt`. `learn --no-train` only collects rounds.
 
-Training uses half the CPU's threads (`--threads` on `train` and `learn` changes it). Every core at full load for minutes on end brought one laptop down with a fatal hardware error twice, both times while training, and the power cut zeroed files being written at the time. Rounds, embeddings and models are now flushed to disk before they replace the old file, so a crash can't lose one, but a retrain in progress is lost.
+Training runs the CPU flat out, which a laptop on a charger too weak for it didn't survive: it went down mid-training three times with a fatal hardware error. If that happens, training carries on from its last finished epoch when run again, and nothing else is lost, since rounds, embeddings and models are flushed to disk before they replace the old file. On a weak charger, `--rest 1` (on `train` and `learn`) pauses as long as each stretch of work took, which ran the CPU about 10 °C cooler at twice the time; `--threads` alone doesn't help, since the cores left boost harder.
 
 The same steps by hand:
 

@@ -17,12 +17,11 @@ DEFAULT_DATA = Path("data/osv5m")
 DEFAULT_EMBEDDINGS = Path("data/embeddings")
 DEFAULT_ROUNDS = DEFAULT_EMBEDDINGS / DEFAULT_BACKBONE.replace("/", "__") / "openguessr-rounds.npz"
 DEFAULT_RUNS = Path("runs")
-DEFAULT_THREADS = max(1, (os.cpu_count() or 2) // 2)
-"""CPU threads to train with. Every core at full load for minutes on end has brought a laptop
-down with a fatal hardware error twice, both times while training, so half of them."""
-DEFAULT_REST = 1.0
-"""Pause as long as each stretch of training took. Fewer threads alone didn't help: the rest
-boost harder, and on 2 of them the CPU still ran at 83 to 95 C and went down again."""
+# Training runs flat out by default. On a charger too weak for that, a laptop went down with a
+# fatal hardware error three times mid-training; fewer threads didn't save it, since the rest
+# boost harder, but resting as long as each stretch of work took (--rest 1) ran 10 C cooler.
+DEFAULT_THREADS = os.cpu_count() or 1
+DEFAULT_REST = 0.0
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
@@ -259,7 +258,7 @@ def learn_from_rounds(args: argparse.Namespace, encoder) -> None:
 
     folder = _embedding_dir(args.embeddings, encoder.name)
     rounds_path = folder / ROUNDS_FILE
-    print(f"\nLearning from your rounds, on {args.threads} CPU threads...")
+    print("\nLearning from your rounds...")
     _limit_threads(args.threads)
     try:
         data = embed_rounds(encoder, args.runs, rounds_path)
@@ -315,15 +314,14 @@ def build_parser() -> argparse.ArgumentParser:
             "--threads",
             type=int,
             default=DEFAULT_THREADS,
-            help=f"CPU threads to train with (default {DEFAULT_THREADS}, half of them: all at once "
-            "has crashed a laptop)",
+            help=f"CPU threads to train with (default {DEFAULT_THREADS}, all of them)",
         )
         p.add_argument(
             "--rest",
             type=float,
             default=DEFAULT_REST,
             help="pause this many times as long as each stretch of training took, so the CPU "
-            f"runs cooler (default {DEFAULT_REST}; 0 = flat out)",
+            "runs cooler and draws less power: 1 halves the load (default 0, flat out)",
         )
 
     def add_prior_strength(p: argparse.ArgumentParser) -> None:

@@ -17,11 +17,13 @@ DEFAULT_DATA = Path("data/osv5m")
 DEFAULT_EMBEDDINGS = Path("data/embeddings")
 DEFAULT_ROUNDS = DEFAULT_EMBEDDINGS / DEFAULT_BACKBONE.replace("/", "__") / "openguessr-rounds.npz"
 DEFAULT_RUNS = Path("runs")
-# Training runs flat out by default. On a charger too weak for that, a laptop went down with a
-# fatal hardware error three times mid-training; fewer threads didn't save it, since the rest
-# boost harder, but resting as long as each stretch of work took (--rest 1) ran 10 C cooler.
-DEFAULT_THREADS = os.cpu_count() or 1
-DEFAULT_REST = 0.0
+# Training flat out ran one laptop's CPU at 97 to 100 C, and it went down with a fatal hardware
+# error four times mid-training, the last within 5 minutes even on a proper charger. On a quarter
+# of the threads, resting as long as each stretch of work took, it ran at 72 to 82 C for over
+# half an hour without trouble, and an epoch took about twice as long. Fewer threads alone didn't
+# cool it: the cores left boost harder.
+DEFAULT_THREADS = max(1, (os.cpu_count() or 1) // 4)
+DEFAULT_REST = 1.0
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
@@ -314,14 +316,15 @@ def build_parser() -> argparse.ArgumentParser:
             "--threads",
             type=int,
             default=DEFAULT_THREADS,
-            help=f"CPU threads to train with (default {DEFAULT_THREADS}, all of them)",
+            help=f"CPU threads to train with (default {DEFAULT_THREADS}, a quarter of them)",
         )
         p.add_argument(
             "--rest",
             type=float,
             default=DEFAULT_REST,
             help="pause this many times as long as each stretch of training took, so the CPU "
-            "runs cooler and draws less power: 1 halves the load (default 0, flat out)",
+            f"runs cooler (default {DEFAULT_REST:g}, half the load; 0 = flat out, which has "
+            "overheated a laptop)",
         )
 
     def add_prior_strength(p: argparse.ArgumentParser) -> None:

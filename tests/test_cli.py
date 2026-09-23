@@ -62,8 +62,8 @@ def test_round_options():
     assert not parser.parse_args(["learn"]).no_text
     assert parser.parse_args(["train"]).threads == parser.parse_args(["learn"]).threads
     assert parser.parse_args(["learn"]).threads == cli.DEFAULT_THREADS >= 1
-    assert parser.parse_args(["learn"]).rest == 0.0  # flat out, unless asked to rest
-    assert parser.parse_args(["train", "--rest", "1"]).rest == 1.0
+    assert parser.parse_args(["learn"]).rest == 1.0  # half the load, so the CPU stays cool
+    assert parser.parse_args(["train", "--rest", "0"]).rest == 0.0
     assert parser.parse_args(["train", "--threads", "2"]).threads == 2
 
 

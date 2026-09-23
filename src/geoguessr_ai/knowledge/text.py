@@ -296,6 +296,10 @@ _BRAZIL_STATES = "sp|mg|rs|go|ba|pe|ce|es|rj|se|pb|rn|pi|to|ro|ac|am|rr|ap|df"
 # States whose letters the United States and Puerto Rico also number roads with: MS-465 is in
 # Mississippi, not Mato Grosso do Sul, and PR-2 is in Puerto Rico, not Paraná.
 _SHARED_STATES = "al|ma|ms|mt|pa|pr|sc"
+_US_ONLY_STATES = (
+    "ak|ar|az|ct|de|fl|ga|hi|ia|id|il|in|ks|ky|la|md|me|mi|mn|mo|nc|nd|ne|nh|nj|nm|nv|ny|oh|ok"
+    "|ri|sd|tn|tx|ut|vt|wa|wi|wv|wy"
+)
 # Prices as some countries write them, in lowercase: what to look for, a short name for it,
 # and where it is written so.
 TELLING_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -339,6 +343,16 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (rf"\b(?:br|{_BRAZIL_STATES})[a-z]?-\d{{3}}\b", "Brazilian road", ("BR",)),
     (rf"\b(?:{_SHARED_STATES})[a-z]?-\d{{2,3}}\b", "state road", ("BR", "US", "PR")),
     (r"\bi-\d{1,3}\b", "Interstate", ("US",)),
+    # How Street View labels highways by state or province, for the letters no Brazilian state
+    # or Spanish province also numbers its roads with (Albacete writes AB- too).
+    (rf"\b(?:us|{_US_ONLY_STATES})-\d{{1,3}}[a-z]?\b", "US highway", ("US",)),
+    (r"\b(?:on|bc|sk|mb|qc|nb|ns|nl|yt|nt)-\d{1,3}[a-z]?\b", "Canadian highway", ("CA",)),
+    (r"\bab-\d{1,3}\b", "Canadian highway", ("CA", "ES")),
+    (r"\bstate\s?(?:rd|road|route|hwy|highway)\s?\d", "state route", ("US", "AU")),
+    (r"\bhwy\s?\d{1,3}\b", "numbered highway", ("US", "CA")),
+    (r"\bm[a-z]?[eé]xico\s?\d{1,3}d?\b", "Mexican federal highway", ("MX",)),  # México 175D
+    (r"\brn\s?(?:\d{1,3}|-\d{1,2})\b", "national route", ("AR", "GT")),  # not Brazil's RN-160
+    (r"\bmr\s?\d{1,3}[a-z]?\b", "Eswatini main road", ("SZ",)),
     (r"\bdn\s?\d{1,3}[a-z]?\b", "Romanian national road", ("RO",)),
     (r"\bss\s?\d{1,3}\b", "Italian state road", ("IT",)),
     (r"\bnh\s?\d{1,3}\b", "Indian national highway", ("IN",)),

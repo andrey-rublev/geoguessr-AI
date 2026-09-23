@@ -172,6 +172,15 @@ def test_prices_speeds_postcodes_and_road_numbers():
         ("Cra. 71c", "CO", "PE"),
         ("DW785", "PL", "CZ"),
         ("RP51", "AR", "CL"),
+        ("US-90", "US", "CA"),
+        ("NE-23", "US", "BR"),
+        ("SK-29", "CA", "US"),
+        ("AB-555", "CA", "US"),
+        ("State Route 87", "AU", "NZ"),
+        ("Hwy 11", "CA", "GB"),
+        ("Mléxico 175D", "MX", "GT"),  # the federal highway shield, read with a stray letter
+        ("RN-17", "AR", "CL"),
+        ("MR3", "SZ", "ZA"),
     ):
         clues = text_clues([TextLine(text, "latin", 0.9)])
         assert ratio(clues, here, elsewhere) >= 3, text
@@ -180,6 +189,8 @@ def test_prices_speeds_postcodes_and_road_numbers():
     assert text_clues(two_signs).notes == ["Turkish: sk."]  # not the state highway SH 247
     rp51 = text_clues([TextLine("RP51", "latin", 0.9)]).notes  # a road, not a rupiah price
     assert not any("rupiah" in note for note in rp51)
+    brazil = text_clues([TextLine("RN-160", "latin", 0.9)])  # Rio Grande do Norte's, not a route
+    assert brazil.notes == ["Brazilian road: rn-160"]
 
 
 def test_towns_on_signs_but_not_streets_and_shops_named_after_them():

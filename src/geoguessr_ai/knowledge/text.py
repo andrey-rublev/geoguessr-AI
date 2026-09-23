@@ -18,7 +18,7 @@ import numpy as np
 
 from .countries import country_codes
 from .facts import Country, countries, per_country
-from .places import place_key, places_in
+from .places import EVERYDAY, place_key, places_in
 
 # How little weight a country keeps when a clue points away from it. These were timid: on the
 # saved rounds a clue named the country the round was really in 69 times out of 70, and clues
@@ -112,7 +112,9 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "Italian",
         "",
         "via,viale,piazza,corso,vicolo,uscita,vietato,farmacia,vendesi,affittasi,comune,"
-        "località,tabacchi",
+        # Italy calls roads strada too, but in the game it is Romania's word seven times to
+        # one: better to know an Italian one by what it is, as in Strada Comunale.
+        "comunale,provinciale,statale,località,tabacchi",
     ),
     "de": (
         "German",
@@ -251,7 +253,7 @@ ABBREVIATIONS = {  # counted only when written with a dot, as on street signs
     "c": "es",
     "cam": "es",
     "str": "de,ro",
-    "ul": "pl",
+    "ul": "pl,cs,sk,hr,sr,sl",  # ulica and ulice, all the way to the Adriatic
     "cd": "tr",
     "sk": "tr",
     "mah": "tr",
@@ -612,10 +614,11 @@ def _endings() -> dict[str, frozenset[str]]:
 
 def _ends_road(token: str, ending: str) -> bool:
     """Whether a name is built on a road ending: enough name before it, and nothing after it
-    unless the ending is long enough to be sure of even with a word run on."""
+    unless the ending is long enough to be sure of even with a word run on. An ending that has
+    lost its accents must end the name, since gränd as grand is inside every Spanish grande."""
     if len(token) < len(ending) + ROAD_ENDING_STEM:
         return False
-    if len(ending) >= ROAD_ENDING_INSIDE:
+    if len(ending) >= ROAD_ENDING_INSIDE and ending in ROAD_ENDINGS:
         return ending in token[ROAD_ENDING_STEM:]
     return token.endswith(ending)
 
@@ -638,7 +641,9 @@ def _language_signs(lines: Sequence[str]) -> dict[frozenset[str], set[str]]:
     for line in lines:
         if line_tokens := _WORD.findall(line):
             ends.update((line_tokens[0], line_tokens[-1]))
-    for token in ends - words.keys():
+    # An everyday word or name is whole, not cut off: HOTEL in Mongolia wasn't Swahili hoteli,
+    # nor MARIA in Argentina the end of Romanian primăria.
+    for token in ends - words.keys() - EVERYDAY:
         if len(token) < CUT_OFF_LETTERS:
             continue
         for word, languages in words.items():

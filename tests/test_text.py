@@ -43,12 +43,23 @@ def test_words_cut_off_at_the_edge_of_a_sign_still_count():
     assert ratio(start, "BR", "MX") >= 2 and start.notes == ["Portuguese: …ravessa"]
     assert not text_clues([TextLine("BIG DESCONT SALE", "latin", 0.9)]).notes  # a whole word
     assert not text_clues([TextLine("ANCIA", "latin", 0.9)]).notes
+    for whole in ("HOTEL", "MARIA"):  # not Swahili hoteli in Mongolia, or Romanian primăria
+        assert not text_clues([TextLine(whole, "latin", 0.9)]).notes, whole
 
 
 def test_a_word_inside_a_longer_one_read_nearby_is_the_same_sign_cut_off():
     twice = [TextLine("Calle Benito Juare", "latin", 0.94), TextLine("alle", "latin", 0.96)]
     assert text_clues(twice).notes == ["Spanish: calle"]  # not a Danish allé as well
     assert text_clues([TextLine("Solvej Allé 12", "latin", 0.9)]).notes == ["Danish: allé"]
+
+
+def test_street_words_that_several_languages_share():
+    italian = text_clues([TextLine("Strada Comunale", "latin", 0.9)])  # Romanian as well
+    assert ratio(italian, "IT", "RO") == 1 and ratio(italian, "IT", "FR") >= 3
+    romanian = text_clues([TextLine("Strada Frumoasa", "latin", 0.9)])  # far likelier alone
+    assert ratio(romanian, "RO", "IT") >= 3
+    croatian = text_clues([TextLine("Mrzljak ul.", "latin", 0.9)])  # ulica, and not only Polish
+    assert ratio(croatian, "HR", "PL") == 1 and ratio(croatian, "HR", "DE") >= 3
 
 
 def test_shop_signs_in_swahili_and_spanish():
@@ -70,6 +81,9 @@ def test_road_words_written_onto_the_end_of_the_name():
     assert ratio(text_clues([TextLine("Ivalontie", "latin", 0.9)]), "FI", "SE") >= 2
     run_on = text_clues([TextLine("Bárðardalsvegurvest", "latin", 0.9)])  # words run together
     assert ratio(run_on, "IS", "AR") >= 4 and "Icelandic: …vegur" in run_on.notes
+    # Without its accent, Swedish gränd is inside every Spanish grande.
+    assert not text_clues([TextLine("LLANOGRANDE", "latin", 0.9)]).notes
+    assert text_clues([TextLine("Kyrkogrand", "latin", 0.9)]).notes == ["Swedish: …grand"]
 
 
 def test_a_short_road_ending_needs_a_name_before_it():

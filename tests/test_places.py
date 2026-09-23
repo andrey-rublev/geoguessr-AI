@@ -30,3 +30,20 @@ def test_a_road_or_feature_word_after_a_name_makes_it_one():
 def test_a_longer_name_found_hides_the_shorter_one_inside_it():
     found = places_in(["Buenos Aires"])
     assert "buenos aires" in found and "aires" not in found
+
+
+def test_a_name_after_a_persons_name_or_title_is_theirs():
+    for street in ("Alfredo Lobos", "Pablo Zarate", "R. Antonio Pereira", "Gral. Pereira"):
+        assert places_in([street]) == {}, street
+    assert places_in(["Zarate 12 km"]) == {"zarate": ("AR",)}
+
+
+def test_a_name_cut_off_the_front_of_a_longer_word_read_nearby_doesnt_count():
+    assert places_in(["Ledina", "edina"]) == {}  # in Slovenia, not Edina in Minnesota
+    assert places_in(["edina"]) == {"edina": ("US",)}
+
+
+def test_a_country_or_states_name_counts_for_it():
+    assert places()["mexico"] == ("MX", "PH")  # not only Mexico in the Philippines
+    assert places()["virginia"] == ("US", "ZA")
+    assert places_in(["Corona.", "Aplicativo de mobilidade urbana"]) == {}  # a beer, a word

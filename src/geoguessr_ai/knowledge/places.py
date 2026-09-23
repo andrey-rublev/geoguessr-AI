@@ -58,8 +58,42 @@ EVERYDAY = set(
     springfield springs station stuart sucre summit sunrise sunset superior tabernacle taylor
     terra terrace torres toyota trinidad triunfo union valle valley vega venus victoria villa
     vista vitoria walker washington water wellington westminster wilson
+    corona divino duarte esquina federal independencia kawasaki lobos lopez porta prado urbana
     """.split()
 )
+# Given names and the titles written before them. A place name straight after one is a person's,
+# as streets across Latin America are named: Eva Duarte, Alfredo Lobos, Gral. San Martin.
+PERSON_BEFORE = set(
+    """
+    jr sr sra dr dra gral gen cnel tte cap ing lic prof pdte pres don dona fray padre
+    agustin alberto alejandro alfonso alfredo alvaro ana andres angel antonio armando arturo
+    beatriz benito bernardo carlos carolina catalina cesar clara cristobal daniel diego domingo
+    eduardo elena eloy emilio enrique ernesto esteban eva federico felipe fernando francisco
+    gabriel gonzalo gregorio guillermo gustavo hector hernan horacio hugo ignacio isabel jaime
+    javier joao joaquim joaquin jorge jose josefa juan juana julio leandro leoncio lorenzo luis
+    luisa manoel manuel marcelo marcos mariano mario mateo miguel nicolas octavio pablo pedro
+    rafael raimundo raul ricardo roberto rodrigo rosa ruben sebastiao sergio teodoro teresa tomas
+    vicente
+    john james william charles henry thomas robert richard edward joseph samuel
+    """.split()
+)
+# Place names that are also a country's or a US state's name: a sign saying Mexico means the
+# country or its capital far more often than Mexico in the Philippines, and Virginia Ely Rd is in
+# the United States, not South Africa. These count for that country as well.
+NAMED_AFTER = {
+    "arizona": "US",
+    "belize": "BZ",
+    "colombia": "CO",
+    "colorado": "US",
+    "costa rica": "CR",
+    "jamaica": "JM",
+    "jordan": "JO",
+    "lebanon": "LB",
+    "liberia": "LR",
+    "mexico": "MX",
+    "venezuela": "VE",
+    "virginia": "US",
+}
 _NOT_LETTERS = re.compile(r"[\W\d_]+")
 _UNSPACED = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7a3\u0e00-\u0e7f]")
 """Chinese characters, kana, Hangul and Thai, written without spaces between words."""
@@ -79,7 +113,7 @@ def places() -> dict[str, tuple[str, ...]]:
     found = {}
     for line in text.splitlines():
         name, codes = line.split("\t")
-        countries = tuple(codes.split(","))
+        countries = tuple(sorted({*codes.split(","), *NAMED_AFTER.get(name, "").split()}))
         if len(countries) <= MAX_COUNTRIES and _telling(name):
             found[name] = countries
     return found
@@ -111,14 +145,20 @@ def places_in(
     lines: Iterable[str], naming_words: Collection[str] = ()
 ) -> dict[str, tuple[str, ...]]:
     """Place names in lines of text, with their countries, except straight after one of
-    ``naming_words`` (as :func:`place_key`) or straight before a road word. A name inside a
-    longer one found, like Rio Grande in Rio Grande do Sul, doesn't count again."""
+    ``naming_words`` (as :func:`place_key`) or a person's name or title, or straight before a
+    road word. A name inside a longer one found, like Rio Grande in Rio Grande do Sul, doesn't
+    count again, nor does one word that is the end of a longer one read elsewhere, which the
+    frame cut off: edina beside Ledina."""
     known = places()
     found = {}
-    for line in lines:
-        words = place_key(line).split()
+    keyed = [place_key(line).split() for line in lines]
+    every = {word for words in keyed for word in words}
+    for words in keyed:
         for start in range(len(words)):
-            if start and words[start - 1] in naming_words:
+            if start and (words[start - 1] in naming_words or words[start - 1] in PERSON_BEFORE):
+                continue
+            first = words[start]
+            if any(other != first and other.endswith(first) for other in every):
                 continue
             for end in range(start + 1, min(start + MAX_WORDS, len(words)) + 1):
                 name = " ".join(words[start:end])

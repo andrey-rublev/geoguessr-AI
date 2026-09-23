@@ -57,6 +57,46 @@ def test_train_learns_city_locations(tmp_path):
     assert ckpt.head(__import__("torch").zeros(1, 32)).shape == (1, len(ckpt.cells))
 
 
+class Crash(Exception):
+    pass
+
+
+def test_training_cut_short_carries_on_where_it_stopped(tmp_path):
+    write_synthetic_embeddings(tmp_path / "photos.npz")
+    rounds = tmp_path / ROUNDS_FILE
+    write_synthetic_rounds(rounds, NAIROBI)
+    cfg = TrainConfig(n_cells=8, hidden=64, epochs=5, batch_size=64, real_fraction=0.25)
+    photos = [tmp_path / "photos.npz"]
+    whole, cut = tmp_path / "whole.pt", tmp_path / "cut.pt"
+    train(photos, whole, cfg, rounds_path=rounds, device="cpu", log=lambda _: None)
+    assert not (tmp_path / "whole.pt.resume").exists()  # a finished run leaves nothing to resume
+
+    def crash_in_epoch_3(line):
+        if line.startswith("epoch   3/"):
+            raise Crash
+
+    with pytest.raises(Crash):
+        train(photos, cut, cfg, rounds_path=rounds, device="cpu", log=crash_in_epoch_3)
+    logs = []
+    train(photos, cut, cfg, rounds_path=rounds, device="cpu", log=logs.append)
+
+    assert any("Carrying on from epoch 2 of 5" in line for line in logs)
+    assert not any("geocells" in line for line in logs)  # the cells came back, not refitted
+    a, b = Checkpoint.load(whole), Checkpoint.load(cut)
+    assert a.metrics == b.metrics
+    for name, weights in a.head.state_dict().items():
+        assert torch.equal(weights, b.head.state_dict()[name]), name
+
+    # Other training on the same path starts over rather than picking up the wrong run.
+    cut_again = []
+    with pytest.raises(Crash):
+        train(photos, cut, cfg, rounds_path=rounds, device="cpu", log=crash_in_epoch_3)
+    other = TrainConfig(n_cells=8, hidden=64, epochs=5, batch_size=64, real_fraction=0.5)
+    train(photos, cut, other, rounds_path=rounds, device="cpu", log=cut_again.append)
+    assert any("Starting over" in line for line in cut_again)
+    assert not any("Carrying on" in line for line in cut_again)
+
+
 def test_spatial_split_keeps_blocks_on_one_side():
     rng = np.random.default_rng(0)
     lat, lon = rng.uniform(-60, 70, 5000), rng.uniform(-180, 180, 5000)

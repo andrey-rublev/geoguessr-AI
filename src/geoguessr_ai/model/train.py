@@ -5,12 +5,13 @@ from __future__ import annotations
 import glob
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
 import torch
 
+from ..files import write_safely
 from ..geo import EARTH_RADIUS_KM, geoguessr_score, haversine_km, to_unit_vectors
 from .backbone import pick_device
 from .geocells import DEFAULT_PRIOR_STRENGTH, GeoCells, debias
@@ -168,25 +169,40 @@ def train(
     n_photos = cfg.batch_size - n_real
     real_share = n_real / cfg.batch_size
 
-    n_cells = cfg.n_cells or int(np.clip(len(tr) // 40, 64, 4096))
-    log(f"{len(tr):,} train / {len(val):,} val images, fitting {n_cells} geocells...")
-    cell_lat, cell_lon = lat[tr], lon[tr]
-    if n_real:
-        cell_lat, cell_lon = (
-            np.concatenate([cell_lat, real.lat]),
-            np.concatenate([cell_lon, real.lon]),
-        )
-    cells = GeoCells.fit(cell_lat, cell_lon, n_cells, seed=cfg.seed)
-    # Debiasing must divide out the prior the head really trained under: the batch mix.
-    prior = cells.cell_share(lat[tr], lon[tr])
-    if n_real:
-        rounds_prior = cells.cell_share(real.lat, real.lon, pseudo_count=0)
-        prior = (1 - real_share) * prior + real_share * rounds_prior
-    log_prior = np.log(prior)
-    game_log_prior = None
-    if n_real:  # one location per round, not per crop
-        firsts = np.unique(real.groups, return_index=True)[1]
-        game_log_prior = cells.spread_log_prior(real.lat[firsts], real.lon[firsts])
+    # Training saves where it got to after every epoch, so a crash costs an epoch, not the run:
+    # the same command, on the same data, carries on from there.
+    resume_path = Path(out_path).with_name(Path(out_path).name + ".resume")
+    fingerprint = {
+        "config": asdict(cfg),
+        "photos": sorted(str(Path(f).resolve()) for f in embedding_files),
+        "train": len(tr),
+        "rounds": [] if real is None else real.round_ids,
+    }
+    state = _load_resume(resume_path, fingerprint, log)
+
+    if state is None:
+        n_cells = cfg.n_cells or int(np.clip(len(tr) // 40, 64, 4096))
+        log(f"{len(tr):,} train / {len(val):,} val images, fitting {n_cells} geocells...")
+        cell_lat, cell_lon = lat[tr], lon[tr]
+        if n_real:
+            cell_lat, cell_lon = (
+                np.concatenate([cell_lat, real.lat]),
+                np.concatenate([cell_lon, real.lon]),
+            )
+        cells = GeoCells.fit(cell_lat, cell_lon, n_cells, seed=cfg.seed)
+        # Debiasing must divide out the prior the head really trained under: the batch mix.
+        prior = cells.cell_share(lat[tr], lon[tr])
+        if n_real:
+            rounds_prior = cells.cell_share(real.lat, real.lon, pseudo_count=0)
+            prior = (1 - real_share) * prior + real_share * rounds_prior
+        log_prior = np.log(prior)
+        game_log_prior = None
+        if n_real:  # one location per round, not per crop
+            firsts = np.unique(real.groups, return_index=True)[1]
+            game_log_prior = cells.spread_log_prior(real.lat[firsts], real.lon[firsts])
+    else:
+        cells = GeoCells(state["centroids"])
+        log_prior, game_log_prior = state["log_prior"], state["game_log_prior"]
 
     dev = pick_device(device)
     torch.manual_seed(cfg.seed)
@@ -204,8 +220,16 @@ def train(
         xyz_real = torch.from_numpy(to_unit_vectors(real.lat, real.lon)).float()
     cell_xyz = torch.from_numpy(cells.unit_vectors).float().to(dev)
     best: dict[str, float] | None = None
+    first = 1
+    if state is not None:
+        head.load_state_dict(state["head"])
+        opt.load_state_dict(state["opt"])
+        sched.load_state_dict(state["sched"])
+        torch.set_rng_state(state["rng"])
+        best, first = state["best"], state["epoch"] + 1
+        log(f"Carrying on from epoch {state['epoch']} of {cfg.epochs}, saved in {resume_path}")
 
-    for epoch in range(1, cfg.epochs + 1):
+    for epoch in range(first, cfg.epochs + 1):
         head.train()
         perm = torch.randperm(len(tr))
         total_loss, seen = 0.0, 0
@@ -238,6 +262,35 @@ def train(
             best = {**metrics, "epoch": epoch}
             Checkpoint(head.cpu(), cells, backbone, best, log_prior, game_log_prior).save(out_path)
             head.to(dev)
+        progress = {
+            "fingerprint": fingerprint,
+            "epoch": epoch,
+            "best": best,
+            "head": head.state_dict(),
+            "opt": opt.state_dict(),
+            "sched": sched.state_dict(),
+            "rng": torch.get_rng_state(),
+            "centroids": cells.centroids,
+            "log_prior": log_prior,
+            "game_log_prior": game_log_prior,
+        }
+        write_safely(resume_path, lambda file, p=progress: torch.save(p, file))
 
+    resume_path.unlink(missing_ok=True)
     log(f"Saved best checkpoint (epoch {best['epoch']}) to {out_path}")
     return best
+
+
+def _load_resume(path: Path, fingerprint: dict, log: Callable[[str], None]) -> dict | None:
+    """Where an interrupted run of the same training on the same data got to, if one did."""
+    if not path.exists():
+        return None
+    try:
+        state = torch.load(path, map_location="cpu", weights_only=False)
+    except Exception as broken:  # noqa: BLE001 - any unreadable file just means starting over
+        log(f"Starting over: {path} can't be read ({broken})")
+        return None
+    if state.get("fingerprint") != fingerprint:
+        log(f"Starting over: {path} was saved training something else")
+        return None
+    return state

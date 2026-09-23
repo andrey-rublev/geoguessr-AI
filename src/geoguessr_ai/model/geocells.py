@@ -16,10 +16,12 @@ import numpy as np
 from ..geo import EARTH_RADIUS_KM, SCORE_SCALE_KM, from_unit_vectors, to_unit_vectors
 
 # Measured on held-out rounds by ``scripts/check_strengths.py``: half of them chose these and
-# the other half said they were worth about 60 points a round. Leaning on either prior fully
-# turned out to overdo it, now that enough rounds have been played to know where the game goes.
-DEFAULT_PRIOR_STRENGTH = 0.6
-DEFAULT_GAME_PRIOR_STRENGTH = 0.5
+# the other half said they were worth about 95 points a round over the 0.6 and 0.5 before.
+# Dividing out the training prior doesn't pay any more: on 601 held-out rounds, both this model
+# and the one before it did best with little or none of it taken out, and a light touch of
+# where the game really goes.
+DEFAULT_PRIOR_STRENGTH = 0.0
+DEFAULT_GAME_PRIOR_STRENGTH = 0.25
 
 
 def debias(

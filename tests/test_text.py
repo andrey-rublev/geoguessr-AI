@@ -166,6 +166,9 @@ def test_prices_speeds_postcodes_and_road_numbers():
         ("Co Rd 158", "US", "CA"),
         ("Range Rd 20", "CA", "GB"),
         ("S Triple X Rd", "US", "GB"),
+        ("Main St N", "US", "AU"),
+        ("Park Rd N", "GB", "AU"),  # the compass point after the name is British too
+        ("10th Ave", "ZA", "AU"),
         ("14th St", "US", "GB"),
         ("Ulitsa Gagarina", "RU", "PL"),
         ("Motiram Marg", "NP", "BD"),

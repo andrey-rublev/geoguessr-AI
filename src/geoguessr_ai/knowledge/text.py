@@ -371,16 +371,21 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("RU", "BY", "KZ", "KG", "UZ", "TJ"),
     ),
     # American road names carry the compass point and number the streets: S Triple X Rd, 14th St.
+    # British ones carry it too, but only after the name: Park Rd N.
     (
-        r"\b(?:n|s|e|w|n[ew]|s[ew])\s(?:\w+\s){1,3}(?:rd|st|ave|dr|ln|blvd|hwy|way)\b"
-        r"|\b(?:rd|st|ave|dr|ln|blvd|hwy|way)\s(?:n|s|e|w|n[ew]|s[ew])\b",
+        r"\b(?:n|s|e|w|n[ew]|s[ew])\s(?:\w+\s){1,3}(?:rd|st|ave|dr|ln|blvd|hwy|way)\b",
         "compass point in a road name",
         ("US", "CA"),
     ),
     (
+        r"\b(?:rd|st|ave|dr|ln|blvd|hwy|way)\s(?:n|s|e|w|n[ew]|s[ew])\b",
+        "compass point in a road name",
+        ("US", "CA", "GB"),
+    ),
+    (
         r"\b\d{1,3}(?:st|nd|rd|th)\s(?:st|ave|pl|ter|blvd|street|avenue|terrace)\b",
         "numbered street",
-        ("US", "CA", "PH", "NG"),
+        ("US", "CA", "PH", "NG", "ZA"),  # and Johannesburg's suburbs: 10th Ave
     ),
 )
 

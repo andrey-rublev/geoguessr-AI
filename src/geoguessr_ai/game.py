@@ -18,6 +18,7 @@ from .camera import Camera, default_camera, ground_view, measure
 from .compass import Compass, CompassReader, compass_region
 from .config import Layout, Point, Region
 from .controls import StopRequested
+from .files import write_safely
 from .geo import haversine_km
 from .knowledge.evidence import Evidence
 from .knowledge.sun import clear_sky, find_sun, latitude_likelihood
@@ -532,11 +533,10 @@ class OpenGuessrBot:
 
 
 def _write_round(path: Path, info: dict) -> None:
-    """Write a round's record through a temporary file, so that the answer being added to it
-    can't leave half a file behind if the machine goes down mid-write."""
-    tmp = path.with_suffix(".partial")
-    tmp.write_text(json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(path)
+    """Write a round's record so that the answer being added to it can't leave half a file
+    behind if the machine goes down mid-write."""
+    text = json.dumps(info, indent=2, ensure_ascii=False)
+    write_safely(path, lambda file: file.write(text.encode("utf-8")))
 
 
 def _describe(guess: Guess) -> str:

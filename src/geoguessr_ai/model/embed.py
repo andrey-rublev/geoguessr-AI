@@ -12,6 +12,7 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
+from ..files import write_safely
 from .backbone import ImageEncoder
 from .data import (
     iter_folder_images,
@@ -69,16 +70,18 @@ def embed_items(
 
     if not ids:
         raise RuntimeError(f"No images could be embedded for {out_path}")
-    tmp = out_path.with_name(out_path.stem + ".partial.npz")
-    np.savez(
-        tmp,
-        ids=np.array(ids),
-        lat=np.array(lats, dtype=np.float32),
-        lon=np.array(lons, dtype=np.float32),
-        embeddings=np.concatenate(chunks),
-        backbone=np.array(encoder.name),
+    # Only a finished file counts, so interrupted runs resume cleanly.
+    write_safely(
+        out_path,
+        lambda file: np.savez(
+            file,
+            ids=np.array(ids),
+            lat=np.array(lats, dtype=np.float32),
+            lon=np.array(lons, dtype=np.float32),
+            embeddings=np.concatenate(chunks),
+            backbone=np.array(encoder.name),
+        ),
     )
-    tmp.replace(out_path)  # only a finished file counts, so interrupted runs resume cleanly
     return len(ids)
 
 

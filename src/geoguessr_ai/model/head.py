@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from ..files import write_safely
 from .geocells import GeoCells
 
 
@@ -41,21 +42,17 @@ class Checkpoint:
     """Where the game sends players, per cell, estimated from played training rounds."""
 
     def save(self, path: Path) -> None:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(
-            {
-                "state_dict": self.head.state_dict(),
-                "embed_dim": self.head.embed_dim,
-                "hidden": self.head.hidden,
-                "centroids": torch.from_numpy(self.cells.centroids),
-                "backbone": self.backbone,
-                "metrics": self.metrics,
-                "log_prior": _tensor(self.log_prior),
-                "game_log_prior": _tensor(self.game_log_prior),
-            },
-            path,
-        )
+        raw = {
+            "state_dict": self.head.state_dict(),
+            "embed_dim": self.head.embed_dim,
+            "hidden": self.head.hidden,
+            "centroids": torch.from_numpy(self.cells.centroids),
+            "backbone": self.backbone,
+            "metrics": self.metrics,
+            "log_prior": _tensor(self.log_prior),
+            "game_log_prior": _tensor(self.game_log_prior),
+        }
+        write_safely(Path(path), lambda file: torch.save(raw, file))
 
     @classmethod
     def load(cls, path: Path) -> Checkpoint:

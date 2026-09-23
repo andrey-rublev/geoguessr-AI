@@ -21,6 +21,7 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
+from ..files import write_safely
 from .backbone import ImageEncoder, square_crops
 
 ROUNDS_FILE = "openguessr-rounds.npz"
@@ -92,18 +93,17 @@ class RoundEmbeddings:
             )
 
     def save(self, path: Path) -> None:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(path.stem + ".partial.npz")
-        np.savez(
-            tmp,
-            embeddings=self.embeddings.astype(np.float16),
-            groups=self.groups,
-            lat=self.lat.astype(np.float32),
-            lon=self.lon.astype(np.float32),
-            backbone=np.array(self.backbone),
+        write_safely(
+            Path(path),
+            lambda file: np.savez(
+                file,
+                embeddings=self.embeddings.astype(np.float16),
+                groups=self.groups,
+                lat=self.lat.astype(np.float32),
+                lon=self.lon.astype(np.float32),
+                backbone=np.array(self.backbone),
+            ),
         )
-        tmp.replace(path)
 
     def subset(self, mask: np.ndarray) -> RoundEmbeddings:
         return RoundEmbeddings(

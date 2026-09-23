@@ -100,7 +100,6 @@ Other ways to improve it:
 
 - **More shards:** every shard is a random sample of the whole world (each has about 190 of 222 countries, in the same mix), so more shards mostly add photos of rare countries.
 - **Better encoder:** add `--backbone geolocal/StreetCLIP` to `embed`. It's much more accurate but a far bigger model: on a CPU expect many hours per shard, and slower rounds. You have to re-embed every shard with it.
-- **CLIP's own idea of the country:** `python scripts/try_zero_shot_countries.py` scores the model with CLIP's zero-shot guess of the country ("a Street View photo taken in Kenya") mixed in, using embeddings you already have (a few minutes).
 - **Reading signs at a larger size:** `python scripts/compare_ocr_sizes.py` reads your saved rounds at several sizes, showing what more it finds and how long each round takes.
 - **Checking the clues:** `python scripts/check_clues.py` scores the clues on your own rounds (see [What the clues are worth](#what-the-clues-are-worth)); rerun it after changing one. `python scripts/check_strengths.py` does the same for how hard the bot leans on what it knows.
 - **Your own photos:** `geoguessr-ai embed --images <folder> --labels <folder>/labels.csv`, where the CSV has `filename,latitude,longitude` columns.
@@ -147,9 +146,9 @@ Road line colours (yellow centre lines in the Americas, yellow edges in southern
 
 ### What the clues are worth
 
-`python scripts/check_clues.py` replays your saved rounds: the model's own belief, then the same belief reweighed by the clues read from that round. Over 1,568 rounds played so far, a clue fitted the country the round was really in **414 times out of 474**, and on the 454 rounds the model was never trained on the clues are worth **+54 points a round** (give or take 19).
+`python scripts/check_clues.py` replays your saved rounds: the model's own belief, then the same belief reweighed by the clues read from that round. Over 2,066 rounds played so far, a clue fitted the country the round was really in **553 times out of 628**, and on the 601 rounds the model was never trained on the clues are worth **+63 points a round** (give or take 19).
 
-That precision is the number to watch, and it only tells the truth on rounds nobody has tuned against. Measured on rounds the guards were written for it looks like 98%; measured on the next thousand played it was 83%, and the fixes those misses paid for brought it to 87%. Each new batch finds its own misreadings.
+That precision is the number to watch, and it only tells the truth on rounds nobody has tuned against. Measured on rounds the guards were written for it looks like 98%; measured on the next thousand played it was 83%, and on the 500 after those fixes, 88%. Each new batch still finds its own misreadings.
 
 They used to be worth less than half: each clue left the countries it pointed away from 30 to 50% of their weight, which the model simply outvoted. Given how seldom a clue is wrong, they now count two to three times as sharply. Rounds the model already had right lose 150 to 600 points to this; badly wrong ones gain thousands.
 
@@ -160,16 +159,24 @@ Sharper clues make a misread expensive, so the guards matter as much as the clue
 - A word that is the tail of a longer one read nearby is the same sign cut off: `alle` beside `Calle Benito Juárez` is Spanish, not a Danish allé.
 - Road numbers are looked for within a line, or a Turkish `811.SH` above a `247.Sk.` becomes the state highway SH 247. Seven Brazilian state codes are US ones too, so `MS-465` means Mississippi as readily as Mato Grosso do Sul.
 - A name with a road word on either side is a road, not a town: Rua São João, Lucas Paddock Rd, Monroe Lake.
+- An everyday word or name is never a cut-off sign word (`HOTEL` in Mongolia isn't Swahili hoteli), and a road ending that lost its accent must end the name (`LLANOGRANDE` in Colombia holds no Swedish gränd).
 
-Towns are the least reliable clue and still worth keeping: they fitted only 52 times in 85, yet dropping them costs 24 points a round (give or take 15). Precision isn't the thing to maximise — a clue that is wrong a third of the time still pays when being right moves the guess thousands of kilometres.
+Towns are the least reliable clue and still worth keeping: they fitted only 52 times in 85, yet dropping them costs 24 points a round (give or take 15). Precision isn't the thing to maximise — a clue that is wrong a third of the time still pays when being right moves the guess thousands of kilometres. The same goes the other way: `Strada Comunale` in Italy was read as Romanian, but letting strada be Italian cost a held-out Romanian round 557 points, since the game shows the word in Romania seven times to one. Italian roads are known by comunale, provinciale and statale instead.
 
 One clue was tried and dropped: a road name shortened the English way (`Sage Rd`) pointing to the countries that sign in English. It fired on 45 rounds and was worth +1 point a round, because Street View labels big roads in Kazakhstan and Mongolia in English too, and those misses cancelled the wins.
 
 ### How hard to lean on what it knows
 
-`python scripts/check_strengths.py` measures the three settings that decide that, choosing them on half the held-out rounds and pricing them on the other half. All three wanted to be weaker than the 1.0 they started at — dividing out the training set's bias at 0.6, the game's own prior at 0.5, Street View coverage at 0.25 — which is worth about **+60 points a round** (give or take 43) on the half that only checked. Coverage matters least now because the prior learned from played rounds says the same thing from experience. Rerun it after a lot more training: what suits the model moves as the model gets better.
+`python scripts/check_strengths.py` measures the three settings that decide that, choosing them on half the held-out rounds and pricing them on the other half. All three keep wanting to be weaker. At 1,568 rounds they went from 1.0 to 0.6 (dividing out the training set's bias), 0.5 (the game's own prior) and 0.25 (Street View coverage), worth about +60 points a round. At 2,066 the training set's bias wanted dividing out not at all and the game's prior only at 0.25, worth another **+96 points a round** (give or take 38) on the half that only checked; the previous model shows the same slope on the same rounds. Coverage matters least because the prior learned from played rounds says the same thing from experience. Rerun it after a lot more training: what suits the model moves as the model gets better.
 
-On 83 earlier rounds, pins used to land at the minimap's edge whenever the guess was off screen (Japan, the US west coast, Australia). Placing them where the model meant raised the mean score from 2,084 to 2,286; on the latest 162 rounds the pin lands a median of 1 km from where the model meant. Coverage added 49 points (give or take 89, so not yet conclusive).
+Measured on the same held-out halves and left alone, since none carried over from the half that chose it to the half that checked:
+
+- Clues counting more or less sharply, kind by kind: the choosing half barely moved, and its pick scored −19 (give or take 14) on the other.
+- A temperature on the model's belief, or averaging its crops' probabilities instead of their logarithms.
+- The played rounds that look most alike, voting for where they were: +30 where chosen, −57 to +11 where checked. The model has learned them already.
+- CLIP's own idea of the country, from prompts like "a Street View photo taken in Kenya" (`scripts/try_zero_shot_countries.py`): it names the country 20% of the time, and mixing it in scored −10 (give or take 25).
+
+On 83 earlier rounds, pins used to land at the minimap's edge whenever the guess was off screen (Japan, the US west coast, Australia). Placing them where the model meant raised the mean score from 2,084 to 2,286; on the 1,680 rounds since, the pin has landed a median of 1 km from where the model meant, and never more than 3.
 
 ## Learn from your rounds
 

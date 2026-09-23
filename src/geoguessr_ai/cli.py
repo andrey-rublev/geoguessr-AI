@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from .config import DEFAULT_LAYOUT_PATH
@@ -16,10 +17,19 @@ DEFAULT_DATA = Path("data/osv5m")
 DEFAULT_EMBEDDINGS = Path("data/embeddings")
 DEFAULT_ROUNDS = DEFAULT_EMBEDDINGS / DEFAULT_BACKBONE.replace("/", "__") / "openguessr-rounds.npz"
 DEFAULT_RUNS = Path("runs")
+DEFAULT_THREADS = max(1, (os.cpu_count() or 2) // 2)
+"""CPU threads to train with. Every core at full load for minutes on end has brought a laptop
+down with a fatal hardware error twice, both times while training, so half of them."""
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
     return Path(root) / backbone.replace("/", "__")
+
+
+def _limit_threads(threads: int) -> None:
+    import torch
+
+    torch.set_num_threads(max(1, threads))
 
 
 def _predictor(args: argparse.Namespace):
@@ -97,6 +107,7 @@ def cmd_train(args: argparse.Namespace) -> None:
         folders = [Path(p) if Path(p).is_dir() else Path(p).parent for p in args.embeddings]
         rounds = next((f / ROUNDS_FILE for f in folders if (f / ROUNDS_FILE).exists()), None)
     files = resolve_embedding_files(args.embeddings)
+    _limit_threads(args.threads)
     metrics = train(files, args.out, cfg, rounds_path=rounds, device=args.device)
     print(json.dumps(metrics, indent=2))
 
@@ -245,7 +256,8 @@ def learn_from_rounds(args: argparse.Namespace, encoder) -> None:
 
     folder = _embedding_dir(args.embeddings, encoder.name)
     rounds_path = folder / ROUNDS_FILE
-    print("\nLearning from your rounds...")
+    print(f"\nLearning from your rounds, on {args.threads} CPU threads...")
+    _limit_threads(args.threads)
     try:
         data = embed_rounds(encoder, args.runs, rounds_path)
         photos = resolve_embedding_files([folder])
@@ -293,6 +305,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     def add_device(p: argparse.ArgumentParser) -> None:
         p.add_argument("--device", default="auto", help="auto, cpu, cuda, xpu or mps")
+
+    def add_threads(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "--threads",
+            type=int,
+            default=DEFAULT_THREADS,
+            help=f"CPU threads to train with (default {DEFAULT_THREADS}, half of them: all at once "
+            "has crashed a laptop)",
+        )
 
     def add_prior_strength(p: argparse.ArgumentParser) -> None:
         p.add_argument(
@@ -392,6 +413,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="share of each batch taken from your rounds (0 = don't use them)",
     )
     add_device(p)
+    add_threads(p)
 
     p = add("predict", cmd_predict, "Guess where some images were taken.")
     p.add_argument("images", type=Path, nargs="+")
@@ -433,6 +455,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--runs", type=Path, default=DEFAULT_RUNS, help="where rounds are saved")
     p.add_argument("--embeddings", type=Path, default=DEFAULT_EMBEDDINGS)
     p.add_argument("--no-train", action="store_true", help="only play and save the rounds")
+    add_threads(p)
 
     return parser
 

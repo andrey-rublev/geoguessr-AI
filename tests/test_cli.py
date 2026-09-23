@@ -1,4 +1,5 @@
 import pytest
+import torch
 from PIL import Image
 from test_mapcal import render_map
 
@@ -59,6 +60,9 @@ def test_round_options():
     assert train_args.real_fraction == 0.3 and train_args.rounds is None
     assert parser.parse_args(["play", "--no-text"]).no_text
     assert not parser.parse_args(["learn"]).no_text
+    assert parser.parse_args(["train"]).threads == parser.parse_args(["learn"]).threads
+    assert parser.parse_args(["learn"]).threads == cli.DEFAULT_THREADS >= 1
+    assert parser.parse_args(["train", "--threads", "2"]).threads == 2
 
 
 @pytest.mark.parametrize("retrained_score,switched", [(2100.0, True), (1900.0, False)])
@@ -89,10 +93,15 @@ def test_learn_switches_to_the_retrained_model_unless_it_scores_worse(
         evaluate, "evaluate_rounds", lambda path, *a, **kw: ({"mean_score": scores[path]}, [])
     )
     args = build_parser().parse_args(
-        ["learn", "--model", str(model), "--embeddings", str(tmp_path)]
+        ["learn", "--model", str(model), "--embeddings", str(tmp_path), "--threads", "1"]
     )
 
-    cli.learn_from_rounds(args, Encoder())
+    threads = torch.get_num_threads()
+    try:
+        cli.learn_from_rounds(args, Encoder())
+        assert torch.get_num_threads() == 1  # trained without every core at full load
+    finally:
+        torch.set_num_threads(threads)
 
     assert model.read_text() == ("new" if switched else "old")
     if switched:

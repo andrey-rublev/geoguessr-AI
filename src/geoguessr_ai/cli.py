@@ -20,6 +20,9 @@ DEFAULT_RUNS = Path("runs")
 DEFAULT_THREADS = max(1, (os.cpu_count() or 2) // 2)
 """CPU threads to train with. Every core at full load for minutes on end has brought a laptop
 down with a fatal hardware error twice, both times while training, so half of them."""
+DEFAULT_REST = 1.0
+"""Pause as long as each stretch of training took. Fewer threads alone didn't help: the rest
+boost harder, and on 2 of them the CPU still ran at 83 to 95 C and went down again."""
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
@@ -108,7 +111,7 @@ def cmd_train(args: argparse.Namespace) -> None:
         rounds = next((f / ROUNDS_FILE for f in folders if (f / ROUNDS_FILE).exists()), None)
     files = resolve_embedding_files(args.embeddings)
     _limit_threads(args.threads)
-    metrics = train(files, args.out, cfg, rounds_path=rounds, device=args.device)
+    metrics = train(files, args.out, cfg, rounds_path=rounds, device=args.device, rest=args.rest)
     print(json.dumps(metrics, indent=2))
 
 
@@ -270,7 +273,8 @@ def learn_from_rounds(args: argparse.Namespace, encoder) -> None:
         f"{len(held_out.round_ids):,} held out to test on"
     )
     retrained = args.model.with_name(f"{args.model.stem}-retrained.pt")
-    train(photos, retrained, TrainConfig(), rounds_path=rounds_path, device=args.device)
+    config = TrainConfig()
+    train(photos, retrained, config, rounds_path=rounds_path, device=args.device, rest=args.rest)
 
     if len(held_out):
         options = {
@@ -313,6 +317,13 @@ def build_parser() -> argparse.ArgumentParser:
             default=DEFAULT_THREADS,
             help=f"CPU threads to train with (default {DEFAULT_THREADS}, half of them: all at once "
             "has crashed a laptop)",
+        )
+        p.add_argument(
+            "--rest",
+            type=float,
+            default=DEFAULT_REST,
+            help="pause this many times as long as each stretch of training took, so the CPU "
+            f"runs cooler (default {DEFAULT_REST}; 0 = flat out)",
         )
 
     def add_prior_strength(p: argparse.ArgumentParser) -> None:

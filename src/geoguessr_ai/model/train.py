@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import glob
 import math
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -109,6 +110,21 @@ def summarize(distances_km: np.ndarray) -> dict[str, float]:
     }
 
 
+class Pacer:
+    """Rests ``rest`` times as long as the work since it last rested, so the CPU runs that much
+    cooler on average. Pauses wait for a stretch of work long enough for the clock to keep."""
+
+    def __init__(self, rest: float = 0.0):
+        self.rest = rest
+        self.since = time.perf_counter()
+
+    def __call__(self) -> None:
+        worked = time.perf_counter() - self.since
+        if self.rest and worked >= 0.05:
+            time.sleep(self.rest * worked)
+            self.since = time.perf_counter()
+
+
 @torch.inference_mode()
 def evaluate(
     head: GeoHead,
@@ -119,13 +135,16 @@ def evaluate(
     device,
     log_prior: np.ndarray | None = None,
     prior_strength: float = DEFAULT_PRIOR_STRENGTH,
+    pace: Callable[[], None] | None = None,
 ) -> dict[str, float]:
+    pace = pace or Pacer()
     head.eval()
     guesses = []
     for i in range(0, len(x), 4096):
         log_probs = torch.log_softmax(head(torch.from_numpy(x[i : i + 4096]).to(device)), dim=1)
         for probs in debias(log_probs.cpu().numpy(), log_prior, prior_strength):
             guesses.append(cells.best_guess(probs)[:2])
+            pace()
     g = np.array(guesses)
     return summarize(haversine_km(g[:, 0], g[:, 1], lat, lon))
 
@@ -138,13 +157,16 @@ def train(
     rounds_path: Path | None = None,
     device: str = "auto",
     log: Callable[[str], None] = print,
+    rest: float = 0.0,
 ) -> dict[str, float]:
     """Train and save the best checkpoint (by validation mean score). Returns its metrics.
 
     ``rounds_path`` is an embedded rounds file (see :mod:`.rounds`). Its training rounds are
-    mixed into every batch; its test rounds are never used.
+    mixed into every batch; its test rounds are never used. ``rest`` pauses that many times as
+    long as each stretch of work took (see :class:`Pacer`): slower, but cooler.
     """
     cfg = cfg or TrainConfig()
+    pace = Pacer(rest)
     x, lat, lon, backbone = load_embeddings(embedding_files)
     if len(x) < 50:
         raise ValueError(f"Need at least 50 embedded images to train, got {len(x)}")
@@ -250,8 +272,11 @@ def train(
             sched.step()
             total_loss += loss.item() * len(xb)
             seen += len(xb)
+            pace()
 
-        metrics = evaluate(head, cells, x[val], lat[val], lon[val], dev, log_prior=log_prior)
+        metrics = evaluate(
+            head, cells, x[val], lat[val], lon[val], dev, log_prior=log_prior, pace=pace
+        )
         log(
             f"epoch {epoch:>3}/{cfg.epochs}  loss {total_loss / seen:.3f}  "
             f"val median {metrics['median_km']:,.0f} km  "

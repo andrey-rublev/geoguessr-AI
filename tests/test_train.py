@@ -97,6 +97,21 @@ def test_training_cut_short_carries_on_where_it_stopped(tmp_path):
     assert not any("Carrying on" in line for line in cut_again)
 
 
+def test_pacer_rests_as_long_as_it_has_worked(monkeypatch):
+    from geoguessr_ai.model import train as training
+
+    clock, slept = iter([0.0, 0.03, 0.12, 0.30, 0.33]), []
+    monkeypatch.setattr(training.time, "perf_counter", lambda: next(clock))
+    monkeypatch.setattr(training.time, "sleep", slept.append)
+    pace = training.Pacer(rest=1.0)
+
+    pace()  # 30 ms of work: too short a pause to keep, so it waits for more
+    pace()  # 120 ms in all: rests as long
+    pace()  # 30 ms since the rest
+
+    assert slept == [pytest.approx(0.12)]
+
+
 def test_spatial_split_keeps_blocks_on_one_side():
     rng = np.random.default_rng(0)
     lat, lon = rng.uniform(-60, 70, 5000), rng.uniform(-180, 180, 5000)

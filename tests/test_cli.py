@@ -86,7 +86,7 @@ def test_learn_switches_to_the_retrained_model_unless_it_scores_worse(
     monkeypatch.setattr(rounds, "embed_rounds", lambda encoder, root, out: Rounds())
     monkeypatch.setattr(train, "resolve_embedding_files", lambda patterns: ["photos.npz"])
     monkeypatch.setattr(
-        train, "train", lambda files, out, cfg, rounds_path, device: out.write_text("new")
+        train, "train", lambda files, out, cfg, rounds_path, device, rest: out.write_text("new")
     )
     scores = {model: 2000.0, retrained: retrained_score}
     monkeypatch.setattr(

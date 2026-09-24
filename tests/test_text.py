@@ -60,6 +60,8 @@ def test_street_words_that_several_languages_share():
     assert ratio(romanian, "RO", "IT") >= 3
     croatian = text_clues([TextLine("Mrzljak ul.", "latin", 0.9)])  # ulica, and not only Polish
     assert ratio(croatian, "HR", "PL") == 1 and ratio(croatian, "HR", "DE") >= 3
+    boulevard = text_clues([TextLine("Bulevar San Nicolas", "latin", 0.9)])  # Guatemala City
+    assert ratio(boulevard, "GT", "RS") == 1 and ratio(boulevard, "GT", "BR") >= 3
 
 
 def test_shop_signs_in_swahili_and_spanish():
@@ -185,6 +187,9 @@ def test_prices_speeds_postcodes_and_road_numbers():
         ("Hwy 11", "CA", "GB"),
         ("Mléxico 175D", "MX", "GT"),  # the federal highway shield, read with a stray letter
         ("RN-17", "AR", "CL"),
+        ("RN 25", "CO", "PE"),
+        ("SE-692", "ES", "PT"),  # near Seville, or Sergipe's
+        ("SE-692", "BR", "AR"),
         ("MR3", "SZ", "ZA"),
     ):
         clues = text_clues([TextLine(text, "latin", 0.9)])

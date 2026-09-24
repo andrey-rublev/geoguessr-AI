@@ -100,7 +100,7 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "calle,avenida,carretera,camino,paseo,calzada,carrera,jirón,pasaje,salida,prohibido,"
         "farmacia,panadería,tienda,ferretería,alquiler,gasolinera,municipalidad,ayuntamiento,"
         "colonia,ruta,oficina,se vende,se renta,descuento,vulcanizadora,llantera,abarrotes,"
-        "tortillería,carnicería,papelería,refaccionaria,licorería,cerrajería",
+        "tortillería,carnicería,papelería,refaccionaria,licorería,cerrajería,bulevar",
     ),
     "fr": (
         "French",
@@ -292,7 +292,9 @@ _EURO = ("AT", "BE", "CY", "DE", "EE", "ES", "FI", "FR", "GR", "HR", "IE", "IT",
 _EURO += ("MT", "NL", "PT", "SI", "SK", "AD", "MC", "ME", "SM", "VA", "XK", "RE", "GP", "MQ")
 _MPH = ("US", "GB", "IM", "JE", "GG", "PR", "GU", "AS", "MP", "VI", "LR", "BS", "BZ", "KY", "VG")
 _MPH += ("AG", "DM", "GD", "KN", "LC", "VC", "TC", "AI", "FK")
-_BRAZIL_STATES = "sp|mg|rs|go|ba|pe|ce|es|rj|se|pb|rn|pi|to|ro|ac|am|rr|ap|df"
+_BRAZIL_STATES = "sp|mg|rs|go|pe|ce|es|rj|pb|rn|pi|ro|ac|am|rr|ap|df"
+# States whose letters a Spanish province also numbers its roads with: SE-692 is near Seville.
+_SPANISH_STATES = "ba|se|to"
 # States whose letters the United States and Puerto Rico also number roads with: MS-465 is in
 # Mississippi, not Mato Grosso do Sul, and PR-2 is in Puerto Rico, not Paraná.
 _SHARED_STATES = "al|ma|ms|mt|pa|pr|sc"
@@ -341,6 +343,7 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"(?<![\d-])\d{2}-\d{3}(?![\d-])", "Polish postcode", ("PL",)),
     (r"〒", "Japanese postcode", ("JP",)),
     (rf"\b(?:br|{_BRAZIL_STATES})[a-z]?-\d{{3}}\b", "Brazilian road", ("BR",)),
+    (rf"\b(?:{_SPANISH_STATES})-\d{{3}}\b", "Brazilian or Spanish road", ("BR", "ES")),
     (rf"\b(?:{_SHARED_STATES})[a-z]?-\d{{2,3}}\b", "state road", ("BR", "US", "PR")),
     (r"\bi-\d{1,3}\b", "Interstate", ("US",)),
     # How Street View labels highways by state or province, for the letters no Brazilian state
@@ -351,7 +354,7 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"\bstate\s?(?:rd|road|route|hwy|highway)\s?\d", "state route", ("US", "AU")),
     (r"\bhwy\s?\d{1,3}\b", "numbered highway", ("US", "CA")),
     (r"\bm[a-z]?[eé]xico\s?\d{1,3}d?\b", "Mexican federal highway", ("MX",)),  # México 175D
-    (r"\brn\s?(?:\d{1,3}|-\d{1,2})\b", "national route", ("AR", "GT")),  # not Brazil's RN-160
+    (r"\brn\s?(?:\d{1,3}|-\d{1,2})\b", "national route", ("AR", "CO", "GT")),  # not Brazil's RN-160
     (r"\bmr\s?\d{1,3}[a-z]?\b", "Eswatini main road", ("SZ",)),
     (r"\bdn\s?\d{1,3}[a-z]?\b", "Romanian national road", ("RO",)),
     (r"\bss\s?\d{1,3}\b", "Italian state road", ("IT",)),

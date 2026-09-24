@@ -17,6 +17,7 @@ def test_ignores_everyday_words_short_names_and_names_after_street_words():
     assert "victoria" not in places() and "lima" not in places()
     assert places_in(["Hotel Victoria", "Main Street Parking"]) == {}
     assert places_in(["JEEVAN TOYOTA", "NW 191st Terrace"]) == {}  # a make and a road word
+    assert places_in(["CAMPBELL TRANSPORT", "TATA HITACHI", "Reservoir Hill St"]) == {}
 
 
 def test_a_road_or_feature_word_after_a_name_makes_it_one():
@@ -46,4 +47,5 @@ def test_a_name_cut_off_the_front_of_a_longer_word_read_nearby_doesnt_count():
 def test_a_country_or_states_name_counts_for_it():
     assert places()["mexico"] == ("MX", "PH")  # not only Mexico in the Philippines
     assert places()["virginia"] == ("US", "ZA")
+    assert places_in(["Trans-Labrador"]) == {"labrador": ("AU", "CA")}
     assert places_in(["Corona.", "Aplicativo de mobilidade urbana"]) == {}  # a beer, a word

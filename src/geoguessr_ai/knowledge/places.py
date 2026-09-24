@@ -59,6 +59,8 @@ EVERYDAY = set(
     terra terrace torres toyota trinidad triunfo union valle valley vega venus victoria villa
     vista vitoria walker washington water wellington westminster wilson
     corona divino duarte esquina federal independencia kawasaki lobos lopez porta prado urbana
+    allende alvarado bayan bellevue campbell clifton evans hitachi johnston lawrence munich
+    reservoir vernon villanueva
     """.split()
 )
 # Given names and the titles written before them. A place name straight after one is a person's,
@@ -88,6 +90,7 @@ NAMED_AFTER = {
     "costa rica": "CR",
     "jamaica": "JM",
     "jordan": "JO",
+    "labrador": "CA",
     "lebanon": "LB",
     "liberia": "LR",
     "mexico": "MX",

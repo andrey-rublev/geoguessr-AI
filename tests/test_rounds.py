@@ -44,6 +44,18 @@ def test_find_rounds_needs_a_recorded_answer(tmp_path):
     assert [r.id for r in find_rounds(tmp_path / "s2")] == ["s2/round_01"]
 
 
+def test_views_street_view_never_drew_are_left_out(tmp_path):
+    for number, undrawn in ((1, [1]), (2, [0, 1])):
+        folder = save_round(tmp_path, "s1", number)
+        info = json.loads((folder / "round.json").read_text())
+        (folder / "round.json").write_text(json.dumps({**info, "undrawn_views": undrawn}))
+
+    rounds = find_rounds(tmp_path)
+
+    assert [r.id for r in rounds] == ["s1/round_01"]  # the second round never showed anything
+    assert [view.name for view in rounds[0].views] == ["view_0.jpg"]
+
+
 def test_a_round_left_half_written_is_skipped_not_raised_over(tmp_path, capsys):
     save_round(tmp_path, "s1", 1)
     broken = save_round(tmp_path, "s1", 2)  # as a power cut mid-write would leave it

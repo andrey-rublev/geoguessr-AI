@@ -38,7 +38,8 @@ class Round:
 
 
 def find_rounds(root: Path) -> list[Round]:
-    """Every saved round under ``root`` whose real location was recorded.
+    """Every saved round under ``root`` whose real location was recorded, with the views Street
+    View finished drawing: a black or blurred one teaches the model nothing about where it was.
 
     A round that can't be read is skipped rather than raising, so one unreadable file, as a
     power cut mid-write would leave behind, can't cost a whole session its learning.
@@ -46,11 +47,14 @@ def find_rounds(root: Path) -> list[Round]:
     rounds = []
     for info_path in sorted(Path(root).rglob("round.json")):
         try:
-            answer = json.loads(info_path.read_text(encoding="utf-8")).get("answer")
+            info = json.loads(info_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as broken:
             print(f"Skipping {info_path}: {broken}")
             continue
-        views = tuple(sorted(info_path.parent.glob("view_*.jpg")))
+        answer, undrawn = info.get("answer"), {f"view_{i}" for i in info.get("undrawn_views", ())}
+        views = tuple(
+            view for view in sorted(info_path.parent.glob("view_*.jpg")) if view.stem not in undrawn
+        )
         if answer and views:
             folder = info_path.parent
             round_id = f"{folder.parent.name}/{folder.name}"

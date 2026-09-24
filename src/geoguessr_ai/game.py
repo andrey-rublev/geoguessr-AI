@@ -49,6 +49,10 @@ CAMERA_DRAG = 0.35
 GROUND_BOX_SCORE = 0.5
 """Road names seen from above are found less surely than signs: a Paraguayan one scored 0.52
 and 0.55, under the 0.6 that signs need."""
+SHARPNESS_WIDTH, BLURRED = 968, 20.0
+"""A view less sharp than this (see :func:`sharpness`) is still being drawn. Of 2,780 saved
+views, the plainest real ones (desert, a bare wall) measured 42 and up; half of a Beijing
+round's views, captured before their tiles loaded, 5 and 6."""
 
 
 class ContinueBlocked(Exception):
@@ -71,6 +75,9 @@ class BotSettings:
     view_settle_wait: float = 0.8
     view_load_timeout: float = 10.0
     """How long to wait for Street View while it is still a black screen."""
+    view_draw_timeout: float = 3.0
+    """How long to wait, after each turn, for a view Street View is still drawing: black, or
+    blurred until its tiles load. A view it never finishes isn't shown to the model."""
     turn_wait: float = 1.0
     """How long the view takes to turn after pressing the compass."""
     map_expand_wait: float = 1.0
@@ -119,6 +126,9 @@ class Look:
     """Each view with the road below it, where Street View writes road names, for reading."""
     headings: list[float | None] = field(default_factory=list)
     """Degrees clockwise from north that each view faces, when the compass was read."""
+    drawn: list[bool] = field(default_factory=list)
+    """Whether Street View had finished drawing each view, rather than leaving it black or
+    blurred."""
     down_views: list[Image.Image] = field(default_factory=list)
     """The road round the car, looking down, where its lines and names show best. Only read,
     not shown to the model, which learned from level photos."""
@@ -133,6 +143,11 @@ class Look:
         """Add what was seen from another spot."""
         for name in (f.name for f in fields(self)):
             getattr(self, name).extend(getattr(other, name))
+
+    def seen(self) -> list[Image.Image]:
+        """The views to show the model: those Street View finished drawing, if any were."""
+        drawn = [view for view, done in zip(self.views, self.drawn, strict=True) if done]
+        return drawn or list(self.views)
 
 
 def scene_region(layout: Layout) -> Region:
@@ -211,7 +226,7 @@ class OpenGuessrBot:
 
         look = self.look_around()
         evidence, lines = self.notice(look)
-        guess = self.predictor.predict(look.views, evidence)
+        guess = self.predictor.predict(look.seen(), evidence)
         sure = [guess.expected_score]  # after each look, saved to judge walking by later
         for below in () if s.dry_run else (s.walk_below, s.walk_again_below):
             if guess.expected_score >= below:
@@ -221,7 +236,7 @@ class OpenGuessrBot:
             self._walk()
             look.extend(self.look_around())
             evidence, lines = self.notice(look)
-            guess = self.predictor.predict(look.views, evidence)
+            guess = self.predictor.predict(look.seen(), evidence)
             sure.append(guess.expected_score)
         for note in evidence.notes:
             print(f"  clue: {note}")
@@ -438,10 +453,21 @@ class OpenGuessrBot:
         return look
 
     def _capture(self, look: Look, heading: float | None) -> None:
-        scene = self.screen.grab(self.scene)
+        """Save what the view shows, once Street View has drawn it: after a turn it can take a
+        few seconds to replace its blur with the panorama's tiles."""
+        waited = 0.0
+        while True:
+            scene = self.screen.grab(self.scene)
+            view = scene.crop((0, 0, self.layout.view.width, self.layout.view.height))
+            drawn = _is_drawn(view)
+            if drawn or waited >= self.settings.view_draw_timeout:
+                break
+            self.controls.sleep(0.5)
+            waited += 0.5
         look.scenes.append(scene)
-        look.views.append(scene.crop((0, 0, self.layout.view.width, self.layout.view.height)))
+        look.views.append(view)
         look.headings.append(heading)
+        look.drawn.append(drawn)
 
     def _press_continue(self, folder: Path | None) -> None:
         """Click Continue, but only once it looks as it did at calibration, not covered."""
@@ -512,6 +538,7 @@ class OpenGuessrBot:
         info = {
             "guess": asdict(guess),
             "headings": look.headings,
+            "undrawn_views": [i for i, drawn in enumerate(look.drawn) if not drawn],
             "down_headings": look.down_headings,
             "up_headings": look.up_headings,
             "up_pitches": look.up_pitches,
@@ -570,3 +597,15 @@ def _compass_point(degrees: float) -> str:
 def _is_blank(image: Image.Image) -> bool:
     """A view with almost no contrast: Street View hasn't drawn the panorama yet."""
     return float(np.asarray(image.convert("L")).std()) < 8.0
+
+
+def sharpness(image: Image.Image) -> float:
+    """Variance of the Laplacian with the view shrunk to :data:`SHARPNESS_WIDTH` pixels wide."""
+    grey = np.asarray(image.convert("L"))
+    height = max(1, round(grey.shape[0] * SHARPNESS_WIDTH / grey.shape[1]))
+    small = cv2.resize(grey, (SHARPNESS_WIDTH, height), interpolation=cv2.INTER_AREA)
+    return float(cv2.Laplacian(small, cv2.CV_64F).var())
+
+
+def _is_drawn(view: Image.Image) -> bool:
+    return not _is_blank(view) and sharpness(view) >= BLURRED

@@ -31,10 +31,11 @@ LAGOS = (6.45, 3.39)
 
 
 class FakeScreen:
-    """Street View that stays black for the first ``blank_grabs`` looks. No compass shows."""
+    """Street View that stays black for the first ``blank_grabs`` looks, and is still blurred,
+    its tiles loading, in the looks numbered in ``loading`` (from 1). No compass shows."""
 
-    def __init__(self, blank_grabs=0):
-        self.blank_grabs, self.grabs = blank_grabs, 0
+    def __init__(self, blank_grabs=0, loading=()):
+        self.blank_grabs, self.grabs, self.loading = blank_grabs, 0, set(loading)
 
     def virtual_desktop(self):
         return DESKTOP
@@ -46,6 +47,9 @@ class FakeScreen:
         if self.blank_grabs:
             self.blank_grabs -= 1
             return Image.new("RGB", (region.width, region.height))
+        if self.grabs in self.loading:  # light and dark, but no detail yet
+            ramp = np.linspace(0, 255, region.width).astype(np.uint8)
+            return Image.fromarray(np.tile(ramp, (region.height, 1))).convert("RGB")
         rng = np.random.default_rng(self.grabs)  # grey, so no blue sky to look up at
         noise = rng.integers(0, 256, (region.height, region.width, 1)).repeat(3, axis=2)
         return Image.fromarray(noise.astype(np.uint8))
@@ -479,6 +483,27 @@ def test_waits_for_street_view_to_stop_being_black():
     OpenGuessrBot(LAYOUT, FakePredictor(), settings, screen, FakeControls()).play()
 
     assert screen.grabs == 3 + 1 + 4  # three black frames, the first good one, four views
+
+
+def test_waits_for_each_view_to_finish_loading():
+    screen, predictor = FakeScreen(loading={2, 3}), FakePredictor()
+    settings = BotSettings(rounds=1, views=4, dry_run=True, debug_dir=None)
+
+    OpenGuessrBot(LAYOUT, predictor, settings, screen, FakeControls()).play()
+
+    assert screen.grabs == 1 + 2 + 4  # Street View drawn, the first view twice still blurred
+    assert predictor.view_counts == [4]
+
+
+def test_a_view_that_never_loads_isnt_shown_to_the_model(tmp_path):
+    screen, predictor = FakeScreen(loading=range(3, 10)), FakePredictor()
+    settings = BotSettings(rounds=1, views=4, record_answers=False, debug_dir=tmp_path)
+
+    OpenGuessrBot(LAYOUT, predictor, settings, screen, FakeControls()).play()
+
+    assert predictor.view_counts == [3]  # the second view stayed blurred for three seconds
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    assert saved["undrawn_views"] == [1] and len(saved["headings"]) == 4
 
 
 def test_dry_run_plays_one_round_without_continuing():

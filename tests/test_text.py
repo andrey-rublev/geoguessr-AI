@@ -141,6 +141,8 @@ def test_local_phone_numbers_without_a_country_code():
     assert ratio(text_clues([TextLine("Tel (415) 555-0132", "latin", 0.9)]), "US", "GB") >= 3
     assert ratio(text_clues([TextLine("01 42 68 53 00", "latin", 0.9)]), "FR", "ES") >= 3
     assert ratio(text_clues([TextLine("8 (495) 123-45-67", "latin", 0.9)]), "RU", "PL") >= 3
+    mobile = text_clues([TextLine("tel. 690 836 020", "latin", 0.9)])  # Spanish, or Polish
+    assert ratio(mobile, "ES", "PL") == 1 and ratio(mobile, "PL", "DE") >= 3
     both = text_clues([TextLine("+55 (11) 99983-2915", "latin", 0.9)])
     assert both.notes == ["phone number +55"]  # the same number counts once
     price = text_clues([TextLine("2024-05-12 R$ 1.299,90 KM 12", "latin", 0.9)])

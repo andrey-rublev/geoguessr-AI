@@ -100,7 +100,7 @@ Other ways to improve it:
 
 - **More shards:** every shard is a random sample of the whole world (each has about 190 of 222 countries, in the same mix), so more shards mostly add photos of rare countries.
 - **Better encoder:** add `--backbone geolocal/StreetCLIP` to `embed`. It's much more accurate but a far bigger model: on a CPU expect many hours per shard, and slower rounds. You have to re-embed every shard with it.
-- **Reading signs at a larger size:** `python scripts/compare_ocr_sizes.py` reads your saved rounds at several sizes, showing what more it finds and how long each round takes.
+- **Reading signs at a larger size:** `python scripts/compare_ocr_sizes.py` reads your saved rounds at several sizes, showing what more it finds and how long each round takes. On 30 rounds, looking for text at full width (1,935 pixels) rather than 1,024 found text in one more round, but both clues it added were wrong, and reading took 4.9 seconds a round instead of 1.7.
 - **Checking the clues:** `python scripts/check_clues.py` scores the clues on your own rounds (see [What the clues are worth](#what-the-clues-are-worth)); rerun it after changing one. `python scripts/check_strengths.py` does the same for how hard the bot leans on what it knows.
 - **Your own photos:** `geoguessr-ai embed --images <folder> --labels <folder>/labels.csv`, where the CSV has `filename,latitude,longitude` columns.
 

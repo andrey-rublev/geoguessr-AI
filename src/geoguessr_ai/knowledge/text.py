@@ -285,7 +285,7 @@ LOCAL_PHONES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (r"\d{3}-\d{2}-\d{2}", ("RU", "UA", "BY", "KZ", "KG", "UZ", "TJ", "MD")),  # 123-45-67
     (r"[6-9]\d{4}\s\d{5}", ("IN",)),  # 98765 43210
     (r"0\d{2,4}\s?/\s?\d{3,8}", ("DE", "AT", "CH", "LI")),  # 0221 / 123456
-    (r"[69]\d{2}\s\d{3}\s\d{3}", ("ES", "PT")),  # 612 345 678
+    (r"[69]\d{2}\s\d{3}\s\d{3}", ("ES", "PT", "PL", "CZ")),  # 612 345 678, and mobiles 690 836 020
 )
 _TOKEN = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*")
 _EURO = ("AT", "BE", "CY", "DE", "EE", "ES", "FI", "FR", "GR", "HR", "IE", "IT", "LT", "LU", "LV")

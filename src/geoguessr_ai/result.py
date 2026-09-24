@@ -8,8 +8,9 @@ Every notch halves the map's scale, which the markers confirm as they draw toget
 the flag can still be measured at the most zoomed-in level where it stands clear of the pin.
 
 An answer is only returned after checks: the recognised map must put our pin where we
-clicked, and measurements from different zoom levels must agree. When in doubt, the reader
-returns no answer rather than a wrong one.
+clicked, at the same scale at two zoom levels (unless the whole world is in view), and
+measurements from different zoom levels must agree. When in doubt, the reader returns no
+answer rather than a wrong one.
 """
 
 from __future__ import annotations
@@ -121,6 +122,8 @@ APART = 10.0
 """Markers closer than this (in 100%-scale pixels) overlap and can't be measured apart."""
 MATCH_WIDTH = 960
 """Result screenshots are shrunk to this width to recognise the world map quickly."""
+SAME_SCALE = math.log2(1.05)
+"""How far (in halvings) the world's scale at two zoom levels may disagree with the markers."""
 
 
 @dataclass(frozen=True)
@@ -250,6 +253,7 @@ class ResultReader:
         self.controls.move(centre)
         reading = Reading(None, "the result map never lined up with the world map")
         levels: list[_Level] = []
+        seen: tuple[MapProjection, int] | None = None  # the world, and how many levels in
         step = 1  # scale halvings per notch, re-measured whenever the markers allow
         for zoom_outs in range(self.max_zoom_outs + 1):
             if zoom_outs:
@@ -258,7 +262,14 @@ class ResultReader:
             if not levels:
                 reading.screenshot = Image.fromarray(rgb)
             elif np.abs(rgb.astype(np.int16) - levels[-1].rgb).mean() < 0.5:
-                break  # the map won't zoom out any further
+                # The map won't zoom out any further: the world was seen as a whole, and once
+                # is enough.
+                if seen:
+                    projection, n = seen
+                    reading.answer, reading.problem = self._answer(
+                        levels[:n], projection, placed_lat, placed_lon
+                    )
+                break
             pin, flag = self._markers(rgb)
             halvings = 0
             if levels:
@@ -266,12 +277,29 @@ class ResultReader:
                 halvings = levels[-1].halvings + step
             levels.append(_Level(rgb, pin, flag, halvings))
             projection = self._locate(rgb)
-            if projection and self._shows_our_pin(projection, levels[-1], placed_lat, placed_lon):
+            if not (
+                projection and self._shows_our_pin(projection, levels[-1], placed_lat, placed_lon)
+            ):
+                continue
+            if seen and self._same_world(seen, projection, levels):
                 reading.answer, reading.problem = self._answer(
                     levels, projection, placed_lat, placed_lon
                 )
                 break
+            seen = projection, len(levels)
+            reading.problem = "the world map was recognised at only one zoom level"
         return reading
+
+    @staticmethod
+    def _same_world(
+        seen: tuple[MapProjection, int], projection: MapProjection, levels: list[_Level]
+    ) -> bool:
+        """Whether a world recognised further in is this one, zoomed in as far as the markers
+        say. A map of mostly land matches the world at the wrong scale nearly as well as at the
+        right one, and put an answer in Bucharest in Turkey: a second look catches it."""
+        before, n = seen
+        halvings = levels[-1].halvings - levels[n - 1].halvings
+        return abs(math.log2(before.world_px / projection.world_px) - halvings) < SAME_SCALE
 
     def _settled_grab(self) -> np.ndarray:
         """Grab the result map once tiles have loaded and animations have finished."""

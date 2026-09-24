@@ -67,10 +67,11 @@ class FakeResultScreen:
 
 
 class FakeControls:
-    """Each wheel notch halves the map's scale around the cursor, like Leaflet does."""
+    """Each wheel notch halves the map's scale around the cursor, like Leaflet does, until the
+    world is ``widest`` pixels across: the notch that gets there goes only part of the way."""
 
-    def __init__(self, screen):
-        self.screen, self.notches = screen, 0
+    def __init__(self, screen, widest=0.0):
+        self.screen, self.notches, self.widest = screen, 0, widest
 
     def sleep(self, seconds):
         pass
@@ -83,9 +84,9 @@ class FakeControls:
         for _ in range(-clicks):
             cx, cy = p.x - REGION.left, p.y - REGION.top
             q = self.screen.projection
-            self.screen.projection = MapProjection(
-                q.world_px / 2, cx - (cx - q.origin_x) / 2, cy - (cy - q.origin_y) / 2, True
-            )
+            if q.world_px <= self.widest:
+                return
+            self.screen.projection = q.zoomed(cx, cy, max(0.5, self.widest / q.world_px))
             self.notches += 1
 
 
@@ -113,6 +114,35 @@ def test_reads_the_answer_after_zooming_out():
     assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
     assert controls.notches >= 2 and reading.answer.zoom_outs == 0
     assert reading.screenshot.size == (REGION.width, REGION.height)
+
+
+def reader_recognising_only_the_widest_view():
+    """The world is only recognised at the map's widest, which the last notch zooms out to only
+    2^0.62 times: counted as a halving, Lisbon would come out 1.3 times too far from Madrid."""
+    screen = FakeResultScreen(fitted(24_576))
+    widest = 3_072 / 2**0.62
+    reader = ResultReader(screen, FakeControls(screen, widest=widest), REGION)
+    locate = reader._locate
+    reader._locate = lambda rgb: locate(rgb) if screen.projection.world_px == widest else None
+    return reader
+
+
+def test_the_notch_that_reaches_the_widest_view_counts_for_what_it_zoomed():
+    reading = reader_recognising_only_the_widest_view().read(*MADRID)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
+
+
+def test_a_miscounted_zoom_is_caught_by_the_flag_on_the_recognised_map(monkeypatch):
+    reader = reader_recognising_only_the_widest_view()
+    monkeypatch.setattr(reader, "_halvings_between", lambda *args: 1.0)  # the last was 0.62
+
+    reading = reader.read(*MADRID)
+
+    # Read where the world was recognised, no zoom steps counted, if not as finely as further in.
+    assert reading.answer is not None and reading.answer.zoom_outs == 4, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 30
 
 
 def test_close_guess_is_measured_before_the_markers_overlap():

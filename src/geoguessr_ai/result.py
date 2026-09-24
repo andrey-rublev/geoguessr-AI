@@ -6,10 +6,12 @@ pixel gives the answer. The view is usually zoomed in too far to recognise coast
 :mod:`.mapcal`), so the reader zooms out one wheel notch at a time around a fixed point.
 Every notch halves the map's scale, which the markers confirm as they draw together, so
 the flag can still be measured at the most zoomed-in level where it stands clear of the pin.
+The notch that reaches the map's widest view goes only part of the way, which the markers
+measure too.
 
 An answer is only returned after checks: the recognised map must put our pin where we
-clicked, and measurements from different zoom levels must agree. When in doubt, the reader
-returns no answer rather than a wrong one.
+clicked, and measurements from more zoomed-in levels must agree with the flag's place on it.
+When in doubt, the reader returns no answer rather than a wrong one.
 """
 
 from __future__ import annotations
@@ -121,6 +123,11 @@ APART = 10.0
 """Markers closer than this (in 100%-scale pixels) overlap and can't be measured apart."""
 MATCH_WIDTH = 960
 """Result screenshots are shrunk to this width to recognise the world map quickly."""
+WHOLE_STEP = 0.25
+"""A zoom step the markers measure within this many halvings of a whole number is taken as
+whole. Further off, it is the notch that reached the map's widest view, which went 0.62 of a
+halving: counted as one, it put 26 answers 1.3 times too far from our pin, one near
+Bucharest in Turkey."""
 
 
 @dataclass(frozen=True)
@@ -227,7 +234,7 @@ class _Level:
     rgb: np.ndarray
     pin: Marker | None
     flag: Marker | None
-    halvings: int
+    halvings: float
     """How many times the map's scale had halved since the first level."""
 
 
@@ -250,7 +257,7 @@ class ResultReader:
         self.controls.move(centre)
         reading = Reading(None, "the result map never lined up with the world map")
         levels: list[_Level] = []
-        step = 1  # scale halvings per notch, re-measured whenever the markers allow
+        step = 1.0  # scale halvings per whole notch, re-measured whenever the markers allow
         for zoom_outs in range(self.max_zoom_outs + 1):
             if zoom_outs:
                 self.controls.scroll(centre, -1)
@@ -260,10 +267,12 @@ class ResultReader:
             elif np.abs(rgb.astype(np.int16) - levels[-1].rgb).mean() < 0.5:
                 break  # the map won't zoom out any further
             pin, flag = self._markers(rgb)
-            halvings = 0
+            halvings = 0.0
             if levels:
-                step = self._halvings_between(levels[-1], pin, flag, step)
-                halvings = levels[-1].halvings + step
+                measured = self._halvings_between(levels[-1], pin, flag)
+                if measured is not None and measured.is_integer():
+                    step = measured
+                halvings = levels[-1].halvings + (step if measured is None else measured)
             levels.append(_Level(rgb, pin, flag, halvings))
             projection = self._locate(rgb)
             if projection and self._shows_our_pin(projection, levels[-1], placed_lat, placed_lon):
@@ -299,22 +308,19 @@ class ResultReader:
         return pin, flag
 
     def _halvings_between(
-        self, before: _Level, pin: Marker | None, flag: Marker | None, step: int
-    ) -> int:
-        """Scale halvings since the previous level, measured from how the markers drew closer."""
+        self, before: _Level, pin: Marker | None, flag: Marker | None
+    ) -> float | None:
+        """Scale halvings since the previous level, measured from how the markers drew closer:
+        a whole number unless the map reached its widest view. None if they can't say."""
         if not (before.pin and before.flag and pin and flag):
-            return step
+            return None
         after = math.dist((pin.x, pin.y), (flag.x, flag.y))
         if after < APART * self.scale:
-            return step
-        return max(
-            0,
-            round(
-                math.log2(
-                    math.dist((before.pin.x, before.pin.y), (before.flag.x, before.flag.y)) / after
-                )
-            ),
-        )
+            return None
+        drawn_in = math.dist((before.pin.x, before.pin.y), (before.flag.x, before.flag.y)) / after
+        halvings = max(0.0, math.log2(drawn_in))
+        whole = float(round(halvings))
+        return whole if abs(halvings - whole) < WHOLE_STEP else halvings
 
     def _locate(self, rgb: np.ndarray) -> MapProjection | None:
         h, w = rgb.shape[:2]
@@ -375,17 +381,21 @@ class ResultReader:
             y = min(max(my + (flag.y - pin.y) / world, 0.0), 1.0)
             a_lat, a_lon = inverse_mercator(mx + (flag.x - pin.x) / world, y)
             estimates.append((zoom_outs, a_lat, _wrap_lon(a_lon), _km_per_px(world, a_lat)))
+        on_map = None  # the flag's place on the recognised map, which counts no zoom steps
         if last.flag:
             a_lat, a_lon = projection.to_latlon(last.flag.x, last.flag.y)
             kmpp = _km_per_px(projection.world_px, a_lat)
-            estimates.append((len(levels) - 1, a_lat, _wrap_lon(a_lon), kmpp))
+            on_map = (len(levels) - 1, a_lat, _wrap_lon(a_lon), kmpp)
+            estimates.append(on_map)
         if not estimates:
             return None, "couldn't see the flag on the result map"
         if len(estimates) == 1:
             zoom_outs, a_lat, a_lon, _ = estimates[0]
             return Answer(a_lat, a_lon, zoom_outs), ""
+        # Measurements further in all rest on the zoom steps counted since, so a miscounted step
+        # moves them together, and only the flag's place on the recognised map can tell.
         for e in estimates:
-            for o in estimates:
+            for o in [on_map] if on_map else estimates:
                 allowed = 3 * self.scale * max(e[3], o[3]) + PLACED_ERROR_KM
                 if o is not e and haversine_km(e[1], e[2], o[1], o[2]) <= allowed:
                     return Answer(e[1], e[2], e[0]), ""

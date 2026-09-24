@@ -148,7 +148,7 @@ Road line colours (yellow centre lines in the Americas, yellow edges in southern
 
 `python scripts/check_clues.py` replays your saved rounds: the model's own belief, then the same belief reweighed by the clues read from that round. Over 2,563 rounds played so far, a clue fitted the country the round was really in **790 times out of 826**, and on the 765 rounds the model was never trained on the clues are worth **+82 points a round** (give or take 19). The road numbers added last (US-90, SK-29, México 175D and the rest) fitted all 58 rounds they fired on and account for about 27 of those points, though they were found looking at every round, held-out ones too. The next 500 rounds were their real test, and they fitted 50 of the 52 they fired on.
 
-That precision is the number to watch, and it only tells the truth on rounds nobody has tuned against. Measured on rounds the guards were written for it looks like 98%; measured on the next thousand played it was 83%, and on the 500 after those fixes, 88%, then 89% on the 500 after that. Each new batch still finds its own misreadings.
+That precision is the number to watch, and it only tells the truth on rounds nobody has tuned against. Measured on rounds the guards were written for it looks like 98%; measured on the next thousand played it was 83%, and on the 500 after those fixes, 88%, then 90% on the 500 after that. Each new batch still finds its own misreadings.
 
 They used to be worth less than half: each clue left the countries it pointed away from 30 to 50% of their weight, which the model simply outvoted. Given how seldom a clue is wrong, they now count two to three times as sharply. Rounds the model already had right lose 150 to 600 points to this; badly wrong ones gain thousands.
 

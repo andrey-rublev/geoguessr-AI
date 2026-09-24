@@ -49,10 +49,11 @@ CAMERA_DRAG = 0.35
 GROUND_BOX_SCORE = 0.5
 """Road names seen from above are found less surely than signs: a Paraguayan one scored 0.52
 and 0.55, under the 0.6 that signs need."""
-SHARPNESS_WIDTH, BLURRED = 968, 20.0
-"""A view less sharp than this (see :func:`sharpness`) is still being drawn. Of 2,780 saved
-views, the plainest real ones (desert, a bare wall) measured 42 and up; half of a Beijing
-round's views, captured before their tiles loaded, 5 and 6."""
+SHARPNESS_WIDTH, BLURRED = 968, 15.0
+"""A view less sharp than this (see :func:`sharpness`) is still being drawn. Of 12,944 saved
+views, the plainest real ones (hazy desert) measured 21 and up, and all 12 captured before
+their tiles loaded under 12, like half of a Beijing round's, which sent the guess to Buenos
+Aires. Black ones, even with "No Street View available" written on them, count as blank."""
 
 
 class ContinueBlocked(Exception):

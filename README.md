@@ -4,7 +4,7 @@ A self-trained geolocation AI that plays [OpenGuessr](https://openguessr.com) by
 
 ## How it works
 
-1. **Look:** presses Street View's compass to face north, then turns 90° at a time to capture north, east, south and west, pressing again if a turn didn't happen. If the sky is clear it then tilts up and looks round for the sun, which a level view seldom shows. If the model is unsure after that (it expects under 1,500 points), the bot walks about 50 m on along the road and looks round again, as players do when a place gives nothing away.
+1. **Look:** presses Street View's compass to face north, then turns 90° at a time to capture north, east, south and west, pressing again if a turn didn't happen. If the sky is clear it then tilts up and looks round for the sun, which a level view seldom shows. If the model is unsure after that (it expects under 1,750 points), the bot walks about 50 m on along the road and looks round again, as players do when a place gives nothing away, and once more if it is still very unsure (under 1,000). On 128 held-out rounds that walked, the second look was worth +221 points a round (give or take 88), but nothing where the model had expected over 1,750.
 2. **Read:** reads signs, and road names also as if looking down on the road, where they come out straight, and looks for the sun.
 3. **Guess:** a frozen CLIP image encoder plus a small classifier you train ranks regions of the world, then GeoGuessr knowledge reweighs them (see [What it knows](#what-it-knows)).
 4. **Place:** finds the world on the minimap by its coastlines, drags the map if the guess is off screen, zooms in, clicks, and checks the pin landed.
@@ -120,7 +120,7 @@ geoguessr-ai learn --rounds 20   # play, read every answer, then retrain on your
 - Reading signs adds about 3 to 5 seconds a round, and its models (about 100 MB) download the first time. `--no-text` skips it.
 - Looking up for the sun adds up to 7 seconds to rounds with blue sky. `--no-look-up` skips it.
 - In the first round the bot drags the view sideways once to measure Street View's camera, so it knows which way each pixel looks.
-- Walking on when unsure adds about 13 seconds to those rounds. `--no-walk` skips it. `--look-down` also tilts the camera down at the road and saves those views, for future use: nothing reads them yet.
+- Walking on when unsure adds about 13 seconds a walk to those rounds. `--no-walk` skips it. `--look-down` also tilts the camera down at the road and saves those views, for future use: nothing reads them yet.
 - Keep Street View's compass (right edge, above the zoom buttons) on screen. Without it the bot drags the view round instead, which doesn't cover every direction.
 - `calibrate` also snapshots the Continue button (`layout-continue.png`). If an advert covers the button, the bot waits up to 20 seconds, then stops rather than click the advert. Layouts from before this need `calibrate` again.
 

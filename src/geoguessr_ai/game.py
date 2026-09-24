@@ -92,11 +92,14 @@ class BotSettings:
     Nothing uses these views yet: a yellow-line detector on 23 live rounds mistook cars, walls
     and grass for paint as often as it found lines, and road numbers written on the road are
     too distorted to read."""
-    walk_below: float = 1500.0
+    walk_below: float = 1750.0
     """When the model expects fewer points than this, walk on along the road and look round again
-    before guessing, as players do when a place gives nothing away (0 = never). On 104 saved
-    rounds it expected under 1,500 in about a third, which really scored 1,560 on average
-    against 2,366 for the rest."""
+    before guessing, as players do when a place gives nothing away (0 = never). On 128 held-out
+    rounds that walked, the second look was worth +221 points (give or take 88): +232 where the
+    model had expected 1,250 to 1,750 before walking, but +10 above 1,750."""
+    walk_again_below: float = 1000.0
+    """Still expecting fewer points than this after walking on, walk on once more. The least sure
+    rounds gained the most from the first walk (+331 to +381 below 1,250)."""
     walk_steps: int = 5
     """Presses of the Up key when walking on: Street View moves about 10 metres each."""
     step_wait: float = 0.8
@@ -209,13 +212,17 @@ class OpenGuessrBot:
         look = self.look_around()
         evidence, lines = self.notice(look)
         guess = self.predictor.predict(look.views, evidence)
-        walked = not s.dry_run and guess.expected_score < s.walk_below
-        if walked:
-            print(f"  unsure (~{guess.expected_score:,.0f} points): walking on to look again")
+        sure = [guess.expected_score]  # after each look, saved to judge walking by later
+        for below in () if s.dry_run else (s.walk_below, s.walk_again_below):
+            if guess.expected_score >= below:
+                break
+            again = " again" if len(sure) > 1 else ""
+            print(f"  unsure (~{guess.expected_score:,.0f} points): walking on to look{again}")
             self._walk()
             look.extend(self.look_around())
             evidence, lines = self.notice(look)
             guess = self.predictor.predict(look.views, evidence)
+            sure.append(guess.expected_score)
         for note in evidence.notes:
             print(f"  clue: {note}")
         print(
@@ -230,7 +237,7 @@ class OpenGuessrBot:
         folder = None
         if run_dir is not None:
             folder = run_dir / f"round_{number:02d}"
-            self._save_round(folder, look, lines, evidence, guess, placement, walked, self.camera)
+            self._save_round(folder, look, lines, evidence, guess, placement, sure, self.camera)
 
         self.controls.sleep(0.4)
         self.controls.click(self.layout.guess_button)
@@ -488,7 +495,7 @@ class OpenGuessrBot:
         evidence: Evidence,
         guess: Guess,
         placement: Placement,
-        walked: bool = False,
+        sure: Sequence[float] = (),
         camera: Camera | None = None,
     ) -> None:
         folder.mkdir(parents=True, exist_ok=True)
@@ -509,7 +516,9 @@ class OpenGuessrBot:
             "up_headings": look.up_headings,
             "up_pitches": look.up_pitches,
             "camera": None if camera is None else asdict(camera),
-            "walked": walked,
+            "walked": len(sure) > 1,
+            "walks": max(len(sure) - 1, 0),
+            "expected_each_look": list(sure),
             "text": [asdict(line) for line in lines],
             "clues": evidence.notes,
             "projection": asdict(placement.projection),

@@ -273,12 +273,34 @@ def test_walks_on_and_looks_again_when_unsure(tmp_path):
     assert len(bot.signs.scenes) == 4 + 8
     saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
     assert saved["walked"] is True and len(saved["headings"]) == 8
+    assert saved["walks"] == 1 and saved["expected_each_look"] == [900.0, 3100.0]
+
+
+@pytest.mark.parametrize(
+    "expected,looks",
+    [
+        ((600.0, 800.0, 2000.0), 3),  # still very unsure after walking: walks on once more
+        ((600.0, 800.0, 700.0, 650.0), 3),  # but not a third time
+        ((1400.0, 1200.0), 2),  # unsure, but not very unsure after walking
+    ],
+)
+def test_walks_on_once_more_when_still_very_unsure(tmp_path, expected, looks):
+    controls, predictor = FakeControls(), FakePredictor(expected=expected)
+    settings = BotSettings(rounds=1, record_answers=False, debug_dir=tmp_path)
+
+    OpenGuessrBot(LAYOUT, predictor, settings, FakeScreen(), controls).play()
+
+    assert predictor.view_counts == [4 * n for n in range(1, looks + 1)]
+    assert controls.keys == ["up"] * settings.walk_steps * (looks - 1)
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    assert saved["walks"] == looks - 1 and saved["expected_each_look"] == list(expected[:looks])
 
 
 def test_sure_rounds_and_dry_runs_dont_walk():
     for settings, expected in (
-        (BotSettings(rounds=1, record_answers=False, debug_dir=None), 1600.0),
+        (BotSettings(rounds=1, record_answers=False, debug_dir=None), 1800.0),
         (BotSettings(rounds=1, dry_run=True, debug_dir=None), 900.0),
+        (BotSettings(rounds=1, record_answers=False, walk_below=0.0, debug_dir=None), 600.0),
     ):
         controls = FakeControls()
         OpenGuessrBot(LAYOUT, FakePredictor((expected,)), settings, FakeScreen(), controls).play()

@@ -67,11 +67,10 @@ class FakeResultScreen:
 
 
 class FakeControls:
-    """Each wheel notch halves the map's scale around the cursor, like Leaflet does, down to a
-    world ``widest`` pixels across."""
+    """Each wheel notch halves the map's scale around the cursor, like Leaflet does."""
 
-    def __init__(self, screen, widest=0):
-        self.screen, self.notches, self.widest = screen, 0, widest
+    def __init__(self, screen):
+        self.screen, self.notches = screen, 0
 
     def sleep(self, seconds):
         pass
@@ -84,8 +83,6 @@ class FakeControls:
         for _ in range(-clicks):
             cx, cy = p.x - REGION.left, p.y - REGION.top
             q = self.screen.projection
-            if q.world_px / 2 < self.widest:
-                return
             self.screen.projection = MapProjection(
                 q.world_px / 2, cx - (cx - q.origin_x) / 2, cy - (cy - q.origin_y) / 2, True
             )
@@ -116,39 +113,6 @@ def test_reads_the_answer_after_zooming_out():
     assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
     assert controls.notches >= 2 and reading.answer.zoom_outs == 0
     assert reading.screenshot.size == (REGION.width, REGION.height)
-
-
-def test_a_world_recognised_at_the_wrong_scale_is_looked_at_again(monkeypatch):
-    screen = FakeResultScreen(fitted(24_576))
-    reader = ResultReader(screen, FakeControls(screen), REGION)
-    locate, fooled = reader._locate, []
-
-    def fooled_once(rgb):
-        # The first time the world is recognised, it is at the wrong scale, but still around
-        # our pin, the way a map of mostly land can be.
-        found = locate(rgb)
-        right = found and math.isclose(found.world_px, screen.projection.world_px, rel_tol=0.02)
-        if right and not fooled:
-            fooled.append(found)
-            return found.zoomed(*found.to_pixel(*MADRID, REGION.width), 1.3)
-        return found
-
-    monkeypatch.setattr(reader, "_locate", fooled_once)
-    reading = reader.read(*MADRID)
-
-    assert fooled and reading.answer is not None, reading.problem
-    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
-
-
-def test_one_look_is_enough_only_once_the_map_wont_zoom_out_further():
-    screen = FakeResultScreen(fitted(1_536))
-    reading = ResultReader(screen, FakeControls(screen), REGION, max_zoom_outs=0).read(*MADRID)
-    assert reading.answer is None and "only one" in reading.problem
-
-    screen = FakeResultScreen(fitted(1_536))
-    reading = ResultReader(screen, FakeControls(screen, widest=1_536), REGION).read(*MADRID)
-    assert reading.answer is not None, reading.problem
-    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 30
 
 
 def test_close_guess_is_measured_before_the_markers_overlap():

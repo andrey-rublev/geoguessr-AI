@@ -126,7 +126,7 @@ MATCH_WIDTH = 960
 WHOLE_STEP = 0.25
 """A zoom step the markers measure within this many halvings of a whole number is taken as
 whole. Further off, it is the notch that reached the map's widest view, which went 0.62 of a
-halving: counted as one, it put 26 answers 1.3 times too far from our pin, one near
+halving: counted as one, it put 25 answers 1.3 times too far from our pin, one near
 Bucharest in Turkey."""
 
 

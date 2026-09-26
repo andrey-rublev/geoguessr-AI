@@ -1,200 +1,85 @@
 # geoguessr-AI
 
-A self-trained geolocation AI that plays [OpenGuessr](https://openguessr.com) by watching your screen and controlling your mouse.
+A self-trained geolocation AI that plays [OpenGuessr](https://openguessr.com) by watching your screen and controlling your mouse. It only uses what's on screen, never the page's code.
 
 ## How it works
 
-1. **Look:** presses Street View's compass to face north, then turns 90° at a time to capture north, east, south and west, pressing again if a turn didn't happen, and waiting for each view to load: Street View shows a blur until its tiles arrive, and a view left black or blurred isn't shown to the model or learned from. If the sky is clear it then tilts up and looks round for the sun, which a level view seldom shows. If the model is unsure after that (it expects under 1,750 points), the bot walks about 50 m on along the road and looks round again, as players do when a place gives nothing away, and once more if it is still very unsure (under 1,000). On 128 held-out rounds that walked, the second look was worth +221 points a round (give or take 88), but nothing where the model had expected over 1,750. The second walk is newer: on the first 12 held-out rounds that took it, +146 (give or take 148).
-2. **Read:** reads signs, and road names also as if looking down on the road, where they come out straight, and looks for the sun.
-3. **Guess:** a frozen CLIP image encoder plus a small classifier you train ranks regions of the world, then GeoGuessr knowledge reweighs them (see [What it knows](#what-it-knows)).
-4. **Place:** finds the world on the minimap by its coastlines, drags the map if the guess is off screen, zooms in, clicks, and checks the pin landed.
-5. **Learn** (`learn` only): reads the real location off the result screen, then retrains on your rounds.
+1. **Look:** faces north with Street View's compass and captures north, east, south and west, waiting for each view to finish loading. Under a clear sky it tilts up to find the sun. If the model is unsure (it expects under 1,750 points) it walks about 50 m on and looks again, and once more if still under 1,000.
+2. **Read:** reads signs and road names, also from above, where text painted on the road comes out straight.
+3. **Guess:** a frozen CLIP image encoder plus a small classifier you train ranks regions of the world, and clues from signs and the sun reweigh them.
+4. **Place:** finds the world on the minimap by its coastlines, zooms in and clicks.
+5. **Learn** (`learn` only): reads the real location off the result screen and retrains on your rounds.
 
-It only uses what's on screen. It never reads the page's code.
+## Results
+
+| Test | Mean score (of 5,000) |
+| --- | --- |
+| OSV-5M test photos, trained on 4 shards | 2,496 |
+| 765 held-out game rounds, images only | 3,337 |
+| Same rounds, with clues | 3,419 |
+| Latest 500 live rounds | 3,420 (country right 70%) |
 
 ## Setup (Windows PowerShell)
 
-First time only:
-
 ```powershell
-cd C:\path\to\geoguessr-AI
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 ```
 
-Every time you open a new terminal, enter the venv:
-
-```powershell
-cd C:\path\to\geoguessr-AI
-.\.venv\Scripts\Activate.ps1
-```
-
-Your prompt now starts with `(.venv)`. Type `deactivate` to leave.
-
-If activation fails with "running scripts is disabled", run this once, then activate again:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-Or skip activating and call the venv's copy directly:
-
-```powershell
-.\.venv\Scripts\geoguessr-ai.exe play --dry-run
-```
+Activate the venv in every new terminal. If activation says scripts are disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
 
 ## Train
 
-The training data is [OpenStreetView-5M](https://huggingface.co/datasets/osv5m/osv5m): about 5M geotagged street photos. It comes in **shards**, zip files of about 50k photos each, and any single shard covers the whole world.
+The training data is [OpenStreetView-5M](https://huggingface.co/datasets/osv5m/osv5m): about 5M geotagged street photos in shards of about 50k, each covering the whole world.
 
 ```powershell
-geoguessr-ai download --shards 0     # labels + one shard (~5.4 GB)
-geoguessr-ai embed --shards 0        # photos -> CLIP features (slow step, ~20 min per shard on CPU)
-geoguessr-ai train                   # minutes; saves models/geoguessr.pt
-```
-
-Measure it on the separate test photos:
-
-```powershell
-geoguessr-ai download --split test --shards 4
+geoguessr-ai download --shards 0                  # labels + one shard (~5.4 GB)
+geoguessr-ai embed --shards 0                     # photos -> CLIP features (~20 min a shard on CPU)
+geoguessr-ai train                                # saves models/geoguessr.pt
+geoguessr-ai download --split test --shards 4     # test photos
 geoguessr-ai embed --split test --shards 4
 geoguessr-ai evaluate --embeddings data/embeddings/openai__clip-vit-base-patch32/osv5m-test-04.npz
 ```
 
-Results on the test photos:
-
-| Training data | Mean score (out of 5,000) | Median miss | Within 750 km |
-| --- | --- | --- | --- |
-| 1 shard (~50k photos) | 2,238 | 1,129 km | 42% |
-| 4 shards (~200k photos) | 2,496 | 823 km | 49% |
-
-### Train further
-
-1. Add more shards. There are 98, each about 2.5 GB:
-
-   ```powershell
-   geoguessr-ai download --shards 4 5 6 7
-   geoguessr-ai embed --shards 4 5 6 7
-   ```
-
-2. Retrain on everything embedded so far (test photos are skipped automatically):
-
-   ```powershell
-   geoguessr-ai train --out models/geoguessr-new.pt
-   ```
-
-3. Score it, and keep it only if the mean score is higher than before:
-
-   ```powershell
-   geoguessr-ai evaluate --embeddings data/embeddings/openai__clip-vit-base-patch32/osv5m-test-04.npz --model models/geoguessr-new.pt
-   ```
-
-4. If it's better, make it the default model:
-
-   ```powershell
-   Copy-Item models/geoguessr-new.pt models/geoguessr.pt
-   ```
-
-Other ways to improve it:
-
-- **More shards:** every shard is a random sample of the whole world (each has about 190 of 222 countries, in the same mix), so more shards mostly add photos of rare countries.
-- **Better encoder:** add `--backbone geolocal/StreetCLIP` to `embed`. It's much more accurate but a far bigger model: on a CPU expect many hours per shard, and slower rounds. You have to re-embed every shard with it.
-- **Reading signs at a larger size:** `python scripts/compare_ocr_sizes.py` reads your saved rounds at several sizes, showing what more it finds and how long each round takes. On 30 rounds, looking for text at full width (1,935 pixels) rather than 1,024 found text in one more round, but both clues it added were wrong, and reading took 4.9 seconds a round instead of 1.7.
-- **Checking the clues:** `python scripts/check_clues.py` scores the clues on your own rounds (see [What the clues are worth](#what-the-clues-are-worth)); rerun it after changing one. `python scripts/check_strengths.py` does the same for how hard the bot leans on what it knows.
-- **Your own photos:** `geoguessr-ai embed --images <folder> --labels <folder>/labels.csv`, where the CSV has `filename,latitude,longitude` columns.
-
-Once a shard is embedded, its zip in `data/osv5m/images/train/` can be deleted to free space.
+More shards help: 1 scored 2,238 on the test photos, 4 scored 2,496. Train to a new file with `--out`, evaluate it with `--model`, and copy it over `models/geoguessr.pt` if it's better. A shard's zip can be deleted once it's embedded.
 
 ## Play
 
 ```powershell
-geoguessr-ai calibrate           # once: point at the view, minimap, and buttons
-geoguessr-ai play --dry-run      # one round, no clicks
-geoguessr-ai play --rounds 10    # just play, as fast as it can
-geoguessr-ai learn --rounds 20   # play, read every answer, then retrain on your rounds
+geoguessr-ai calibrate            # once: point at the view, minimap and buttons
+geoguessr-ai play --dry-run       # one round, no clicks
+geoguessr-ai play --rounds 10     # just play
+geoguessr-ai learn --rounds 500   # play, read every answer, then retrain
 ```
 
-- `play` learns nothing. `learn` is slower: reading each answer zooms the result map out (5 to 20 seconds a round), and retraining takes a few minutes at the end.
-- Each round prints its clues and likeliest countries, like `clue: Portuguese: farmácia, rua` and `guess -23.550, -46.630 (BR 81%, PT 6%, AR 3%; driving on the right 97%)`.
-- Reading signs adds about 3 to 5 seconds a round, and its models (about 100 MB) download the first time. `--no-text` skips it.
-- Looking up for the sun adds up to 7 seconds to rounds with blue sky. `--no-look-up` skips it.
-- In the first round the bot drags the view sideways once to measure Street View's camera, so it knows which way each pixel looks.
-- Walking on when unsure adds about 13 seconds a walk to those rounds. `--no-walk` skips it. `--look-down` also tilts the camera down at the road and saves those views, for future use: nothing reads them yet.
-- Keep Street View's compass (right edge, above the zoom buttons) on screen. Without it the bot drags the view round instead, which doesn't cover every direction.
-- `calibrate` also snapshots the Continue button (`layout-continue.png`). If an advert covers the button, the bot waits up to 20 seconds, then stops rather than click the advert. Layouts from before this need `calibrate` again.
-
-**Stop:** press **F8**, or move the mouse into a screen corner. Re-run `calibrate` if you move the browser window.
-
-## What it knows
-
-| Clue | How it's used | Limits |
-| --- | --- | --- |
-| Street View coverage | Countries with no Google Street View (most of China, Central Asia, much of Africa and the Middle East) count for less; ones with only a little, less again | Leant on gently (`--coverage-strength 0.25`), since `learn` also learns where the game really sends you, which says the same thing from experience. |
-| Script | Korean, Japanese, Chinese, Cyrillic, Greek, Thai, Devanagari (Arabic too after `pip install python-bidi`) | Hebrew, Georgian, Khmer, Lao and several Indian scripts can't be read. Chinese characters count for Japan as much as anywhere: the reader picks out kanji shop names and no kana at all. |
-| Language | Telling letters (ł, ř, ğ, ã, ß) and street and shop words (rua, calle, straße, jalan, kinyozi) in about 40 languages, even read without accents (PRACA), cut off by the frame (DESCONT), shortened as on street signs (C., Tv., Rte., Jl.) or written onto the end of the name (Ivalontie, Eindstraat, Bárðardalsvegur) | English barely counts: it's on signs everywhere. |
-| Road names | Street View writes them flat on the road. Each view is also turned into a picture of the road from above, where they come out straight: in 6 of 40 saved rounds it read road names the level views missed, like Mazatlán-Culiacán and Gaspar Rodríguez de Francia | Only once the camera is measured. Road numbers painted on the road (A167, C-13) still can't be read. |
-| Road labels | How a country numbers and names its roads: `Co Rd 158`, `Range Rd 20`, `FM213`, `S Triple X Rd`, `14th St`, `Ulitsa`, `Marg`, `Cra. 71c`, `DW785`, `RP 51` | The compass points and numbered streets fit Canada as well as the US; a compass point after the name (`Park Rd N`) fits Britain too, and numbered streets the Philippines, Nigeria and Johannesburg. |
-| Towns | 46,000 town and city names (all over 15,000 people), in local scripts too (Москва, 東京): towns on a direction sign are usually near. A town named like a country or US state counts for it too (México, Virginia) | Names that are everyday words (Victoria, Corona), short (Lima), makes (TOYOTA), road words (Terrace) or found in more than 4 countries don't count, nor ones after a street or shop word (Rua São João, Tv. Pinheiro), a given name or a title (Alfredo Lobos, Gral. Pereira), or cut off a longer word nearby (edina beside Ledina). |
-| Domains, phone numbers, brands | `.com.br`, `+48`, Brazil's `99983-2915`, PEMEX, M-PESA, O Boticário (even run together as OBOTICARIO) | About 100 regional chains and 15 local phone formats. |
-| Prices | `R$ 9,99`, `25 zł`, `Ksh 100`, `Rp 15.000` | About 25 currencies, counting for less than road signs do: a tourist shop can price in euros. The euro and pound signs only narrow it to their regions. |
-| Speeds, postcodes, road numbers | `35 MPH`, `SW1A 1AA`, `01310-100`, `BR-116`, `I-95`, `DN1`, `SH58`, and Street View's highway labels by state or province (`US-90`, `NE-23`, `SK-29`), Mexico's federal shields (`México 175D`), national routes (`RN-17`) and Eswatini's main roads (`MR3`) | What a country's own road authority and post office write, so these count for the most of any clue. |
-| Sun | Its direction and height: low in the south means well north of the tropics, high in the north means south of them, overhead means the tropics | Only a whole, round sun glowing into open sky counts, not one cut off by the view's edge, behind a roof or in haze. On the 26 saved rounds where it was found it fitted the real latitude in 24, and it is worth more than any other clue. |
-| Driving side | Printed with each guess, from the countries the model favours | A separate detector scored worse on test photos (2,467 vs 2,500), since the model already gets it right 88% of the time, so it isn't counted twice. |
-
-Road line colours (yellow centre lines in the Americas, yellow edges in southern Africa and the Middle East) aren't used either: a detector for yellow paint found it on cars, walls and dry grass as often as on roads, in level views of 104 saved rounds and looking down in 23 live ones, and many rounds are on unmarked roads anyway. Bollards, poles and the Google car aren't looked for separately. The model only picks them up the way it learns anything else, from photos and your rounds.
-
-### What the clues are worth
-
-`python scripts/check_clues.py` replays your saved rounds: the model's own belief, then the same belief reweighed by the clues read from that round. Over 2,563 rounds played so far, a clue fitted the country the round was really in **790 times out of 826**, and on the 765 rounds the model was never trained on the clues are worth **+82 points a round** (give or take 19). The road numbers added last (US-90, SK-29, México 175D and the rest) fitted all 58 rounds they fired on and account for about 27 of those points, though they were found looking at every round, held-out ones too. The next 500 rounds were their real test, and they fitted 50 of the 52 they fired on.
-
-That precision is the number to watch, and it only tells the truth on rounds nobody has tuned against. Measured on rounds the guards were written for it looks like 98%; measured on the next thousand played it was 83%, and on the 500 after those fixes, 88%, then 90% on the 500 after that. Each new batch still finds its own misreadings.
-
-They used to be worth less than half: each clue left the countries it pointed away from 30 to 50% of their weight, which the model simply outvoted. Given how seldom a clue is wrong, they now count two to three times as sharply. Rounds the model already had right lose 150 to 600 points to this; badly wrong ones gain thousands.
-
-Sharper clues make a misread expensive, so the guards matter as much as the clues, and every one below was written for a miss that really happened:
-
-- Cyrillic and Greek need a word of four letters and one letter that couldn't be a misread Latin one, and Greek doesn't count beside Cyrillic at all: `со` read out of Francisco sent Mexico to North Macedonia, `по` out of a Spanish `no` sent Spain to Russia, and `ΣΥΠΕΡΜΑΡΚΕΤ` was Russian СУПЕРМАРКЕТ.
-- A dot with a space around it only joins a web address when the rest looks like one: `Ctra. de la Rabassa` is a road in Andorra, not a German `.de` domain.
-- A word that is the tail of a longer one read nearby is the same sign cut off: `alle` beside `Calle Benito Juárez` is Spanish, not a Danish allé.
-- Road numbers are looked for within a line, or a Turkish `811.SH` above a `247.Sk.` becomes the state highway SH 247. Seven Brazilian state codes are US ones too, so `MS-465` means Mississippi as readily as Mato Grosso do Sul.
-- A name with a road word on either side is a road, not a town: Rua São João, Lucas Paddock Rd, Monroe Lake.
-- An everyday word or name is never a cut-off sign word (`HOTEL` in Mongolia isn't Swahili hoteli), and a road ending that lost its accent must end the name (`LLANOGRANDE` in Colombia holds no Swedish gränd).
-
-Towns are the least reliable clue and still worth keeping: they fitted only 70 times in 110 (73 in 92 once people's names, country names and cut-off words stopped counting), yet dropping them costs 24 points a round (give or take 15). On the latest 500 they fitted 22 of 32, most misses being people's names on shops and streets (Campbell Transport, Evans, St Lawrence Cres), which no longer count. Precision isn't the thing to maximise — a clue that is wrong a third of the time still pays when being right moves the guess thousands of kilometres. The same goes the other way: `Strada Comunale` in Italy was read as Romanian, but letting strada be Italian cost a held-out Romanian round 557 points, since the game shows the word in Romania seven times to one. Italian roads are known by comunale, provinciale and statale instead.
-
-One clue was tried and dropped: a road name shortened the English way (`Sage Rd`) pointing to the countries that sign in English. It fired on 45 rounds and was worth +1 point a round, because Street View labels big roads in Kazakhstan and Mongolia in English too, and those misses cancelled the wins.
-
-### How hard to lean on what it knows
-
-`python scripts/check_strengths.py` measures the three settings that decide that, choosing them on half the held-out rounds and pricing them on the other half. All three keep wanting to be weaker. At 1,568 rounds they went from 1.0 to 0.6 (dividing out the training set's bias), 0.5 (the game's own prior) and 0.25 (Street View coverage), worth about +60 points a round. At 2,066 the training set's bias wanted dividing out not at all and the game's prior only at 0.25, worth another **+96 points a round** (give or take 38) on the half that only checked; the previous model shows the same slope on the same rounds. Coverage matters least because the prior learned from played rounds says the same thing from experience. Rerun it after a lot more training: what suits the model moves as the model gets better.
-
-Measured on the same held-out halves and left alone, since none carried over from the half that chose it to the half that checked:
-
-- Clues counting more or less sharply, kind by kind: the choosing half barely moved, and its pick scored −19 (give or take 14) on the other.
-- A temperature on the model's belief, or averaging its crops' probabilities instead of their logarithms.
-- The played rounds that look most alike, voting for where they were: +30 where chosen, −57 to +11 where checked. The model has learned them already.
-- CLIP's own idea of the country, from prompts like "a Street View photo taken in Kenya" (`scripts/try_zero_shot_countries.py`): it names the country 20% of the time, and mixing it in scored −10 (give or take 25).
-
-On 83 earlier rounds, pins used to land at the minimap's edge whenever the guess was off screen (Japan, the US west coast, Australia). Placing them where the model meant raised the mean score from 2,084 to 2,286; on the 1,680 rounds since, the pin has landed a median of 1 km from where the model meant, and never more than 3.
+- **Stop:** press **F8**, or move the mouse into a screen corner. Re-run `calibrate` if you move the browser window.
+- Keep Street View's compass on screen, or the bot has to drag the view round instead.
+- Per round: reading signs takes 3 to 5 seconds (`--no-text`), looking up for the sun up to 7 (`--no-look-up`), each walk about 13 (`--no-walk`), and reading the answer in `learn` 5 to 20.
+- If an advert covers the Continue button, the bot waits up to 20 seconds, then stops rather than click the advert.
 
 ## Learn from your rounds
 
-`learn` saves every round in `runs/` with the real location read off the result screen. These are real game images, unlike OSV-5M's phone and dashcam photos. After playing it embeds the new rounds, retrains with them in up to 15% of each batch, and learns where the game tends to send you. More isn't better: at 2,066 rounds, 30% and 50% both scored worse on held-out rounds (3,336 and 3,339 against 3,398 on the half that checked), since the model already learns the rounds it trains on far better than new ones (4,798 against about 3,400). It switches to the retrained model only if that scores at least as well on the 30% of rounds held out for testing, and keeps the old one as `models/geoguessr-previous.pt`. `learn --no-train` only collects rounds.
+`learn` saves every round in `runs/` with the real location, then retrains with your rounds making up 15% of each batch (30% and 50% scored worse). It switches to the new model only if it scores at least as well on the 30% of rounds held out for testing, and keeps the old one as `models/geoguessr-previous.pt`. The last 500 rounds added 53 points on held-out rounds.
 
-Answers are checked before they're saved, but 25 of the first 2,474 were still wrong, each 1.3 times too far from the pin: the zoom-out notch that reaches the result map's widest view goes only 0.62 of the way, and was counted as a whole one. Checked against each round's first result screen, where the map sits at a whole zoom level, they were corrected (the misread answer is kept in `round.json` as `answer_misread`), and the reader now measures that notch. Several clues that had seemed to misfire were right all along: Catalan *carrer* in a round saved in France, Romanian *strada* in one saved in Turkey.
+Training uses a quarter of the CPU's threads and rests between stretches, since running flat out crashed a laptop at 97 to 100 °C. `--threads` and `--rest 0` change that. Training cut short carries on from its last finished epoch.
 
-Training uses a quarter of the CPU's threads and pauses as long as each stretch of work took, so it takes about twice as long as it could. Flat out, one laptop's CPU sat at 97 to 100 °C and the laptop went down mid-training four times with a fatal hardware error; this way it ran at 72 to 82 °C for over half an hour without trouble. Fewer threads alone didn't cool it, since the cores left boost harder. `--threads` and `--rest` (on `train` and `learn`) change it, `--rest 0` for flat out. If training is cut short anyway, it carries on from its last finished epoch when run again, and nothing else is lost: rounds, embeddings and models are flushed to disk before they replace the old file.
+## What it knows
 
-The same steps by hand:
+| Clue | Examples |
+| --- | --- |
+| Script | Korean, Japanese, Chinese, Cyrillic, Greek, Thai, Devanagari |
+| Language | Telling letters (ł, ř, ğ, ã, ß) and street and shop words in about 40 languages (rua, calle, straße, jalan) |
+| Road labels and numbers | `Co Rd 158`, `14th St`, `BR-116`, `I-95`, `US-90`, `SK-29`, `México 175D`, `RN-17` |
+| Speeds and postcodes | `35 MPH`, `SW1A 1AA`, `01310-100` |
+| Towns | 46,000 towns of over 15,000 people, but not everyday words, surnames or street names |
+| Domains, phones, brands, prices | `.com.br`, `+48`, PEMEX, `R$ 9,99` |
+| Sun | Its direction and height narrow down the latitude |
+| Street View coverage | Countries with little or none count for less |
 
-```powershell
-geoguessr-ai embed --rounds
-geoguessr-ai train --out models/geoguessr-rounds.pt
-geoguessr-ai evaluate --rounds --model models/geoguessr-rounds.pt
-```
+On rounds nobody tuned them against, clues fit the real country about 90% of the time, and they add **82 points a round** on held-out rounds. `python scripts/check_clues.py` and `python scripts/check_strengths.py` re-measure them on your rounds.
 
-Scores on held-out rounds are noisy: trust a difference bigger than about twice `mean_score_stderr`, which takes a few hundred rounds.
+Tried and dropped: road line colours, a separate driving-side detector, CLIP's own guess of the country, votes from similar past rounds, and reading signs at full width.
 
 ## Commands
 
@@ -203,7 +88,7 @@ Scores on held-out rounds are noisy: trust a difference bigger than about twice 
 | `download` | Download dataset shards |
 | `embed` | Turn photos into features |
 | `train` | Train the model |
-| `evaluate` | Score a model on held-out photos |
+| `evaluate` | Score a model on held-out photos or rounds |
 | `predict` | Guess where image files were taken |
 | `calibrate` | Record where the game UI is on screen |
 | `play` | Play OpenGuessr |

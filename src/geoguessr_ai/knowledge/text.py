@@ -91,7 +91,7 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "Portuguese",
         "ãõ",
         "rua,avenida,estrada,rodovia,travessa,praça,largo,alameda,saída,proibido,farmácia,"
-        "padaria,loja,aluga-se,vende-se,oficina,correios,prefeitura,freguesia,desconto,promoção,"
+        "padaria,loja,aluga-se,vende-se,vende,oficina,correios,prefeitura,freguesia,desconto,promoção,"
         "aluguel,lanchonete,borracharia,açougue,sorveteria,mercearia,drogaria",
     ),
     "es": (
@@ -100,7 +100,9 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "calle,avenida,carretera,camino,paseo,calzada,carrera,jirón,pasaje,salida,prohibido,"
         "farmacia,panadería,tienda,ferretería,alquiler,gasolinera,municipalidad,ayuntamiento,"
         "colonia,ruta,oficina,se vende,se renta,descuento,vulcanizadora,llantera,abarrotes,"
-        "tortillería,carnicería,papelería,refaccionaria,licorería,cerrajería,bulevar",
+        "tortillería,carnicería,papelería,refaccionaria,licorería,cerrajería,bulevar,vende,"
+        # Italian never writes Via with an accent, nor as the DOBLE VIA of two-way roads.
+        "vía,doble vía",
     ),
     "fr": (
         "French",
@@ -111,7 +113,7 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
     "it": (
         "Italian",
         "",
-        "via,viale,piazza,corso,vicolo,uscita,vietato,farmacia,vendesi,affittasi,comune,"
+        "via,viale,piazza,corso,vicolo,uscita,vietato,farmacia,vendesi,vende,affittasi,comune,"
         # Italy calls roads strada too, but in the game it is Romania's word seven times to
         # one: better to know an Italian one by what it is, as in Strada Comunale.
         "comunale,provinciale,statale,località,tabacchi",
@@ -249,9 +251,11 @@ ABBREVIATIONS = {  # counted only when written with a dot, as on street signs
     "brgy": "tl",
     "av": "pt,es,fr,ca",
     "tv": "pt",
+    "estr": "pt",  # Estrada, on nine Brazilian and Portuguese rounds out of nine
     "rte": "fr",
     "c": "es",
     "cam": "es",
+    "ctra": "es,ca",  # Carretera, in Spain and Andorra
     "str": "de,ro",
     "ul": "pl,cs,sk,hr,sr,sl",  # ulica and ulice, all the way to the Adriatic
     "cd": "tr",
@@ -259,7 +263,7 @@ ABBREVIATIONS = {  # counted only when written with a dot, as on street signs
     "mah": "tr",
     "rr": "sq",
 }
-_AMBIGUOUS_DOMAINS = {"at", "be", "do", "go", "id", "in", "is", "it", "me", "my", "no", "so"}
+_AMBIGUOUS_DOMAINS = {"at", "be", "do", "go", "id", "in", "is", "it", "me", "my", "no", "so", "um"}
 _SECOND_LEVEL = {"com", "co", "org", "net", "gov", "gob", "gouv", "edu", "ac", "or", "ne", "go"}
 _WORD = re.compile(r"[^\W\d_]+(?:['’-][^\W\d_]+)*")
 _OWN_LETTERS = re.compile(r"[^\W\dA-Za-z_]+")
@@ -367,6 +371,8 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (r"\brp\s?\d{1,3}\b", "Argentine provincial route", ("AR",)),
     (r"\bcra\.?\s?\d{1,3}[a-z]?", "carrera", ("CO",)),
     (r"\bmarg\b", "marg", ("IN", "NP")),
+    (r"\b\d+\s?\.\s?(?:sk|sok|cd|cad)\b", "numbered Turkish street", ("TR",)),  # 1003. Sk.
+    (r"\bprovincial trunk\b|\bpth\s?\d", "Manitoba highway", ("CA",)),
     # Street View labels roads in Russia and Central Asia in Latin letters as well.
     (
         r"\b(?:ulitsa|shosse|prospekt|pereulok|proyezd|naberezhnaya)\b",
@@ -611,8 +617,9 @@ def _really_written_in(script: str, lines: Sequence[TextLine]) -> bool:
     Cyrillic-writing countries far more often, so ΣΥΠΕΡΜΑΡΚΕΤ was Russian СУПЕРМАРКЕТ.
     """
     lookalikes = LATIN_LOOKALIKES.get(script)
-    if lookalikes is None:
-        return True
+    if lookalikes is None:  # but one character over and over, like 田田田田田, is windows
+        written = [line.text for line in lines if line.script == script]
+        return any(len(set("".join(_OWN_LETTERS.findall(text)))) > 1 for text in written)
     if script == "greek" and any(line.script == "cyrillic" for line in lines):
         return False
     written = [line.text for line in lines if line.script == script]
@@ -675,7 +682,21 @@ def _language_signs(lines: Sequence[str]) -> dict[frozenset[str], set[str]]:
                 found.setdefault(languages, set()).add(token + "…")
             elif word.endswith(token):  # or the start, as in ravessa for Travessa
                 found.setdefault(languages, set()).add("…" + token)
-    tokens = set(_WORD.findall(text))
+    # Phrases and abbreviations first, and a phrase's words don't count again alone: the via of
+    # DOBLE VIA is Spanish, not Italian. Nor does an abbreviation in a run of initials: the c.
+    # of C.C.C.P. isn't Spanish.
+    rest = text
+    for phrase, languages in words.items():
+        if phrase.endswith("."):
+            pattern = rf"(?<!\w)(?<![^\W\d_]\.){re.escape(phrase)}(?!\w\.)"
+        elif " " in phrase:
+            pattern = rf"(?<!\w){re.escape(phrase)}(?!\w)"
+        else:
+            continue
+        if re.search(pattern, text):
+            found.setdefault(languages, set()).add(phrase)
+            rest = re.sub(pattern, " ", rest)
+    tokens = set(_WORD.findall(rest))
     endings = _endings()
     for token in tokens:
         # A word that is the tail of a longer one read elsewhere is the same sign with its
@@ -688,11 +709,6 @@ def _language_signs(lines: Sequence[str]) -> dict[frozenset[str], set[str]]:
         for ending, languages in endings.items():
             if _ends_road(token, ending):
                 found.setdefault(languages, set()).add("…" + ending)
-    for phrase, languages in words.items():
-        is_phrase, is_abbreviation = " " in phrase, phrase.endswith(".")
-        if (is_phrase or is_abbreviation) and re.search(rf"(?<!\w){re.escape(phrase)}", text):
-            if is_abbreviation or re.search(rf"{re.escape(phrase)}(?!\w)", text):
-                found.setdefault(languages, set()).add(phrase)
     return found
 
 
@@ -717,7 +733,7 @@ def _domains(text: str, *, web_only: bool = False) -> set[str]:
     for match in _DOMAIN.finditer(text):
         prefix, labels, tld = match.groups()
         names = labels.rstrip(".").split(".")
-        if tld not in tlds:
+        if tld not in tlds or not re.search(r"[a-z]", names[-1]):  # a Turkish 1003.Sk is a street
             continue
         clearly_web = bool(prefix) or names[-1] in _SECOND_LEVEL
         if clearly_web or (not web_only and tld not in _AMBIGUOUS_DOMAINS and len(names[-1]) >= 4):

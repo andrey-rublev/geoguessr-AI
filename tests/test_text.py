@@ -96,9 +96,27 @@ def test_a_short_road_ending_needs_a_name_before_it():
 
 def test_a_road_word_before_a_preposition_isnt_a_web_address():
     for words in ("Ctra. de la Rabassa", "Chem. de Montigny", "CONSTRL . la Cierva"):
-        assert not text_clues([TextLine(words, "latin", 0.9)]).notes, words
+        notes = text_clues([TextLine(words, "latin", 0.9)]).notes
+        assert not any("domain" in note for note in notes), words
     spread = [TextLine("www.", "latin", 0.9), TextLine("lojas.com.br", "latin", 0.9)]
     assert text_clues(spread).notes == ["web domain .br"]  # an address split across lines
+
+
+def test_via_with_an_accent_or_on_a_two_way_sign_is_spanish():
+    for text in ("Vía Ubaté-Lenguazaque", "DOBLE VIA"):  # in Colombia and Ecuador
+        clues = text_clues([TextLine(text, "latin", 0.95)])
+        assert ratio(clues, "CO", "IT") >= 3 and not any("Italian" in n for n in clues.notes), text
+    assert ratio(text_clues([TextLine("Via Mantegna", "latin", 0.98)]), "IT", "CO") >= 3
+    sale = text_clues([TextLine("Vende", "latin", 1.0), TextLine("C. Jardinera", "latin", 1.0)])
+    assert ratio(sale, "ES", "IT") >= 3  # not Italian vendesi or Portuguese vende-se, cut off
+
+
+def test_road_abbreviations_but_not_a_run_of_initials():
+    estrada = text_clues([TextLine("Estr. Alvino do Nascimento", "latin", 0.99)])
+    assert ratio(estrada, "BR", "ES") >= 3 and "Portuguese: estr." in estrada.notes
+    assert ratio(text_clues([TextLine("Ctra. de Burgos", "latin", 0.9)]), "ES", "BR") >= 3
+    soviet = text_clues([TextLine("C.C.C.P", "latin", 0.96)])  # СССР, not Spanish C. for Calle
+    assert not soviet.notes
 
 
 def test_state_letters_brazil_shares_with_the_united_states():
@@ -123,6 +141,10 @@ def test_a_short_misreading_isnt_a_script_and_greek_yields_to_cyrillic():
     assert text_clues([TextLine("Ευδόξου", "greek", 0.98)]).notes == ["Greek: Ευδόξου"]
 
 
+def test_one_character_over_and_over_is_windows_not_writing():
+    assert not text_clues([TextLine("田田田田田", "han", 0.89)]).notes  # in Maryland
+
+
 def test_ukrainian_letters_tell_ukraine_from_russia():
     clues = text_clues([TextLine("вулиця Київська", "cyrillic", 0.9)])
     assert ratio(clues, "UA", "RU") > 2 and ratio(clues, "RU", "FR") > 5
@@ -135,6 +157,7 @@ def test_web_domains_and_phone_codes():
     russia = text_clues([TextLine("тел. +7 (495) 123-45-67", "cyrillic", 0.9)])
     assert ratio(russia, "RU", "DE") >= 10 and ratio(russia, "KZ", "RU") == 1
     assert not text_clues([TextLine("St.No 5", "latin", 0.9)]).notes  # not a domain
+    assert text_clues([TextLine("C. Gral.Um", "latin", 0.82)]).notes == ["Spanish: c."]  # Urrutia
 
 
 def test_local_phone_numbers_without_a_country_code():
@@ -191,12 +214,15 @@ def test_prices_speeds_postcodes_and_road_numbers():
         ("SE-692", "ES", "PT"),  # near Seville, or Sergipe's
         ("SE-692", "BR", "AR"),
         ("MR3", "SZ", "ZA"),
+        ("1003.Sk", "TR", "SK"),  # the 1003rd sokak, not a Slovak web address
+        ("Provincial Trunk Hwy", "CA", "IT"),  # in Manitoba, not Italian provinciale cut off
     ):
         clues = text_clues([TextLine(text, "latin", 0.9)])
         assert ratio(clues, here, elsewhere) >= 3, text
     assert text_clues([TextLine("1500 km", "latin", 0.9)]).notes == []
     two_signs = [TextLine("811.SH", "latin", 0.9), TextLine("247.Sk.", "latin", 0.98)]
-    assert text_clues(two_signs).notes == ["Turkish: sk."]  # not the state highway SH 247
+    notes = text_clues(two_signs).notes  # not the state highway SH 247
+    assert notes == ["Turkish: sk.", "numbered Turkish street: 247.sk"]
     rp51 = text_clues([TextLine("RP51", "latin", 0.9)]).notes  # a road, not a rupiah price
     assert not any("rupiah" in note for note in rp51)
     brazil = text_clues([TextLine("RN-160", "latin", 0.9)])  # Rio Grande do Norte's, not a route

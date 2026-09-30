@@ -134,15 +134,41 @@ def test_the_notch_that_reaches_the_widest_view_counts_for_what_it_zoomed():
     assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
 
 
-def test_a_miscounted_zoom_is_caught_by_the_flag_on_the_recognised_map(monkeypatch):
+def test_a_miscounted_zoom_is_put_right_by_the_whole_zoom_levels(monkeypatch):
     reader = reader_recognising_only_the_widest_view()
     monkeypatch.setattr(reader, "_halvings_between", lambda *args: 1.0)  # the last was 0.62
+
+    reading = reader.read(*MADRID)
+
+    assert reading.answer is not None and reading.answer.zoom_outs == 0, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
+
+
+def test_zoom_steps_counted_far_wrong_are_caught_by_the_recognised_map(monkeypatch):
+    reader = reader_recognising_only_the_widest_view()
+    monkeypatch.setattr(reader, "_halvings_between", lambda *args: 2.0)
 
     reading = reader.read(*MADRID)
 
     # Read where the world was recognised, no zoom steps counted, if not as finely as further in.
     assert reading.answer is not None and reading.answer.zoom_outs == 4, reading.problem
     assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 30
+
+
+def test_reads_the_answer_off_a_map_recognised_a_few_pixels_out():
+    screen = FakeResultScreen(fitted(24_576))
+    reader = ResultReader(screen, FakeControls(screen), REGION)
+    locate = reader._locate
+
+    def a_little_out(rgb):  # the pin is still within reach of where we clicked
+        p = locate(rgb)
+        return p and MapProjection(p.world_px, p.origin_x + 7, p.origin_y, p.wraps, p.score)
+
+    reader._locate = a_little_out
+    reading = reader.read(*MADRID)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
 
 
 def test_close_guess_is_measured_before_the_markers_overlap():

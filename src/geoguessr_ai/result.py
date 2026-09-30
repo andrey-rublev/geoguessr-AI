@@ -7,11 +7,12 @@ pixel gives the answer. The view is usually zoomed in too far to recognise coast
 Every notch halves the map's scale, which the markers confirm as they draw together, so
 the flag can still be measured at the most zoomed-in level where it stands clear of the pin.
 The notch that reaches the map's widest view goes only part of the way, which the markers
-measure too.
+measure too, and the first view is always at a whole zoom level, which puts right a step
+counted wrongly.
 
 An answer is only returned after checks: the recognised map must put our pin where we
-clicked, and measurements from more zoomed-in levels must agree with the flag's place on it.
-When in doubt, the reader returns no answer rather than a wrong one.
+clicked, and measurements from more zoomed-in levels must agree with the flag's offset from
+our pin on it. When in doubt, the reader returns no answer rather than a wrong one.
 """
 
 from __future__ import annotations
@@ -128,6 +129,13 @@ WHOLE_STEP = 0.25
 whole. Further off, it is the notch that reached the map's widest view, which went 0.62 of a
 halving: counted as one, it put 25 answers 1.3 times too far from our pin, one near
 Bucharest in Turkey."""
+TILE = 256
+"""The world's width in pixels at zoom level 0 and 100% scale. The first result view is at a
+whole zoom level, so its world is this, at the markers' scale, times a power of two: 96% of
+the 2,474 answers read by 24 September put it within 0.005 of a halving of one."""
+WHOLE_ZOOM_SLACK = 0.1
+"""Halvings a first view may be off a whole zoom level before it is put on one. The markers'
+scale that the levels are reckoned from is measured to about 1% (1.243 for 1.25), or 0.01."""
 
 
 @dataclass(frozen=True)
@@ -227,6 +235,14 @@ def _km_per_px(world_px: float, lat: float) -> float:
 
 def _wrap_lon(lon: float) -> float:
     return (lon + 180.0) % 360.0 - 180.0
+
+
+def _whole_zoom(world_px: float, scale: float) -> float:
+    """The width of the world at the whole zoom level nearest ``world_px``, unless it is within
+    how well the markers' scale is measured of one already."""
+    levels = math.log2(world_px / (TILE * scale))
+    off = levels - round(levels)
+    return world_px if abs(off) <= WHOLE_ZOOM_SLACK else world_px / 2.0**off
 
 
 @dataclass
@@ -366,6 +382,8 @@ class ResultReader:
         last = levels[-1]
         h, w = last.rgb.shape[:2]
         mx, my = mercator_xy(lat, lon)
+        # Levels before the last are at whole zoom levels, whatever the steps counted to it.
+        first_world = _whole_zoom(projection.world_px * 2.0**last.halvings, self.scale)
         estimates = []  # (zoom_outs, lat, lon, km per pixel), most zoomed-in first
         for zoom_outs, level in enumerate(levels):
             pin, flag = level.pin, level.flag
@@ -377,26 +395,39 @@ class ResultReader:
             if not all(2 <= m.x < w - 2 and 2 <= m.y < h - 2 for m in (pin, flag)):
                 continue
             # The flag's offset from our pin, at this level's scale, starting from where we clicked.
-            world = projection.world_px * 2.0 ** (last.halvings - level.halvings)
+            world = (
+                projection.world_px if level is last else first_world / 2.0 ** round(level.halvings)
+            )
             y = min(max(my + (flag.y - pin.y) / world, 0.0), 1.0)
             a_lat, a_lon = inverse_mercator(mx + (flag.x - pin.x) / world, y)
             estimates.append((zoom_outs, a_lat, _wrap_lon(a_lon), _km_per_px(world, a_lat)))
-        on_map = None  # the flag's place on the recognised map, which counts no zoom steps
+        # Measurements further in rest on the zoom steps counted since, so a miscounted step moves
+        # them together. What counts none is the flag's offset from our pin on the recognised map,
+        # or, where the two overlap there, the flag's place on it, which is only as good as the
+        # map's fit: the pin had to be within as much of where we clicked.
+        offset = estimates[-1] if estimates and estimates[-1][0] == len(levels) - 1 else None
+        place = None
         if last.flag:
             a_lat, a_lon = projection.to_latlon(last.flag.x, last.flag.y)
             kmpp = _km_per_px(projection.world_px, a_lat)
-            on_map = (len(levels) - 1, a_lat, _wrap_lon(a_lon), kmpp)
-            estimates.append(on_map)
+            place = (len(levels) - 1, a_lat, _wrap_lon(a_lon), kmpp)
+            estimates.append(place)
         if not estimates:
             return None, "couldn't see the flag on the result map"
         if len(estimates) == 1:
             zoom_outs, a_lat, a_lon, _ = estimates[0]
             return Answer(a_lat, a_lon, zoom_outs), ""
-        # Measurements further in all rest on the zoom steps counted since, so a miscounted step
-        # moves them together, and only the flag's place on the recognised map can tell.
+
+        def agree(e, o) -> bool:
+            allowed = 3 * self.scale * max(e[3], o[3]) + PLACED_ERROR_KM
+            if place is e or place is o:  # as far off as the pin was let be, beside the flag
+                allowed += (4 + APART) * self.scale * place[3]
+            return haversine_km(e[1], e[2], o[1], o[2]) <= allowed
+
         for e in estimates:
-            for o in [on_map] if on_map else estimates:
-                allowed = 3 * self.scale * max(e[3], o[3]) + PLACED_ERROR_KM
-                if o is not e and haversine_km(e[1], e[2], o[1], o[2]) <= allowed:
-                    return Answer(e[1], e[2], e[0]), ""
+            judges = [place] if e is offset else [offset or place]
+            if not any(judges):  # the flag is gone from the recognised map: any two will do
+                judges = estimates
+            if any(o is not None and o is not e and agree(e, o) for o in judges):
+                return Answer(e[1], e[2], e[0]), ""
         return None, "the zoom levels disagree about where the flag is"

@@ -18,6 +18,7 @@ def test_ignores_everyday_words_short_names_and_names_after_street_words():
     assert places_in(["Hotel Victoria", "Main Street Parking"]) == {}
     assert places_in(["JEEVAN TOYOTA", "NW 191st Terrace"]) == {}  # a make and a road word
     assert places_in(["CAMPBELL TRANSPORT", "TATA HITACHI", "Reservoir Hill St"]) == {}
+    assert places_in(["Cypress Dr", "Old Homestead", "Queens Pinch", "Księgarnia Eureka"]) == {}
 
 
 def test_a_road_or_feature_word_after_a_name_makes_it_one():
@@ -34,18 +35,27 @@ def test_a_longer_name_found_hides_the_shorter_one_inside_it():
 
 
 def test_a_name_after_a_persons_name_or_title_is_theirs():
-    for street in ("Alfredo Lobos", "Pablo Zarate", "R. Antonio Pereira", "Gral. Pereira"):
+    for street in (
+        "Alfredo Lobos",
+        "Pablo Zarate",
+        "R. Antonio Pereira",
+        "Gral. Pereira",
+        "Aníbal Pinto",
+    ):
         assert places_in([street]) == {}, street
     assert places_in(["Zarate 12 km"]) == {"zarate": ("AR",)}
 
 
-def test_a_name_cut_off_the_front_of_a_longer_word_read_nearby_doesnt_count():
+def test_a_name_cut_off_a_longer_word_read_nearby_doesnt_count():
     assert places_in(["Ledina", "edina"]) == {}  # in Slovenia, not Edina in Minnesota
     assert places_in(["edina"]) == {"edina": ("US",)}
+    assert places_in(["Estr. Alvin–", "Estr. Alvino"]) == {}  # not Alvin in Texas, cut off
 
 
 def test_a_country_or_states_name_counts_for_it():
     assert places()["mexico"] == ("MX", "PH")  # not only Mexico in the Philippines
     assert places()["virginia"] == ("US", "ZA")
     assert places_in(["Trans-Labrador"]) == {"labrador": ("AU", "CA")}
+    assert places_in(["LA RIOJA"]) == {"la rioja": ("AR", "ES")}  # a Spanish region too
+    assert "CL" in places_in(["Chacabuco"])["chacabuco"]  # a battle every Chilean town names
     assert places_in(["Corona.", "Aplicativo de mobilidade urbana"]) == {}  # a beer, a word

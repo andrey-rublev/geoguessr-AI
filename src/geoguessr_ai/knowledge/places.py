@@ -61,6 +61,7 @@ EVERYDAY = set(
     corona divino duarte esquina federal independencia kawasaki lobos lopez porta prado urbana
     allende alvarado bayan bellevue campbell clifton evans hitachi johnston lawrence munich
     reservoir vernon villanueva
+    cypress encarnacion eureka homestead pinto provincial queens sherwood villagran
     """.split()
 )
 # Given names and the titles written before them. A place name straight after one is a person's,
@@ -68,7 +69,7 @@ EVERYDAY = set(
 PERSON_BEFORE = set(
     """
     jr sr sra dr dra gral gen cnel tte cap ing lic prof pdte pres don dona fray padre
-    agustin alberto alejandro alfonso alfredo alvaro ana andres angel antonio armando arturo
+    agustin alberto alejandro alfonso alfredo alvaro ana andres angel anibal antonio armando arturo
     beatriz benito bernardo carlos carolina catalina cesar clara cristobal daniel diego domingo
     eduardo elena eloy emilio enrique ernesto esteban eva federico felipe fernando francisco
     gabriel gonzalo gregorio guillermo gustavo hector hernan horacio hugo ignacio isabel jaime
@@ -81,16 +82,20 @@ PERSON_BEFORE = set(
 )
 # Place names that are also a country's or a US state's name: a sign saying Mexico means the
 # country or its capital far more often than Mexico in the Philippines, and Virginia Ely Rd is in
-# the United States, not South Africa. These count for that country as well.
+# the United States, not South Africa. Or a region's, or a battle's that streets across another
+# country are named after: La Rioja is in Spain too, and Chacabuco in every Chilean town. These
+# count for that country as well.
 NAMED_AFTER = {
     "arizona": "US",
     "belize": "BZ",
+    "chacabuco": "CL",
     "colombia": "CO",
     "colorado": "US",
     "costa rica": "CR",
     "jamaica": "JM",
     "jordan": "JO",
     "labrador": "CA",
+    "la rioja": "ES",
     "lebanon": "LB",
     "liberia": "LR",
     "mexico": "MX",
@@ -150,8 +155,8 @@ def places_in(
     """Place names in lines of text, with their countries, except straight after one of
     ``naming_words`` (as :func:`place_key`) or a person's name or title, or straight before a
     road word. A name inside a longer one found, like Rio Grande in Rio Grande do Sul, doesn't
-    count again, nor does one word that is the end of a longer one read elsewhere, which the
-    frame cut off: edina beside Ledina."""
+    count again, nor does one that is the end or the start of a longer word read elsewhere,
+    which the frame cut off: edina beside Ledina, or Alvin beside Estr. Alvino."""
     known = places()
     found = {}
     keyed = [place_key(line).split() for line in lines]
@@ -164,7 +169,9 @@ def places_in(
             if any(other != first and other.endswith(first) for other in every):
                 continue
             for end in range(start + 1, min(start + MAX_WORDS, len(words)) + 1):
-                name = " ".join(words[start:end])
+                name, last = " ".join(words[start:end]), words[end - 1]
+                if any(other != last and other.startswith(last) for other in every):
+                    continue
                 if name in known and not _road_follows(words, end):
                     found[name] = known[name]
         joined = "".join(words)

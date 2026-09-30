@@ -251,10 +251,12 @@ def cmd_learn(args: argparse.Namespace) -> None:
 
 
 def learn_from_rounds(args: argparse.Namespace, encoder) -> None:
-    """Embed new rounds, retrain, and switch to the retrained model unless it scores worse."""
+    """Embed new rounds, retrain, and switch to the retrained model, which guesses together
+    with the newest of the current one's, unless that scores worse."""
     import shutil
 
     from .model.evaluate import evaluate_rounds
+    from .model.head import Checkpoint, Ensemble
     from .model.rounds import ROUNDS_FILE, embed_rounds
     from .model.train import TrainConfig, resolve_embedding_files, train
 
@@ -276,6 +278,9 @@ def learn_from_rounds(args: argparse.Namespace, encoder) -> None:
     retrained = args.model.with_name(f"{args.model.stem}-retrained.pt")
     config = TrainConfig()
     train(photos, retrained, config, rounds_path=rounds_path, device=args.device, rest=args.rest)
+    # Models trained apart make different mistakes, so two guess better than either alone.
+    newest = Ensemble.load(args.model).members[0]
+    Ensemble([Checkpoint.load(retrained), newest]).save(retrained)
 
     if len(held_out):
         options = {

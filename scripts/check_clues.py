@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import torch
 
 from geoguessr_ai.geo import geoguessr_score, haversine_km
 from geoguessr_ai.knowledge.countries import country_at, country_codes
@@ -34,9 +33,8 @@ from geoguessr_ai.knowledge.text import TextLine, text_clues
 from geoguessr_ai.model.geocells import (
     DEFAULT_GAME_PRIOR_STRENGTH,
     DEFAULT_PRIOR_STRENGTH,
-    debias,
 )
-from geoguessr_ai.model.head import Checkpoint
+from geoguessr_ai.model.head import Ensemble
 from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings, is_test_round
 
 SUN_NOTE = re.compile(r"sun to the [\w-]+ \((\d+) deg\), (-?\d+) deg up")
@@ -63,8 +61,8 @@ def main() -> None:
         sys.exit(f"{args.embeddings} not found: run `geoguessr-ai embed --rounds` first")
 
     saved = saved_rounds(args.rounds)
-    checkpoint = Checkpoint.load(args.model)
-    cells, head = checkpoint.cells, checkpoint.head.eval()
+    model = Ensemble.load(args.model)
+    cells = model.cells
     embedded = RoundEmbeddings.load(args.embeddings)
     coverage_only = cell_weights(cells.centroids, None, DEFAULT_COVERAGE_STRENGTH)
     codes = country_codes()
@@ -80,14 +78,9 @@ def main() -> None:
         if info is None:
             continue
         where = embedded.groups == round_id
-        crops = torch.as_tensor(embedded.embeddings[where], dtype=torch.float32)
-        with torch.inference_mode():
-            log_probs = torch.log_softmax(head(crops), dim=1).mean(dim=0).cpu().numpy()
-        belief = debias(
-            log_probs,
-            checkpoint.log_prior,
+        belief = model.belief(
+            model.log_probs(embedded.embeddings[where]),
             DEFAULT_PRIOR_STRENGTH,
-            checkpoint.game_log_prior,
             DEFAULT_GAME_PRIOR_STRENGTH,
         )
         lat, lon = float(embedded.lat[where][0]), float(embedded.lon[where][0])

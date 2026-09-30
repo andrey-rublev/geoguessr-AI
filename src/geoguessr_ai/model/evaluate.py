@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from PIL import Image
 
@@ -11,10 +12,10 @@ from ..geo import geoguessr_score, haversine_km
 from ..knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
 from .backbone import pick_device
 from .geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
-from .head import Checkpoint
+from .head import Ensemble
 from .predictor import Guess, guess_from_embeddings
 from .rounds import DEFAULT_TEST_FRACTION, RoundEmbeddings
-from .train import evaluate, load_embeddings, summarize
+from .train import load_embeddings, summarize
 
 
 def evaluate_embeddings(
@@ -23,27 +24,20 @@ def evaluate_embeddings(
     device: str = "auto",
     prior_strength: float = DEFAULT_PRIOR_STRENGTH,
 ) -> dict[str, float]:
-    """Score a checkpoint on precomputed embeddings, e.g. the OSV-5M test split."""
-    checkpoint = Checkpoint.load(checkpoint_path)
+    """Score a model on precomputed embeddings, e.g. the OSV-5M test split, each a place."""
+    model = Ensemble.load(checkpoint_path)
     x, lat, lon, backbone = load_embeddings(embedding_files)
-    if backbone != checkpoint.backbone:
+    if backbone != model.backbone:
         raise ValueError(
-            f"Embeddings come from {backbone} but the model was trained on {checkpoint.backbone}"
+            f"Embeddings come from {backbone} but the model was trained on {model.backbone}"
         )
-    dev = pick_device(device)
-    return {
-        "places": len(x),
-        **evaluate(
-            checkpoint.head.to(dev),
-            checkpoint.cells,
-            x,
-            lat,
-            lon,
-            dev,
-            log_prior=checkpoint.log_prior,
-            prior_strength=prior_strength,
-        ),
-    }
+    model.to(pick_device(device))
+    guesses = []
+    for i in range(0, len(x), 1024):
+        probs = model.belief(model.log_probs(x[i : i + 1024], one_place=False), prior_strength)
+        guesses.extend(model.cells.best_guess(p)[:2] for p in probs)
+    g = np.array(guesses)
+    return {"places": len(x), **summarize(haversine_km(g[:, 0], g[:, 1], lat, lon))}
 
 
 def _row(group: str, lat: float, lon: float, guess: Guess) -> dict:
@@ -93,23 +87,23 @@ def evaluate_rounds(
     test_fraction: float = DEFAULT_TEST_FRACTION,
     coverage_strength: float = DEFAULT_COVERAGE_STRENGTH,
 ) -> tuple[dict[str, float], list[dict]]:
-    """Score a checkpoint on your held-out OpenGuessr rounds, views combined as in the game."""
-    checkpoint = Checkpoint.load(checkpoint_path)
+    """Score a model on your held-out OpenGuessr rounds, views combined as in the game."""
+    model = Ensemble.load(checkpoint_path)
     _, test = RoundEmbeddings.load(rounds_path).split(test_fraction)
-    if test.backbone != checkpoint.backbone:
+    if test.backbone != model.backbone:
         raise ValueError(
             f"{rounds_path} was embedded with {test.backbone}, "
-            f"but the model was trained on {checkpoint.backbone}"
+            f"but the model was trained on {model.backbone}"
         )
     if not len(test):
         raise ValueError(f"No rounds in {rounds_path} are held out for testing yet; play more")
-    checkpoint.head.to(pick_device(device))
+    model.to(pick_device(device))
 
     rows = []
     for round_id in test.round_ids:
         mask = test.groups == round_id
         guess = guess_from_embeddings(
-            checkpoint,
+            model,
             test.embeddings[mask],
             prior_strength,
             game_prior_strength,

@@ -20,7 +20,7 @@ import torch
 from geoguessr_ai.geo import geoguessr_score, haversine_km
 from geoguessr_ai.knowledge.countries import country_at, country_codes
 from geoguessr_ai.knowledge.evidence import Evidence
-from geoguessr_ai.model.head import Checkpoint
+from geoguessr_ai.model.head import Ensemble
 from geoguessr_ai.model.predictor import guess_from_embeddings
 from geoguessr_ai.model.rounds import RoundEmbeddings
 from geoguessr_ai.model.train import load_embeddings
@@ -70,7 +70,7 @@ def country_probs(crops: np.ndarray, prompts: np.ndarray) -> np.ndarray:
     return probs / probs.sum()
 
 
-def score(checkpoint: Checkpoint, places: list[Place], prompts: np.ndarray):
+def score(checkpoint: Ensemble, places: list[Place], prompts: np.ndarray):
     codes = country_codes()
     named, scores = 0, {weight: [] for weight in WEIGHTS}
     for crops, lat, lon in places:
@@ -83,7 +83,7 @@ def score(checkpoint: Checkpoint, places: list[Place], prompts: np.ndarray):
     return named / len(places), {weight: np.array(s) for weight, s in scores.items()}
 
 
-def report(title: str, places: list[Place], checkpoint: Checkpoint, prompts: np.ndarray) -> None:
+def report(title: str, places: list[Place], checkpoint: Ensemble, prompts: np.ndarray) -> None:
     named, scores = score(checkpoint, places, prompts)
     print(f"\n{title}: {len(places)} places. CLIP alone names the country for {named:.0%}.")
     for weight, s in scores.items():
@@ -101,7 +101,7 @@ def main() -> None:
     parser.add_argument("--places", type=int, default=2000, help="test photos to score")
     args = parser.parse_args()
 
-    checkpoint = Checkpoint.load(args.model)
+    checkpoint = Ensemble.load(args.model)
     prompts = country_prompts(checkpoint.backbone)
 
     x, lat, lon, backbone = load_embeddings([args.test])

@@ -1,4 +1,4 @@
-"""Run a trained checkpoint on screenshots."""
+"""Run a trained model on screenshots."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from ..knowledge.countries import country_codes
 from ..knowledge.evidence import DEFAULT_COVERAGE_STRENGTH, Evidence, cell_countries, cell_weights
 from ..knowledge.facts import per_country
 from .backbone import ImageEncoder, square_crops
-from .geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH, debias
-from .head import Checkpoint
+from .geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
+from .head import Checkpoint, Ensemble
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,7 @@ class Guess:
 
 @torch.inference_mode()
 def guess_from_embeddings(
-    checkpoint: Checkpoint,
+    model: Ensemble | Checkpoint,
     embeddings: torch.Tensor | np.ndarray,
     prior_strength: float = DEFAULT_PRIOR_STRENGTH,
     game_prior_strength: float = DEFAULT_GAME_PRIOR_STRENGTH,
@@ -46,18 +46,10 @@ def guess_from_embeddings(
     ``evidence`` (clues like the writing on signs) and Street View coverage, at
     ``coverage_strength`` (0 = ignore it), reweigh the model's geocells before choosing.
     """
-    head = checkpoint.head.eval()
-    x = torch.as_tensor(embeddings, dtype=torch.float32).to(next(head.parameters()).device)
-    # Each crop votes; summing log-probabilities rewards cells every view agrees on.
-    log_probs = torch.log_softmax(head(x), dim=1).mean(dim=0)
-    probs = debias(
-        log_probs.cpu().numpy(),
-        checkpoint.log_prior,
-        prior_strength,
-        checkpoint.game_log_prior,
-        game_prior_strength,
-    )
-    cells = checkpoint.cells
+    if isinstance(model, Checkpoint):
+        model = Ensemble([model])
+    probs = model.belief(model.log_probs(embeddings), prior_strength, game_prior_strength)
+    cells = model.cells
     probs = probs * cell_weights(cells.centroids, evidence, coverage_strength)
     probs /= probs.sum()
 
@@ -85,9 +77,9 @@ class GeoPredictor:
         self.prior_strength = prior_strength
         self.game_prior_strength = game_prior_strength
         self.coverage_strength = coverage_strength
-        self.checkpoint = Checkpoint.load(checkpoint_path)
-        self.encoder = ImageEncoder(self.checkpoint.backbone, device)
-        self.head = self.checkpoint.head.to(self.encoder.device).eval()
+        self.model = Ensemble.load(checkpoint_path)
+        self.encoder = ImageEncoder(self.model.backbone, device)
+        self.model.to(self.encoder.device)
 
     def predict(self, images: Sequence[Image.Image], evidence: Evidence | None = None) -> Guess:
         """Guess one location from several views of the same place."""
@@ -95,7 +87,7 @@ class GeoPredictor:
             raise ValueError("predict() needs at least one image")
         crops = [crop for image in images for crop in square_crops(image)]
         return guess_from_embeddings(
-            self.checkpoint,
+            self.model,
             self.encoder.encode(crops),
             self.prior_strength,
             self.game_prior_strength,

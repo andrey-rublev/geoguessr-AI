@@ -7,7 +7,7 @@ from geoguessr_ai.knowledge.countries import country_codes
 from geoguessr_ai.knowledge.evidence import Evidence
 from geoguessr_ai.model import predictor as predictor_module
 from geoguessr_ai.model.geocells import GeoCells
-from geoguessr_ai.model.head import Checkpoint, GeoHead
+from geoguessr_ai.model.head import Checkpoint, Ensemble, GeoHead
 
 CENTROIDS = np.array([(48.86, 2.35), (35.68, 139.69), (-33.87, 151.21)])
 
@@ -112,3 +112,31 @@ def test_predict_requires_images(tmp_path, monkeypatch):
     monkeypatch.setattr(predictor_module, "ImageEncoder", FakeEncoder)
     with pytest.raises(ValueError):
         predictor_module.GeoPredictor(path).predict([])
+
+
+def sure_of(cell: int, centroids: np.ndarray) -> Checkpoint:
+    head = GeoHead(embed_dim=8, n_cells=len(centroids), hidden=4)
+    with torch.no_grad():
+        for p in head.parameters():
+            p.zero_()
+        head.net[-1].bias[cell] = 9.0
+    return Checkpoint(head, GeoCells(centroids), "fake/backbone")
+
+
+def test_an_ensemble_averages_its_members_on_the_newest_ones_cells(tmp_path, monkeypatch):
+    paris = sure_of(0, CENTROIDS)
+    tokyo = sure_of(1, CENTROIDS + 0.3)  # cells refitted, a little elsewhere
+    path = tmp_path / "model.pt"
+    Ensemble([paris, tokyo]).save(path)
+    monkeypatch.setattr(predictor_module, "ImageEncoder", FakeEncoder)
+
+    guess = predictor_module.GeoPredictor(path).predict([Image.new("RGB", (200, 200))])
+
+    shares = {(round(lat), round(lon)): p for lat, lon, p in guess.top_cells}
+    assert shares[(49, 2)] == pytest.approx(0.5, abs=0.01)  # on the first member's cells
+    assert shares[(36, 140)] == pytest.approx(0.5, abs=0.01)
+    with pytest.raises(ValueError, match="Ensemble"):
+        Checkpoint.load(path)
+    single = tmp_path / "single.pt"
+    paris.save(single)
+    assert len(Ensemble.load(single).members) == 1  # a checkpoint on its own is an ensemble too

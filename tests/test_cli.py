@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 import torch
 from PIL import Image
@@ -8,7 +9,12 @@ from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
 from geoguessr_ai.knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
 from geoguessr_ai.mapcal import MapProjection
 from geoguessr_ai.model import evaluate, rounds, train
-from geoguessr_ai.model.geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
+from geoguessr_ai.model.geocells import (
+    DEFAULT_GAME_PRIOR_STRENGTH,
+    DEFAULT_PRIOR_STRENGTH,
+    GeoCells,
+)
+from geoguessr_ai.model.head import Checkpoint, Ensemble, GeoHead
 from geoguessr_ai.model.rounds import ROUNDS_FILE
 
 
@@ -67,12 +73,17 @@ def test_round_options():
     assert parser.parse_args(["train", "--threads", "2"]).threads == 2
 
 
+def trained(when: float) -> Checkpoint:
+    cells = GeoCells(np.array([(48.86, 2.35), (35.68, 139.69)]))
+    return Checkpoint(GeoHead(8, len(cells), hidden=4), cells, "clip", {"trained": when})
+
+
 @pytest.mark.parametrize("retrained_score,switched", [(2100.0, True), (1900.0, False)])
-def test_learn_switches_to_the_retrained_model_unless_it_scores_worse(
+def test_learn_switches_to_the_retrained_model_with_the_last_unless_they_score_worse(
     tmp_path, monkeypatch, retrained_score, switched
 ):
     model = tmp_path / "geoguessr.pt"
-    model.write_text("old")
+    trained(1.0).save(model)
     retrained = tmp_path / "geoguessr-retrained.pt"
 
     class Encoder:
@@ -88,7 +99,7 @@ def test_learn_switches_to_the_retrained_model_unless_it_scores_worse(
     monkeypatch.setattr(rounds, "embed_rounds", lambda encoder, root, out: Rounds())
     monkeypatch.setattr(train, "resolve_embedding_files", lambda patterns: ["photos.npz"])
     monkeypatch.setattr(
-        train, "train", lambda files, out, cfg, rounds_path, device, rest: out.write_text("new")
+        train, "train", lambda files, out, cfg, rounds_path, device, rest: trained(2.0).save(out)
     )
     scores = {model: 2000.0, retrained: retrained_score}
     monkeypatch.setattr(
@@ -105,9 +116,12 @@ def test_learn_switches_to_the_retrained_model_unless_it_scores_worse(
     finally:
         torch.set_num_threads(threads)
 
-    assert model.read_text() == ("new" if switched else "old")
+    def when(path):
+        return [member.metrics["trained"] for member in Ensemble.load(path).members]
+
+    assert when(model) == ([2.0, 1.0] if switched else [1.0])  # the new one with the last
     if switched:
-        assert (tmp_path / "geoguessr-previous.pt").read_text() == "old"
+        assert when(tmp_path / "geoguessr-previous.pt") == [1.0]
 
 
 def test_locate_map_command(tmp_path, capsys):

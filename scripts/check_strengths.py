@@ -25,7 +25,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import torch
 
 from geoguessr_ai.geo import geoguessr_score, haversine_km
 from geoguessr_ai.knowledge.evidence import (
@@ -38,9 +37,8 @@ from geoguessr_ai.knowledge.text import TextLine, text_clues
 from geoguessr_ai.model.geocells import (
     DEFAULT_GAME_PRIOR_STRENGTH,
     DEFAULT_PRIOR_STRENGTH,
-    debias,
 )
-from geoguessr_ai.model.head import Checkpoint
+from geoguessr_ai.model.head import Ensemble
 from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings, is_test_round
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -66,8 +64,8 @@ def main() -> None:
         sys.exit(f"{args.embeddings} not found: run `geoguessr-ai embed --rounds` first")
 
     saved = saved_rounds(args.rounds)
-    checkpoint = Checkpoint.load(args.model)
-    cells, head = checkpoint.cells, checkpoint.head.eval()
+    model = Ensemble.load(args.model)
+    cells = model.cells
     embedded = RoundEmbeddings.load(args.embeddings)
 
     played = []
@@ -76,9 +74,7 @@ def main() -> None:
         if info is None or not is_test_round(round_id):
             continue
         where = embedded.groups == round_id
-        crops = torch.as_tensor(embedded.embeddings[where], dtype=torch.float32)
-        with torch.inference_mode():
-            log_probs = torch.log_softmax(head(crops), dim=1).mean(dim=0).cpu().numpy()
+        log_probs = model.log_probs(embedded.embeddings[where])
         lines = [TextLine(t["text"], t["script"], t["score"]) for t in info.get("text", [])]
         clues = text_clues(lines) if lines else None
         evidence = Evidence(countries=None if clues is None else clues.likelihood)
@@ -107,7 +103,7 @@ def main() -> None:
             weights[cover] = {r[0]: cell_weights(cells.centroids, r[2], cover) for r in played}
         got = []
         for round_id, log_probs, _, lat, lon in group:
-            belief = debias(log_probs, checkpoint.log_prior, prior, checkpoint.game_log_prior, game)
+            belief = model.belief(log_probs, prior, game)
             odds = belief * weights[cover][round_id]
             guess = cells.best_guess(odds / odds.sum())
             got.append(float(geoguessr_score(haversine_km(guess[0], guess[1], lat, lon))))

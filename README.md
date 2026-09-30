@@ -11,8 +11,8 @@ It looks north, east, south and west (walking on when unsure), reads signs and f
 | Test | Mean score (of 5,000) |
 | --- | --- |
 | OSV-5M test photos | 2,496 |
-| Held-out game rounds, images only / with clues | 3,337 / 3,419 |
-| Latest 500 live rounds | 3,420 |
+| Held-out game rounds, images only / with clues | 3,414 / 3,502 |
+| Latest 425 live rounds | 3,450 |
 
 ## Setup (Windows PowerShell)
 
@@ -44,7 +44,7 @@ geoguessr-ai learn --rounds 500   # play, read every answer, then retrain
 
 - **Stop:** press **F8** or move the mouse into a screen corner.
 - Keep Street View's compass on screen, and re-run `calibrate` if you move the browser window.
-- `learn` switches to the retrained model only if it scores better on held-out rounds. Training uses a quarter of the CPU to stay cool (`--threads`, `--rest`).
+- `learn` pairs the retrained model with the last one (two trained apart guess better than either) and switches only if the pair scores better on held-out rounds. Training uses a quarter of the CPU to stay cool (`--threads`, `--rest`).
 
 Run `geoguessr-ai <command> --help` for options.
 

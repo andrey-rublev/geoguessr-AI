@@ -11,7 +11,7 @@ from test_sun import sky
 from geoguessr_ai import game as game_module
 from geoguessr_ai.buttons import button_region
 from geoguessr_ai.camera import Camera
-from geoguessr_ai.clock import timer_region
+from geoguessr_ai.clock import NOTICE_WIDTH, notice_region, timer_region
 from geoguessr_ai.config import Layout, Point, Region
 from geoguessr_ai.game import BotSettings, OpenGuessrBot
 from geoguessr_ai.knowledge.text import TextLine
@@ -167,7 +167,7 @@ class FakeSignReader:
     """Reads one Portuguese street sign among the scenes it is shown, and a road's name from
     above among ground views, which it's shown with a lower bar for finding text."""
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self.scenes, self.grounds = [], []
 
     def read(self, images, min_box_score=None):
@@ -530,8 +530,10 @@ class MultiplayerRoom(TurningStreetView):
     """A multiplayer room. The host starts a round ``lobby`` seconds in, and the next one
     ``results`` seconds after each ends, ``rounds`` in all. Each lasts ``length`` seconds, or
     until everyone has guessed: the others do ``others_guess`` seconds in, which in a ``duel``
-    cuts the time left to 15 seconds. The compass shows only during rounds, and every click,
-    look and second waited passes time."""
+    cuts the time left to 15 seconds and says so over Street View for ``notice`` seconds. The
+    compass shows only during rounds, and every click, look and second waited passes time."""
+
+    notice = 3.0
 
     def __init__(self, rounds=2, length=60.0, others_guess=20.0, duel=False, results=8.0):
         super().__init__()
@@ -563,7 +565,7 @@ class MultiplayerRoom(TurningStreetView):
         if self.phase != "round":
             return False
         if not self.others_in and self.t >= self.start + self.others_guess:
-            self.others_in = True
+            self.others_in, self.guessed_at = True, self.t
             if self.duel:
                 self.deadline = min(self.deadline, self.t + 15.0)
             return True
@@ -572,6 +574,13 @@ class MultiplayerRoom(TurningStreetView):
             self.phase, self.phase_ends = "results", self.t + self.results
             return True
         return False
+
+    def notice_text(self):
+        """What the game writes over the middle of Street View."""
+        shows = self.duel and self.phase == "round" and self.others_in
+        if shows and self.t < self.guessed_at + self.notice:
+            return "A player has guessed Time reduced to max. 15s"
+        return ""
 
     def timer_text(self):
         if self.phase != "round":
@@ -605,6 +614,8 @@ class MultiplayerRoom(TurningStreetView):
         self._pass(0.02)
         if region == timer_region(PARTY.timer):  # what it says is in timer_text
             return Image.new("RGB", (region.width, region.height), (50, 52, 60))
+        if region == notice_region(PARTY.view):  # and in notice_text
+            return Image.new("RGB", (region.width, region.height), (120, 140, 160))
         if region.left != PARTY.view.left and self.phase != "round":  # no compass
             return Image.new("RGB", (region.width, region.height), (90, 110, 70))
         return super().grab(region)
@@ -622,8 +633,8 @@ def party(monkeypatch):
 
     def bot_in(room, predictor=None, **settings):
         class TimerReadingSigns(FakeSignReader):
-            def read_line(self, image):
-                return room.timer_text()
+            def read_line(self, image, whole=True):
+                return room.notice_text() if image.width == NOTICE_WIDTH else room.timer_text()
 
         monkeypatch.setattr(game_module, "SignReader", TimerReadingSigns)
         monkeypatch.setattr(game_module, "ResultReader", PartyReader)
@@ -658,8 +669,9 @@ def test_hurries_when_little_time_is_left(party):
     assert predictor.view_counts == [1] and bot.signs.scenes == [] and room.keys == []
 
 
-def test_notices_the_timer_cut_short_when_another_player_guesses(party, capsys):
+def test_the_timer_shows_a_cut_whose_notice_was_missed(party, capsys):
     room = MultiplayerRoom(rounds=1, length=120.0, others_guess=9.0, duel=True)
+    room.notice = 0.0  # gone before it was seen, as while the map was open
     predictor = FakePredictor(expected=(1000.0,))  # unsure: would walk on, given time
     bot = party(room, predictor)
 
@@ -669,6 +681,19 @@ def test_notices_the_timer_cut_short_when_another_player_guesses(party, capsys):
     assert "116 s on the clock" in out and "timer was cut to 1" in out
     assert room.locked[0] is not None and room.locked[0] < 9 + 15
     assert bot.signs.scenes == [] and room.keys == []  # no time to read signs or walk on
+
+
+def test_stops_looking_round_as_soon_as_another_player_guesses(party, capsys):
+    room = MultiplayerRoom(rounds=1, length=100.0, others_guess=6.0, duel=True)
+    predictor = FakePredictor(expected=(1000.0,))  # unsure: would walk on, given time
+    bot = party(room, predictor)
+
+    bot.play()
+
+    out = capsys.readouterr().out
+    assert "another player guessed, leaving 1" in out  # seen while it said so, for 3 seconds
+    assert predictor.view_counts[0] < 4 and room.keys == []  # stopped looking, didn't walk
+    assert room.locked[0] is not None and room.locked[0] < 6 + 15
 
 
 def test_gives_up_a_round_whose_time_runs_out_and_plays_the_next(party, capsys):

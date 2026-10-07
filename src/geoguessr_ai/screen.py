@@ -41,6 +41,10 @@ class Screen:
         )
         return Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
 
+    def open_another(self) -> Screen:
+        """Another screen grabber, for another thread: each belongs to the one that opened it."""
+        return Screen()
+
     def virtual_desktop(self) -> Region:
         """The bounding box of all monitors."""
         mon = self._sct.monitors[0]

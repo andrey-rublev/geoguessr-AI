@@ -48,7 +48,11 @@ _RANGES = {
     "arabic": ((0x600, 0x6FF), (0x750, 0x77F), (0xFB50, 0xFDFF), (0xFE70, 0xFEFF)),
     "devanagari": ((0x900, 0x97F),),
 }
-_NOT_A_SIGN = re.compile(r"google|©|image capture|report a problem|keyboard shortcuts", re.I)
+_NOT_A_SIGN = re.compile(
+    r"google|©|image capture|report a problem|keyboard shortcuts"
+    r"|player has guessed|time reduced",  # what a multiplayer round says over Street View
+    re.I,
+)
 
 
 def script_of(char: str) -> str | None:
@@ -125,7 +129,10 @@ def _steep(corners: np.ndarray) -> bool:
 
 
 class SignReader:
-    def __init__(self, models: Sequence[str] | None = None, min_score: float = 0.8) -> None:
+    def __init__(
+        self, models: Sequence[str] | None = None, min_score: float = 0.8, threads: int = -1
+    ) -> None:
+        """``threads`` is how many CPU threads each model may use (-1 = as many as it likes)."""
         import importlib.util
 
         from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion, RapidOCR
@@ -146,6 +153,7 @@ class SignReader:
                     "Rec.lang_type": LangRec(model),
                     "Rec.model_type": ModelType("mobile"),
                     "Rec.ocr_version": OCRVersion("PP-OCRv5"),
+                    "EngineConfig.onnxruntime.intra_op_num_threads": threads,
                 }
             )
 
@@ -189,15 +197,19 @@ class SignReader:
         lines = (pick_reading(r, self.min_score) for r in per_line.values())
         return [line for line in lines if line and not _NOT_A_SIGN.search(line.text)]
 
-    def read_line(self, image: Image.Image) -> str:
+    def read_line(self, image: Image.Image, whole: bool = True) -> str:
         """What a small crop around one short line of text says, like a multiplayer round's
-        timer, in Latin letters and digits: everything found in it, or else the whole crop
-        read as one line. Unlike :meth:`read`, short runs of digits count."""
+        timer, in Latin letters and digits: everything found in it, or else, with ``whole``,
+        the whole crop read as one line. Unlike :meth:`read`, short runs of digits count."""
         from rapidocr.ch_ppocr_rec import TextRecInput
         from rapidocr.utils.process_img import get_rotate_crop_image
 
         bgr = _bgr(image)
-        crops = [get_rotate_crop_image(bgr, box) for box in self._find_lines(bgr, 0.5)] or [bgr]
+        crops = [get_rotate_crop_image(bgr, box) for box in self._find_lines(bgr, 0.5)]
+        if not crops and whole:
+            crops = [bgr]
+        if not crops:
+            return ""
         recognise = self._recognisers.get("latin") or next(iter(self._recognisers.values()))
         result = recognise(TextRecInput(img=[_pad_width(crop) for crop in crops]))
         return " ".join(str(text) for text in result.txts or ())

@@ -1,4 +1,5 @@
 import math
+import time
 
 from PIL import Image
 
@@ -56,3 +57,39 @@ def test_a_timer_it_cant_read_forgets_nothing():
     timer.t = 5.0
     assert clock.read() is None and clock.left() == 37.0
     assert not RoundClock(timer, None, None, lambda: 0.0).readable
+
+
+def test_watches_for_other_players_guesses_in_the_background_during_rounds():
+    from contextlib import contextmanager
+
+    from geoguessr_ai.clock import GuessWatch, parse_notice
+    from geoguessr_ai.config import Region
+
+    class Screen:
+        def grab(self, region):
+            return Image.new("RGB", (region.width, region.height))
+
+    @contextmanager
+    def open_screen():  # its own, as the thread needs
+        yield Screen()
+
+    looks = []
+
+    def read_text(image):
+        looks.append(image.size)
+        return "A player has guessed Time reduced to max. 15s" if len(looks) >= 3 else ""
+
+    watch = GuessWatch(Region(0, 0, 960, 300), read_text, time.monotonic, interval=0.01)
+    watch.watch(open_screen)
+    try:
+        time.sleep(0.1)
+        assert looks == []  # no round on: nothing to watch for
+        watch.begin_round()
+        give_up = time.monotonic() + 5
+        while watch.guessed_at is None and time.monotonic() < give_up:
+            time.sleep(0.01)
+    finally:
+        watch.stop()
+    assert watch.guessed_at is not None and watch.cut_to == 15 and not watch.watching
+    assert looks[0] == (480, 150)  # shrunk to read quickly
+    assert parse_notice("A player has gu") == 15  # half-read, a duel's cut is assumed

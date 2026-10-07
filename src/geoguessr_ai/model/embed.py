@@ -85,6 +85,10 @@ def embed_items(
     return len(ids)
 
 
+def osv5m_embedding_path(out_dir: Path, split: str, shard: int) -> Path:
+    return Path(out_dir) / f"osv5m-{split}-{shard:02d}.npz"
+
+
 def embed_osv5m_shard(
     encoder: ImageEncoder,
     root: Path,
@@ -95,7 +99,7 @@ def embed_osv5m_shard(
     limit: int | None = None,
     batch_size: int = 64,
 ) -> Path:
-    out_path = Path(out_dir) / f"osv5m-{split}-{shard:02d}.npz"
+    out_path = osv5m_embedding_path(out_dir, split, shard)
     if out_path.exists():
         print(f"{out_path} already exists, skipping")
         return out_path

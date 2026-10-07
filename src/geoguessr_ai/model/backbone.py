@@ -67,3 +67,18 @@ class ImageEncoder:
         pixels = inputs["pixel_values"].to(self.device)
         embeds = self.model(pixel_values=pixels).image_embeds
         return F.normalize(embeds.float(), dim=-1).cpu()
+
+
+class LazyEncoder:
+    """An :class:`ImageEncoder` loaded the first time something needs encoding, so that
+    retraining on photos and rounds embedded before never waits for CLIP to load."""
+
+    def __init__(self, name: str = DEFAULT_BACKBONE, device: str = "auto") -> None:
+        self.name = name
+        self._device = device
+        self._encoder: ImageEncoder | None = None
+
+    def encode(self, images: Sequence[Image.Image]) -> torch.Tensor:
+        if self._encoder is None:
+            self._encoder = ImageEncoder(self.name, self._device)
+        return self._encoder.encode(images)

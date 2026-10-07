@@ -48,8 +48,19 @@ geoguessr-ai learn --rounds 500   # play, read every answer, then retrain
 
 Run `geoguessr-ai <command> --help` for options.
 
+## Play with friends
+
+```powershell
+geoguessr-ai calibrate --party    # once, in a multiplayer room with a round showing
+geoguessr-ai party                # join your friends' room first (Multiplayer > Join)
+```
+
+- A friend hosts and presses Continue: the bot waits on the result and standings screens for them.
+- It reads the round's timer under the map and skips walking, the sun and signs when time is short, rereading it so it notices when the timer is cut.
+- The chat box is blanked out of what it sees. Rounds are saved with their answers, so `learn` uses them too.
+
 ## Credits
 
 Data: OpenStreetView-5M (CC-BY-SA 4.0), GeoNames (CC BY 4.0), Natural Earth, `global-land-mask`. Encoder: OpenAI CLIP. Text reading: RapidOCR with PaddleOCR models (Apache 2.0).
 
-For fun and learning; please don't use it against real players.
+For fun and learning; only play it against friends who know it's a bot, never in ranked or public games.

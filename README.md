@@ -56,7 +56,8 @@ geoguessr-ai party                # join your friends' room first (Multiplayer >
 ```
 
 - A friend hosts and presses Continue: the bot waits on the result and standings screens for them.
-- It reads the round's timer under the map and skips walking, the sun and signs when time is short, rereading it so it notices when the timer is cut.
+- It keeps track of the round's time all along, and skips walking, the sun and signs when it's short.
+- The moment another player guesses (the game says so over Street View in duels), it stops looking round and guesses.
 - The chat box is blanked out of what it sees. Rounds are saved with their answers, so `learn` uses them too.
 
 ## Credits

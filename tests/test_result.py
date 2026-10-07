@@ -171,6 +171,29 @@ def test_reads_the_answer_off_a_map_recognised_a_few_pixels_out():
     assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
 
 
+def test_a_first_view_recognised_off_a_whole_zoom_level_is_looked_at_again():
+    screen = FakeResultScreen(fitted(3_072))  # recognisable at once, at zoom level 3
+    reader = ResultReader(screen, FakeControls(screen), REGION)
+    locate = reader._locate
+    seen = []
+
+    def wrong_at_first(rgb):  # the world 0.77 times its size, our pin landing right by chance
+        p = locate(rgb)
+        seen.append(p)
+        if p is None or len(seen) > 1:
+            return p
+        world = p.world_px * 0.77
+        (x, y), (mx, my) = p.to_pixel(*MADRID, REGION.width), mercator_xy(*MADRID)
+        return MapProjection(world, x - mx * world, y - my * world, p.wraps, p.score)
+
+    reader._locate = wrong_at_first
+    reading = reader.read(*MADRID)
+
+    assert seen[0] is not None, "the first view should be recognisable"
+    assert reading.answer is not None and reading.answer.zoom_outs == 0, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 20
+
+
 def test_close_guess_is_measured_before_the_markers_overlap():
     near = (40.52, -3.52)  # about 19 km from Madrid
     screen = FakeResultScreen(fitted(786_432, MADRID, near), pin=near, flag=MADRID)

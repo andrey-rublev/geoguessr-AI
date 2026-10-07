@@ -11,8 +11,8 @@ measure too, and the first view is always at a whole zoom level, which puts righ
 counted wrongly.
 
 An answer is only returned after checks: the recognised map must put our pin where we
-clicked, and measurements from more zoomed-in levels must agree with the flag's offset from
-our pin on it. When in doubt, the reader returns no answer rather than a wrong one.
+clicked, at a whole zoom level if it is the first view, and measurements from more zoomed-in
+levels must agree with the flag's offset from our pin on it. When in doubt, the reader returns no answer rather than a wrong one.
 """
 
 from __future__ import annotations
@@ -135,7 +135,9 @@ whole zoom level, so its world is this, at the markers' scale, times a power of 
 the 2,474 answers read by 24 September put it within 0.005 of a halving of one."""
 WHOLE_ZOOM_SLACK = 0.1
 """Halvings a first view may be off a whole zoom level before it is put on one. The markers'
-scale that the levels are reckoned from is measured to about 1% (1.243 for 1.25), or 0.01."""
+scale that the levels are reckoned from is measured to about 1% (1.243 for 1.25), or 0.01.
+A world recognised on the first view this far off one is a wrong fit: two in 900 rounds by
+30 September were, both 0.38 off, which put one answer in Turkey near Tehran instead."""
 
 
 @dataclass(frozen=True)
@@ -237,11 +239,16 @@ def _wrap_lon(lon: float) -> float:
     return (lon + 180.0) % 360.0 - 180.0
 
 
+def _zoom_off(world_px: float, scale: float) -> float:
+    """Halvings ``world_px`` is off the nearest whole zoom level, at the markers' ``scale``."""
+    levels = math.log2(world_px / (TILE * scale))
+    return levels - round(levels)
+
+
 def _whole_zoom(world_px: float, scale: float) -> float:
     """The width of the world at the whole zoom level nearest ``world_px``, unless it is within
     how well the markers' scale is measured of one already."""
-    levels = math.log2(world_px / (TILE * scale))
-    off = levels - round(levels)
+    off = _zoom_off(world_px, scale)
     return world_px if abs(off) <= WHOLE_ZOOM_SLACK else world_px / 2.0**off
 
 
@@ -291,6 +298,11 @@ class ResultReader:
                 halvings = levels[-1].halvings + (step if measured is None else measured)
             levels.append(_Level(rgb, pin, flag, halvings))
             projection = self._locate(rgb)
+            # The first view is at a whole zoom level, so a world recognised on it at another
+            # size is a wrong fit that only happened to put our pin where it is: look further out.
+            if projection and len(levels) == 1 and self.scale:
+                if abs(_zoom_off(projection.world_px, self.scale)) > WHOLE_ZOOM_SLACK:
+                    projection = None
             if projection and self._shows_our_pin(projection, levels[-1], placed_lat, placed_lon):
                 reading.answer, reading.problem = self._answer(
                     levels, projection, placed_lat, placed_lon

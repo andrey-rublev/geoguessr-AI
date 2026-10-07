@@ -19,6 +19,7 @@ def test_ignores_everyday_words_short_names_and_names_after_street_words():
     assert places_in(["JEEVAN TOYOTA", "NW 191st Terrace"]) == {}  # a make and a road word
     assert places_in(["CAMPBELL TRANSPORT", "TATA HITACHI", "Reservoir Hill St"]) == {}
     assert places_in(["Cypress Dr", "Old Homestead", "Queens Pinch", "Księgarnia Eureka"]) == {}
+    assert places_in(["UOMO e DONNA", "Rumah Makan", "Canela", "Young", "C. Barro de Oll"]) == {}
 
 
 def test_a_road_or_feature_word_after_a_name_makes_it_one():
@@ -41,6 +42,7 @@ def test_a_name_after_a_persons_name_or_title_is_theirs():
         "R. Antonio Pereira",
         "Gral. Pereira",
         "Aníbal Pinto",
+        "Edgar Ibarra",
     ):
         assert places_in([street]) == {}, street
     assert places_in(["Zarate 12 km"]) == {"zarate": ("AR",)}

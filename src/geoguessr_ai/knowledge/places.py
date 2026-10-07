@@ -62,6 +62,7 @@ EVERYDAY = set(
     allende alvarado bayan bellevue campbell clifton evans hitachi johnston lawrence munich
     reservoir vernon villanueva
     cypress encarnacion eureka homestead pinto provincial queens sherwood villagran
+    barro canela donna perez rumah young
     """.split()
 )
 # Given names and the titles written before them. A place name straight after one is a person's,
@@ -71,7 +72,7 @@ PERSON_BEFORE = set(
     jr sr sra dr dra gral gen cnel tte cap ing lic prof pdte pres don dona fray padre
     agustin alberto alejandro alfonso alfredo alvaro ana andres angel anibal antonio armando arturo
     beatriz benito bernardo carlos carolina catalina cesar clara cristobal daniel diego domingo
-    eduardo elena eloy emilio enrique ernesto esteban eva federico felipe fernando francisco
+    edgar eduardo elena eloy emilio enrique ernesto esteban eva federico felipe fernando francisco
     gabriel gonzalo gregorio guillermo gustavo hector hernan horacio hugo ignacio isabel jaime
     javier joao joaquim joaquin jorge jose josefa juan juana julio leandro leoncio lorenzo luis
     luisa manoel manuel marcelo marcos mariano mario mateo miguel nicolas octavio pablo pedro

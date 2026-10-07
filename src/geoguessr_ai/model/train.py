@@ -284,7 +284,7 @@ def train(
             f"<750 km {metrics['within_750km']:.0%}"
         )
         if best is None or metrics["mean_score"] > best["mean_score"]:
-            best = {**metrics, "epoch": epoch}
+            best = {**metrics, "epoch": epoch, "seed": cfg.seed}
             Checkpoint(head.cpu(), cells, backbone, best, log_prior, game_log_prior).save(out_path)
             head.to(dev)
         progress = {

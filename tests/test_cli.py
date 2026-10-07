@@ -22,6 +22,7 @@ from geoguessr_ai.model.rounds import ROUNDS_FILE
     "argv",
     [
         ["calibrate"],
+        ["calibrate", "--party"],
         ["download", "--shards", "0", "1"],
         ["embed", "--limit", "100"],
         ["embed", "--rounds"],
@@ -33,6 +34,8 @@ from geoguessr_ai.model.rounds import ROUNDS_FILE
         ["play", "--dry-run", "--rounds", "1", "--no-text"],
         ["learn", "--rounds", "20"],
         ["learn", "--no-train"],
+        ["party"],
+        ["party", "--rounds", "5", "--round-time", "60", "--no-answers"],
     ],
 )
 def test_every_command_parses(argv):
@@ -40,7 +43,9 @@ def test_every_command_parses(argv):
     assert callable(args.func)
 
 
-@pytest.mark.parametrize("command", [["predict", "a.jpg"], ["evaluate"], ["play"], ["learn"]])
+@pytest.mark.parametrize(
+    "command", [["predict", "a.jpg"], ["evaluate"], ["play"], ["learn"], ["party"]]
+)
 def test_model_commands_take_prior_strengths(command):
     parser = build_parser()
     defaults = parser.parse_args(command)
@@ -71,6 +76,15 @@ def test_round_options():
     assert parser.parse_args(["learn"]).rest == 1.0  # half the load, so the CPU stays cool
     assert parser.parse_args(["train", "--rest", "0"]).rest == 0.0
     assert parser.parse_args(["train", "--threads", "2"]).threads == 2
+
+
+def test_party_plays_until_stopped_in_its_own_layout():
+    parser = build_parser()
+    party = parser.parse_args(["party"])
+    assert party.rounds == 0 and party.layout.name == "layout-party.json"
+    assert party.round_time == 0.0 and not party.no_answers
+    assert parser.parse_args(["play"]).layout.name == "layout.json"
+    assert parser.parse_args(["calibrate", "--party"]).party
 
 
 def trained(when: float) -> Checkpoint:

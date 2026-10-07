@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from .config import DEFAULT_LAYOUT_PATH
+from .config import DEFAULT_LAYOUT_PATH, PARTY_LAYOUT_PATH
 from .knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
 from .model.backbone import DEFAULT_BACKBONE
 from .model.geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
@@ -49,9 +49,12 @@ def _predictor(args: argparse.Namespace):
 
 
 def cmd_calibrate(args: argparse.Namespace) -> None:
-    from .calibrate import run_calibration
+    from .calibrate import run_calibration, run_party_calibration
 
-    run_calibration(args.layout)
+    if args.party:
+        run_party_calibration(args.layout or PARTY_LAYOUT_PATH)
+    else:
+        run_calibration(args.layout or DEFAULT_LAYOUT_PATH)
 
 
 def cmd_download(args: argparse.Namespace) -> None:
@@ -202,9 +205,11 @@ def _run_bot(args: argparse.Namespace, settings):
     layout = Layout.load(args.layout)
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Train a model first (see README).")
+    if layout.continue_button is None and not settings.party:
+        raise SystemExit(f"{args.layout} is a multiplayer layout: play it with `party`.")
     button = button_image_path(args.layout)
     continue_image = Image.open(button).convert("RGB") if button.exists() else None
-    if continue_image is None and not settings.dry_run:
+    if continue_image is None and not settings.dry_run and not settings.party:
         print("Re-run `geoguessr-ai calibrate` so the bot won't click adverts covering Continue.")
     predictor = _predictor(args)
     with Screen() as screen, Controls(dry_run=settings.dry_run, stop_key=args.stop_key) as controls:
@@ -248,6 +253,26 @@ def cmd_learn(args: argparse.Namespace) -> None:
     predictor = _run_bot(args, settings)
     if not args.no_train:
         learn_from_rounds(args, predictor.encoder)
+
+
+def cmd_party(args: argparse.Namespace) -> None:
+    from .game import BotSettings
+
+    settings = BotSettings(
+        party=True,
+        rounds=args.rounds,
+        views=args.views,
+        dry_run=args.dry_run,
+        read_text=not args.no_text,
+        look_up=not args.no_look_up,
+        look_down=args.look_down,
+        walk_below=0.0 if args.no_walk else BotSettings.walk_below,
+        record_answers=not args.no_answers,
+        round_time=args.round_time,
+        round_load_wait=1.0,  # it waits for the round to show, so needn't wait long after
+        debug_dir=None if args.no_debug else args.runs,
+    )
+    _run_bot(args, settings)
 
 
 def learn_from_rounds(args: argparse.Namespace, encoder) -> None:
@@ -379,7 +404,12 @@ def build_parser() -> argparse.ArgumentParser:
         add_device(p)
 
     p = add("calibrate", cmd_calibrate, "Record where the OpenGuessr UI is on your screen.")
-    p.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT_PATH)
+    p.add_argument(
+        "--party",
+        action="store_true",
+        help=f"in a multiplayer room instead (saved as {PARTY_LAYOUT_PATH} unless --layout)",
+    )
+    p.add_argument("--layout", type=Path, help=f"where to save it (default {DEFAULT_LAYOUT_PATH})")
 
     p = add("download", cmd_download, "Download OpenStreetView-5M labels and image shards.")
     p.add_argument("--root", type=Path, default=DEFAULT_DATA)
@@ -473,6 +503,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--embeddings", type=Path, default=DEFAULT_EMBEDDINGS)
     p.add_argument("--no-train", action="store_true", help="only play and save the rounds")
     add_threads(p)
+
+    p = add(
+        "party",
+        cmd_party,
+        "Play a multiplayer room with friends: each round the host starts, within its timer, "
+        "waiting for the host to go on. Rounds are saved, with answers, for learn.",
+    )
+    add_game_options(p)
+    p.set_defaults(rounds=0, layout=PARTY_LAYOUT_PATH)
+    p.add_argument(
+        "--round-time",
+        type=float,
+        default=0.0,
+        help="seconds a round lasts, assumed if its timer can't be read (default: no limit)",
+    )
+    p.add_argument("--no-answers", action="store_true", help="don't read the result screens")
+    p.add_argument("--dry-run", action="store_true", help="one round, never clicks")
+    p.add_argument("--runs", type=Path, default=DEFAULT_RUNS, help="where rounds are saved")
+    p.add_argument("--no-debug", action="store_true", help="don't save the rounds")
 
     return parser
 

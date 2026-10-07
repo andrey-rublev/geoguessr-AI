@@ -189,6 +189,19 @@ class SignReader:
         lines = (pick_reading(r, self.min_score) for r in per_line.values())
         return [line for line in lines if line and not _NOT_A_SIGN.search(line.text)]
 
+    def read_line(self, image: Image.Image) -> str:
+        """What a small crop around one short line of text says, like a multiplayer round's
+        timer, in Latin letters and digits: everything found in it, or else the whole crop
+        read as one line. Unlike :meth:`read`, short runs of digits count."""
+        from rapidocr.ch_ppocr_rec import TextRecInput
+        from rapidocr.utils.process_img import get_rotate_crop_image
+
+        bgr = _bgr(image)
+        crops = [get_rotate_crop_image(bgr, box) for box in self._find_lines(bgr, 0.5)] or [bgr]
+        recognise = self._recognisers.get("latin") or next(iter(self._recognisers.values()))
+        result = recognise(TextRecInput(img=[_pad_width(crop) for crop in crops]))
+        return " ".join(str(text) for text in result.txts or ())
+
     def _find_lines(self, bgr: np.ndarray, min_box_score: float) -> list[np.ndarray]:
         """Corners of the biggest confidently detected lines of text, in full-size pixels."""
         h, w = bgr.shape[:2]

@@ -58,6 +58,10 @@ class Controls:
         if self._stop.is_set():
             raise StopRequested("Stop key pressed")
 
+    def now(self) -> float:
+        """Seconds by a clock that only goes forward, to time rounds by."""
+        return time.monotonic()
+
     def sleep(self, seconds: float) -> None:
         """Sleep in small slices so the stop key stays responsive."""
         deadline = time.monotonic() + seconds

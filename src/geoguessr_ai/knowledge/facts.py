@@ -3,7 +3,7 @@ Google Street View it has, phone codes, web domains, and the writing on its sign
 
 Coverage is Google's official Street View as of 2025, roughly: ``full`` where cars have
 driven most roads, ``some`` for a few roads, towns or trekker paths, ``none`` otherwise.
-It is approximate; the game prior that ``learn`` estimates from your rounds refines it.
+It is approximate; the game prior that ``train`` estimates from your rounds refines it.
 Belize and Kosovo count as ``some``: OpenGuessr has sent real rounds there.
 """
 

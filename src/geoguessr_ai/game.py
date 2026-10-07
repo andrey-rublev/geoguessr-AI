@@ -413,7 +413,7 @@ class OpenGuessrBot:
         says where it is and RapidOCR is there to read it."""
         read_text = None
         if self.layout.timer is None:
-            print("No timer in the layout: run `geoguessr-ai calibrate --party` to time rounds")
+            print("No timer in the layout: run `geoguessr-ai friends --calibrate` to time rounds")
         elif self.signs is not None:
             read_text = self.signs.read_line
         else:

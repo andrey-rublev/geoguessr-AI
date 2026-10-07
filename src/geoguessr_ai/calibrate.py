@@ -154,7 +154,7 @@ def run_party_calibration(
 
     print(
         f"\nSaved {path}. Check {preview_path}: green = view, cyan = map, red = blanked out,\n"
-        "yellow = timer, magenta = clicks. Then play with `geoguessr-ai party`."
+        "yellow = timer, magenta = clicks. Then play with `geoguessr-ai friends`."
     )
     return layout
 

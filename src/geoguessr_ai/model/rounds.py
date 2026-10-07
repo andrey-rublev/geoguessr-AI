@@ -1,7 +1,8 @@
 """OpenGuessr rounds the bot has played, reused as training and test data.
 
-``geoguessr-ai play`` saves every round under ``runs/<session>/round_NN/``: the views it
-looked at and the real location, read off the result screen. Unlike the Mapillary photos in
+``geoguessr-ai play --learn`` and ``geoguessr-ai friends`` save every round under
+``runs/<session>/round_NN/``: the views the bot looked at and the real location, read off the
+result screen. Unlike the Mapillary photos in
 OSV-5M, these are exactly the Google Street View images the bot faces in the game.
 
 Rounds are split into train and test by a hash of their id, so a round never switches
@@ -141,7 +142,8 @@ def embed_rounds(
     rounds = {rnd.id: rnd for rnd in find_rounds(root)}
     if not rounds:
         raise FileNotFoundError(
-            f"No rounds with a recorded answer under {root}. Play some with `geoguessr-ai play`."
+            f"No rounds with a recorded answer under {root}. "
+            "Play some with `geoguessr-ai play --learn`."
         )
     out_path = Path(out_path)
     kept = None

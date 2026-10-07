@@ -1,9 +1,15 @@
-"""The bot: look around, ask the model where we are, drop the pin, read the answer, next round."""
+"""The bot: look around, ask the model where we are, drop the pin, read the answer, next round.
+
+In a multiplayer room it plays each round the host starts instead, within the round's timer,
+and waits on the result screen for the host to go on rather than pressing Continue.
+"""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+import math
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
@@ -11,10 +17,11 @@ from typing import Protocol
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from .buttons import MIN_SIMILARITY, button_region, similarity
 from .camera import Camera, default_camera, ground_view, measure
+from .clock import RoundClock, timer_region
 from .compass import Compass, CompassReader, compass_region
 from .config import Layout, Point, Region
 from .controls import StopRequested
@@ -56,8 +63,25 @@ their tiles loaded under 12, like half of a Beijing round's, which sent the gues
 Aires. Black ones, even with "No Street View available" written on them, count as blank."""
 
 
+STEP_SECONDS = {"view": 2.5, "read": 6.0, "walk": 22.0, "look_up": 8.0, "camera": 2.0}
+"""In a multiplayer round, how long each optional step is planned to take until it has been
+timed: one more view, reading the signs, walking on to look again, looking up for the sun and
+measuring Street View's camera."""
+GUESS_SECONDS = 9.0
+"""How long placing the pin and pressing Guess is planned to take until it has been timed."""
+SPARE_SECONDS = 4.0
+"""Time kept in hand beyond the steps planned: the timer is read in whole seconds, and may be
+cut short between readings."""
+TIMER_DROP = 3.0
+"""Seconds the timer must have lost beyond the time gone by to say it was cut short."""
+
+
 class ContinueBlocked(Exception):
     """Something, like an advert, kept covering the Continue button."""
+
+
+class RoundOver(Exception):
+    """A multiplayer round ended before the bot guessed: its time ran out."""
 
 
 class Predictor(Protocol):
@@ -113,6 +137,14 @@ class BotSettings:
     step_wait: float = 0.8
     record_answers: bool = True
     """Read the real location off each result screen and save it with the round."""
+    party: bool = False
+    """Play in a multiplayer room: each round the host starts, against its timer, waiting on
+    the result screen for the host to go on rather than pressing Continue. ``rounds`` is then
+    how many to play before stopping (0 = until stopped)."""
+    round_time: float = 0.0
+    """Multiplayer: seconds a round lasts, assumed when its timer can't be read (0 = no limit)."""
+    party_wait: float = 0.5
+    """Multiplayer: how often to look whether a round has begun or ended."""
     dry_run: bool = False
     debug_dir: Path | None = Path("runs")
 
@@ -154,7 +186,8 @@ class Look:
 def scene_region(layout: Layout) -> Region:
     """The view plus the road below it, down to just above the game's buttons and adverts."""
     view = layout.view
-    bottom = min(layout.guess_button.y, layout.continue_button.y) - 80
+    buttons = [b.y for b in (layout.guess_button, layout.continue_button) if b is not None]
+    bottom = min(buttons) - 80
     return Region(view.left, view.top, view.width, max(bottom - view.top, view.height))
 
 
@@ -199,6 +232,12 @@ class OpenGuessrBot:
         self.reader = None
         if settings.record_answers:
             self.reader = ResultReader(screen, controls, result_region(layout))
+        self.clock: RoundClock | None = None
+        """In a multiplayer room, the round's timer."""
+        self.took = dict(STEP_SECONDS, guess=GUESS_SECONDS)
+        """How long each step of a multiplayer round has taken, lately."""
+        if settings.party:
+            self.clock = self._round_clock()
 
     def play(self) -> None:
         s = self.settings
@@ -211,8 +250,11 @@ class OpenGuessrBot:
             print("Dry run: one round, no clicks. The mouse still hovers, drags and zooms.")
         print("Stop any time with F8, or by slamming the mouse into a screen corner.")
         try:
-            for number in range(1, rounds + 1):
-                self.play_round(number, run_dir)
+            if s.party:
+                self._play_party(run_dir)
+            else:
+                for number in range(1, rounds + 1):
+                    self.play_round(number, run_dir)
         except StopRequested:
             print("Stopped by user.")
         except self.controls.failsafe:
@@ -224,20 +266,31 @@ class OpenGuessrBot:
         s = self.settings
         print(f"\nRound {number}")
         self.controls.sleep(s.round_load_wait)
+        self._start_clock()
 
         look = self.look_around()
-        evidence, lines = self.notice(look)
+        self._read_clock()  # it may have been cut short while looking
+        read = self._time_for("read")
+        if not read:
+            print("  short of time: not reading the signs")
+        with self._timing("read" if read else None):
+            evidence, lines = self.notice(look, read=read)
         guess = self.predictor.predict(look.seen(), evidence)
         sure = [guess.expected_score]  # after each look, saved to judge walking by later
         for below in () if s.dry_run else (s.walk_below, s.walk_again_below):
             if guess.expected_score >= below:
                 break
+            self._read_clock()
+            if not self._time_for("walk"):
+                print(f"  unsure (~{guess.expected_score:,.0f} points), but short of time to walk")
+                break
             again = " again" if len(sure) > 1 else ""
             print(f"  unsure (~{guess.expected_score:,.0f} points): walking on to look{again}")
-            self._walk()
-            look.extend(self.look_around())
-            evidence, lines = self.notice(look)
-            guess = self.predictor.predict(look.seen(), evidence)
+            with self._timing("walk"):
+                self._walk()
+                look.extend(self.look_around())
+                evidence, lines = self.notice(look, read=self._time_for("read"))
+                guess = self.predictor.predict(look.seen(), evidence)
             sure.append(guess.expected_score)
         for note in evidence.notes:
             print(f"  clue: {note}")
@@ -246,28 +299,161 @@ class OpenGuessrBot:
             f"(model expects ~{guess.expected_score:,.0f} points)"
         )
 
-        placement = self.guess_map.place(guess.lat, guess.lon)
-        if placement.confirmed is False:
-            print("  couldn't see the pin where it was clicked; guessing anyway")
-        placed = (placement.lat, placement.lon)
-        folder = None
-        if run_dir is not None:
-            folder = run_dir / f"round_{number:02d}"
-            self._save_round(folder, look, lines, evidence, guess, placement, sure, self.camera)
+        self._check_round()
+        with self._timing("guess"):
+            placement = self.guess_map.place(guess.lat, guess.lon)
+            if placement.confirmed is False:
+                print("  couldn't see the pin where it was clicked; guessing anyway")
+            placed = (placement.lat, placement.lon)
+            folder = None
+            if run_dir is not None:
+                folder = run_dir / f"round_{number:02d}"
+                self._save_round(folder, look, lines, evidence, guess, placement, sure, self.camera)
 
-        self.controls.sleep(0.4)
-        self.controls.click(self.layout.guess_button)
+            self.controls.sleep(0.4)
+            self._check_round()  # Guess sits near Continue, which a finished round shows
+            self.controls.click(self.layout.guess_button)
         if not s.dry_run:
+            if s.party:
+                self.controls.move(self.layout.view.center)  # closes the map, to see it end
+                if self.clock is not None and math.isfinite(spare := self.clock.left()):
+                    print(f"  locked in with {spare:.0f} s to spare; waiting for the round to end")
+                self._wait_for(lambda: not self._round_on())
             self.controls.sleep(s.result_wait)
             if self.reader is not None:
                 if self.reader.scale is None:  # the result screen draws the same pin
                     self.reader.scale = self.guess_map.scale
-                reading = self.reader.read(*placed)
+                if s.party:  # every player's pin shows, and the host may go on at any time
+                    reading = self.reader.read(*placed, crowded=True, abort=self._round_on)
+                else:
+                    reading = self.reader.read(*placed)
                 self._report(reading, placed)
                 if folder is not None:
                     self._save_reading(folder, reading)
-            self._press_continue(folder)
+            if not s.party:
+                self._press_continue(folder)
         return placement
+
+    def _play_party(self, run_dir: Path | None) -> None:
+        """Play each round the host of a multiplayer room starts, until ``rounds`` have been
+        played or the bot is stopped, waiting through result and standings screens."""
+        s = self.settings
+        print("Multiplayer: playing each round the host starts. It never presses Continue.")
+        played = 0
+        while not s.rounds or played < s.rounds:
+            self._wait_for(self._round_on, "\nWaiting for the host to start a round...")
+            played += 1
+            try:
+                self.play_round(played, run_dir)
+            except RoundOver:
+                print("  the round ended before the bot could guess")
+                self._wait_for(lambda: not self._round_on())
+            if s.dry_run:
+                break
+
+    def _round_on(self) -> bool:
+        """Whether a multiplayer round is on: Street View's compass shows only then, not on the
+        result, loading or standings screens."""
+        return self.compass.read() is not None
+
+    def _wait_for(self, condition: Callable[[], bool], message: str = "") -> None:
+        """Wait until ``condition()`` holds twice running, since screens flicker as they change,
+        saying ``message`` once if it doesn't at first."""
+        running, said = 0, False
+        while running < 2:
+            if condition():
+                running += 1
+            else:
+                running = 0
+                if message and not said:
+                    print(message)
+                    said = True
+            if running < 2:
+                self.controls.sleep(self.settings.party_wait)
+
+    def _check_round(self) -> None:
+        """In a multiplayer room, give up on the round if it has ended, as when its time ran
+        out, rather than click on whatever the result screen shows there."""
+        if not self.settings.party or self.settings.dry_run:
+            return
+        for _ in range(3):
+            if self._round_on():
+                return
+            self.controls.sleep(0.3)
+        raise RoundOver
+
+    def _round_clock(self) -> RoundClock:
+        """The multiplayer round's timer, read with the sign reader's recogniser, if the layout
+        says where it is and RapidOCR is there to read it."""
+        read_text = None
+        if self.layout.timer is None:
+            print("No timer in the layout: run `geoguessr-ai calibrate --party` to time rounds")
+        elif self.signs is not None:
+            read_text = self.signs.read_line
+        else:
+            try:
+                read_text = SignReader(models=["latin"]).read_line
+            except ImportError:
+                print("Can't read the round's timer: install RapidOCR (`pip install rapidocr`)")
+        timer = self.layout.timer
+        return RoundClock(
+            self.screen,
+            None if timer is None else timer_region(timer),
+            read_text,
+            self.controls.now,
+            show=self._open_map,
+            hide=self._close_map,
+        )
+
+    def _open_map(self) -> None:
+        self.controls.move(self.layout.map_hover)
+        self.controls.move(self.layout.map_region.center)  # stay over it so it doesn't collapse
+        self.controls.sleep(self.settings.map_expand_wait)
+
+    def _close_map(self) -> None:
+        self.controls.move(self.layout.view.center)
+        self.controls.sleep(0.3)
+
+    def _start_clock(self) -> None:
+        """At the start of a multiplayer round, read how long it has."""
+        if self.clock is None:
+            return
+        self.clock.forget()
+        left = self._read_clock()
+        if left is None and self.settings.round_time:
+            left = self.settings.round_time - self.settings.round_load_wait
+            self.clock.deadline = self.controls.now() + left
+            print(f"  couldn't read the timer: assuming {left:.0f} s are left")
+        elif left is not None:
+            print(f"  {left:.0f} s on the clock")
+
+    def _read_clock(self) -> float | None:
+        """Read the multiplayer round's timer, saying if it was cut short since the last time,
+        as when another player guesses in a duel."""
+        if self.clock is None or not self.clock.readable:
+            return None
+        expected = self.clock.left()
+        left = self.clock.read()
+        if left is not None and math.isfinite(expected) and left < expected - TIMER_DROP:
+            print(f"  the timer was cut to {left:.0f} s")
+        return left
+
+    def _time_for(self, *steps: str) -> bool:
+        """Whether a multiplayer round's timer leaves time for these steps and then to guess."""
+        if self.clock is None:
+            return True
+        need = sum(self.took[step] for step in steps) + self.took["guess"] + SPARE_SECONDS
+        return self.clock.left() >= need
+
+    @contextmanager
+    def _timing(self, step: str | None) -> Iterator[None]:
+        """Time a step of a multiplayer round, to plan the next ones by."""
+        if self.clock is None or step is None:
+            yield
+            return
+        start = self.controls.now()
+        yield
+        self.took[step] = (self.took[step] + self.controls.now() - start) / 2
 
     def look_around(self) -> Look:
         """See every direction: north, east, south and west by the compass, if it can be found."""
@@ -277,21 +463,32 @@ class OpenGuessrBot:
         self._wait_for_street_view()
         compass = None if s.dry_run else self.compass.read()
         if compass is None:
-            return self._drag_around()
+            if s.party and not s.dry_run:  # no compass, no round: it must have ended
+                self._check_round()
+                compass = self.compass.read()
+            if compass is None:
+                return self._drag_around()
         look = Look()
         for turn in range(min(s.views, 4)):
-            heading = self._face(compass, 90.0 * turn)
-            self._capture(look, 90.0 * turn if heading is None else heading)
+            if turn and not self._time_for("view"):
+                print(f"  short of time: looked {turn} way{'s' if turn > 1 else ''} round")
+                break
+            with self._timing("view"):
+                heading = self._face(compass, 90.0 * turn)
+                self._capture(look, 90.0 * turn if heading is None else heading)
         if not self.camera.measured and self.camera_tries < CAMERA_TRIES:
-            self._measure_camera()
+            if self._time_for("camera"):
+                with self._timing("camera"):
+                    self._measure_camera()
         if s.look_down and len(look.views) == 4:
             views, headings, _ = self._look_tilted(compass, -LOOK_DOWN_PITCH, self.scene)
             look.down_views += views
             look.down_headings += headings
-        if s.look_up and self._sun_may_show(look):
-            views, headings, pitch = self._look_tilted(
-                compass, LOOK_UP_PITCH, self.layout.view, _shows_sun
-            )
+        if s.look_up and self._time_for("look_up", "read") and self._sun_may_show(look):
+            with self._timing("look_up"):
+                views, headings, pitch = self._look_tilted(
+                    compass, LOOK_UP_PITCH, self.layout.view, _shows_sun
+                )
             look.up_views += views
             look.up_headings += headings
             look.up_pitches += [pitch] * len(views)
@@ -309,12 +506,12 @@ class OpenGuessrBot:
         which says which way each pixel looks (see :mod:`.camera`)."""
         self.camera_tries += 1
         view = self.layout.view
-        before = np.asarray(self.screen.grab(view).convert("L"))
+        before = np.asarray(self._grab(view).convert("L"))
         distance = round(view.width * CAMERA_DRAG)
         start = Point(view.left + (view.width + distance) // 2, view.top + view.height // 4)
         self.controls.drag(start, -distance, 0)
         self.controls.sleep(self.settings.view_settle_wait)
-        after = np.asarray(self.screen.grab(view).convert("L"))
+        after = np.asarray(self._grab(view).convert("L"))
         fit = measure(before, after, view, self.camera)
         if fit is None:
             print("  couldn't measure Street View's camera from this view; will try again")
@@ -346,7 +543,7 @@ class OpenGuessrBot:
         for turn in range(4):
             if turn:
                 heading = self._face(compass, 90.0 * turn, clockwise=True)
-            views.append(self.screen.grab(region))
+            views.append(self._grab(region))
             headings.append(90.0 * turn if heading is None else heading)
             if enough is not None and enough(views[-1]):
                 break
@@ -401,11 +598,11 @@ class OpenGuessrBot:
                 break
         return heading
 
-    def notice(self, look: Look) -> tuple[Evidence, list[TextLine]]:
+    def notice(self, look: Look, read: bool = True) -> tuple[Evidence, list[TextLine]]:
         """Read the signs every way, and the road's name from above, and look for the sun:
-        clues the model can't see."""
+        clues the model can't see. Without ``read``, only look for the sun, which is quick."""
         lines: list[TextLine] = []
-        if self.signs is not None:
+        if self.signs is not None and read:
             lines = self.signs.read(look.scenes)
             lines += self.signs.read(self._ground_views(look), min_box_score=GROUND_BOX_SCORE)
         clues = text_clues(lines)
@@ -458,7 +655,7 @@ class OpenGuessrBot:
         few seconds to replace its blur with the panorama's tiles."""
         waited = 0.0
         while True:
-            scene = self.screen.grab(self.scene)
+            scene = self._grab(self.scene)
             view = scene.crop((0, 0, self.layout.view.width, self.layout.view.height))
             drawn = _is_drawn(view)
             if drawn or waited >= self.settings.view_draw_timeout:
@@ -470,8 +667,29 @@ class OpenGuessrBot:
         look.headings.append(heading)
         look.drawn.append(drawn)
 
+    def _grab(self, region: Region) -> Image.Image:
+        """A screenshot of ``region`` with whatever the game draws over Street View, like a
+        multiplayer room's chat box, painted over in the picture's middling colour: the chat
+        is no sign to read, and the model never saw one in a photo."""
+        image = self.screen.grab(region)
+        overlaps = []
+        for area in self.layout.covered:
+            left, top = max(area.left, region.left) - region.left, max(area.top, region.top)
+            right = min(area.left + area.width, region.left + region.width) - region.left
+            bottom = min(area.top + area.height, region.top + region.height)
+            if right > left and bottom > top:
+                overlaps.append((left, top - region.top, right - 1, bottom - region.top - 1))
+        if overlaps:
+            fill = tuple(int(v) for v in np.median(np.asarray(image).reshape(-1, 3), axis=0))
+            draw = ImageDraw.Draw(image)
+            for box in overlaps:
+                draw.rectangle(box, fill=fill)
+        return image
+
     def _press_continue(self, folder: Path | None) -> None:
         """Click Continue, but only once it looks as it did at calibration, not covered."""
+        if self.layout.continue_button is None:
+            raise ContinueBlocked("this layout has no Continue button: it is for multiplayer")
         if self.continue_image is None:
             self.controls.click(self.layout.continue_button)
             return
@@ -498,7 +716,7 @@ class OpenGuessrBot:
     def _wait_for_street_view(self) -> None:
         """Wait while Street View is still a black screen."""
         waited = 0.0
-        while _is_blank(self.screen.grab(self.layout.view)):
+        while _is_blank(self._grab(self.layout.view)):
             if waited >= self.settings.view_load_timeout:
                 print("  Street View still looks blank; guessing anyway")
                 return

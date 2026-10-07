@@ -11,6 +11,7 @@ from test_sun import sky
 from geoguessr_ai import game as game_module
 from geoguessr_ai.buttons import button_region
 from geoguessr_ai.camera import Camera
+from geoguessr_ai.clock import timer_region
 from geoguessr_ai.config import Layout, Point, Region
 from geoguessr_ai.game import BotSettings, OpenGuessrBot
 from geoguessr_ai.knowledge.text import TextLine
@@ -512,3 +513,182 @@ def test_dry_run_plays_one_round_without_continuing():
     OpenGuessrBot(LAYOUT, FakePredictor(), settings, FakeScreen(), controls).play()
     assert controls.clicks[-1] == LAYOUT.guess_button
     assert LAYOUT.continue_button not in controls.clicks
+
+
+PARTY = Layout(
+    view=LAYOUT.view,
+    map_hover=LAYOUT.map_hover,
+    map_region=LAYOUT.map_region,
+    guess_button=LAYOUT.guess_button,
+    continue_button=None,  # the host presses it
+    timer=Point(1800, 960),
+    covered=(Region(0, 600, 300, 200),),  # the chat box
+)
+
+
+class MultiplayerRoom(TurningStreetView):
+    """A multiplayer room. The host starts a round ``lobby`` seconds in, and the next one
+    ``results`` seconds after each ends, ``rounds`` in all. Each lasts ``length`` seconds, or
+    until everyone has guessed: the others do ``others_guess`` seconds in, which in a ``duel``
+    cuts the time left to 15 seconds. The compass shows only during rounds, and every click,
+    look and second waited passes time."""
+
+    def __init__(self, rounds=2, length=60.0, others_guess=20.0, duel=False, results=8.0):
+        super().__init__()
+        self.t, self.length, self.others_guess, self.duel = 0.0, length, others_guess, duel
+        self.results, self.rounds_left = results, rounds
+        self.phase, self.phase_ends = "lobby", 2.0
+        self.locked = []  # seconds into each round we locked in, or None
+        self.idle_clicks = []  # clicks while no round was on
+
+    def now(self):
+        return self.t
+
+    def _pass(self, seconds):
+        self.t += seconds
+        if self.t > 3600:
+            raise TimeoutError("the bot has waited an hour for a round that never came")
+        while self._step():
+            pass
+
+    def _step(self):
+        if self.phase in ("lobby", "results") and self.t >= self.phase_ends:
+            if not self.rounds_left:
+                self.phase = "standings"
+                return False
+            self.rounds_left -= 1
+            self.phase, self.start = "round", self.phase_ends
+            self.deadline, self.locked_at, self.others_in = self.start + self.length, None, False
+            return True
+        if self.phase != "round":
+            return False
+        if not self.others_in and self.t >= self.start + self.others_guess:
+            self.others_in = True
+            if self.duel:
+                self.deadline = min(self.deadline, self.t + 15.0)
+            return True
+        if self.t >= self.deadline or (self.others_in and self.locked_at is not None):
+            self.locked.append(self.locked_at)
+            self.phase, self.phase_ends = "results", self.t + self.results
+            return True
+        return False
+
+    def timer_text(self):
+        if self.phase != "round":
+            return ""
+        left = max(int(self.deadline - self.t), 0)
+        return f"{left // 60:02d}:{left % 60:02d}"
+
+    def sleep(self, seconds):
+        self._pass(seconds)
+
+    def move(self, p):
+        self._pass(0.05)
+
+    def press(self, key):
+        super().press(key)
+        self._pass(0.1)
+
+    def drag(self, start, dx, dy=0):
+        super().drag(start, dx, dy)
+        self._pass(0.5)
+
+    def click(self, p):
+        if self.phase != "round":
+            self.idle_clicks.append(p)
+        super().click(p)
+        if self.phase == "round" and p == PARTY.guess_button and self.locked_at is None:
+            self.locked_at = self.t - self.start
+        self._pass(0.2)
+
+    def grab(self, region):
+        self._pass(0.02)
+        if region == timer_region(PARTY.timer):  # what it says is in timer_text
+            return Image.new("RGB", (region.width, region.height), (50, 52, 60))
+        if region.left != PARTY.view.left and self.phase != "round":  # no compass
+            return Image.new("RGB", (region.width, region.height), (90, 110, 70))
+        return super().grab(region)
+
+
+class PartyReader(FakeReader):
+    def read(self, lat, lon, crowded=False, abort=None):
+        self.crowded, self.aborted = crowded, abort()
+        return super().read(lat, lon)
+
+
+@pytest.fixture
+def party(monkeypatch):
+    """Plays in a multiplayer room, reading its timer off what the room says is left."""
+
+    def bot_in(room, predictor=None, **settings):
+        class TimerReadingSigns(FakeSignReader):
+            def read_line(self, image):
+                return room.timer_text()
+
+        monkeypatch.setattr(game_module, "SignReader", TimerReadingSigns)
+        monkeypatch.setattr(game_module, "ResultReader", PartyReader)
+        rounds = room.rounds_left  # all the host will start
+        settings = {"party": True, "rounds": rounds, "look_up": False, "debug_dir": None} | settings
+        return OpenGuessrBot(PARTY, predictor or FakePredictor(), BotSettings(**settings), room, room)
+
+    return bot_in
+
+
+def test_plays_each_round_the_host_starts_and_waits_for_the_host_to_go_on(party, capsys):
+    room = MultiplayerRoom(rounds=2, length=60.0, others_guess=5.0)
+    bot = party(room)
+
+    bot.play()
+
+    assert len(room.locked) == 2 and all(at is not None and at < 60 for at in room.locked)
+    assert room.idle_clicks == []  # nothing clicked on result screens: no Continue
+    assert bot.guess_map.guesses == [LAGOS, LAGOS]
+    assert bot.reader.crowded and not bot.reader.aborted  # other players' pins show too
+    assert "60 s on the clock" not in capsys.readouterr().out  # read after the round loaded
+
+
+def test_hurries_when_little_time_is_left(party):
+    room = MultiplayerRoom(rounds=1, length=12.0, others_guess=60.0)
+    predictor = FakePredictor(expected=(1000.0,))  # unsure: would walk on, given time
+    bot = party(room, predictor)
+
+    bot.play()
+
+    assert room.locked[0] is not None  # in time
+    assert predictor.view_counts == [1] and bot.signs.scenes == [] and room.keys == []
+
+
+def test_notices_the_timer_cut_short_when_another_player_guesses(party, capsys):
+    room = MultiplayerRoom(rounds=1, length=120.0, others_guess=9.0, duel=True)
+    predictor = FakePredictor(expected=(1000.0,))  # unsure: would walk on, given time
+    bot = party(room, predictor)
+
+    bot.play()
+
+    out = capsys.readouterr().out  # cut while it looked round, two minutes down to 15 seconds
+    assert "116 s on the clock" in out and "timer was cut to 1" in out
+    assert room.locked[0] is not None and room.locked[0] < 9 + 15
+    assert bot.signs.scenes == [] and room.keys == []  # no time to read signs or walk on
+
+
+def test_gives_up_a_round_whose_time_runs_out_and_plays_the_next(party, capsys):
+    room = MultiplayerRoom(rounds=2, length=5.0, others_guess=60.0)
+    bot = party(room)
+    bot.settings.round_load_wait = 4.5  # Street View took most of the round to load
+
+    bot.play()
+
+    assert room.locked[0] is None and "ended before the bot could guess" in capsys.readouterr().out
+    assert PARTY.guess_button not in room.idle_clicks
+    assert len(room.locked) == 2
+
+
+def test_the_chat_box_is_blanked_out_of_what_the_bot_sees():
+    street_view = TurningStreetView()
+    settings = BotSettings(rounds=1, views=1, record_answers=False, debug_dir=None)
+    bot = OpenGuessrBot(PARTY, FakePredictor(), settings, street_view, street_view)
+
+    look = bot.look_around()
+
+    chat = np.asarray(look.views[0])[500:700, 0:300]  # where it covers the view
+    assert chat.std() == 0 and np.asarray(look.views[0])[500:700, 300:600].std() > 10

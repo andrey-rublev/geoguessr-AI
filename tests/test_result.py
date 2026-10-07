@@ -46,10 +46,12 @@ def fitted(world, a=MADRID, b=LISBON):
 
 
 class FakeResultScreen:
-    """A result map at any zoom, drawn from the land mask, with our pin and the answer's flag."""
+    """A result map at any zoom, drawn from the land mask, with our pin and the answer's flag,
+    and in a multiplayer room the pins of ``others``."""
 
-    def __init__(self, projection, pin=MADRID, flag=LISBON, show_flag=True):
+    def __init__(self, projection, pin=MADRID, flag=LISBON, show_flag=True, others=()):
         self.projection, self.pin, self.flag, self.show_flag = projection, pin, flag, show_flag
+        self.others = others
 
     def grab(self, region):
         assert region == REGION
@@ -60,7 +62,8 @@ class FakeResultScreen:
         cols = np.floor(mx * 4096).astype(np.int64) % 4096
         rgb = np.where(OCEAN[rows, cols][..., None], WATER, LAND).astype(np.float32)
         rgb[(my < 0) | (my >= 1)] = OFF_WORLD
-        paint(rgb, "pin", *p.to_pixel(*self.pin, region.width), PIN_RED)
+        for place in (*self.others, self.pin):
+            paint(rgb, "pin", *p.to_pixel(*place, region.width), PIN_RED)
         if self.show_flag:  # the game draws the flag over the pin
             paint(rgb, "flag", *p.to_pixel(*self.flag, region.width), FLAG_BLACK)
         return Image.fromarray(rgb.round().astype(np.uint8))
@@ -192,6 +195,25 @@ def test_a_first_view_recognised_off_a_whole_zoom_level_is_looked_at_again():
     assert seen[0] is not None, "the first view should be recognisable"
     assert reading.answer is not None and reading.answer.zoom_outs == 0, reading.problem
     assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 20
+
+
+def test_reads_the_answer_among_other_players_pins():
+    paris, porto = (48.86, 2.35), (41.15, -8.61)  # the others guessed here, nearer the flag
+    screen = FakeResultScreen(fitted(3_072, MADRID, paris), others=(paris, porto))
+    reader = ResultReader(screen, FakeControls(screen), REGION)
+    reader.scale = 1.5  # as the guess map measured it
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 20
+
+
+def test_stops_reading_once_the_result_map_goes():
+    screen = FakeResultScreen(fitted(24_576))
+    controls = FakeControls(screen)
+    reading = ResultReader(screen, controls, REGION).read(*MADRID, abort=lambda: True)
+    assert reading.answer is None and "went" in reading.problem and controls.notches == 0
 
 
 def test_close_guess_is_measured_before_the_markers_overlap():

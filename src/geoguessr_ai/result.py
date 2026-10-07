@@ -10,16 +10,22 @@ The notch that reaches the map's widest view goes only part of the way, which th
 measure too, and the first view is always at a whole zoom level, which puts right a step
 counted wrongly.
 
+In a multiplayer room the result map shows every player's pin, all alike, so there the reader
+takes ours to be the one the recognised map puts where we clicked, and measures the flag on
+that map alone.
+
 An answer is only returned after checks: the recognised map must put our pin where we
 clicked, at a whole zoom level if it is the first view, and measurements from more zoomed-in
-levels must agree with the flag's offset from our pin on it. When in doubt, the reader returns no answer rather than a wrong one.
+levels must agree with the flag's offset from our pin on it. When in doubt, the reader
+returns no answer rather than a wrong one.
 """
 
 from __future__ import annotations
 
 import functools
 import math
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
@@ -122,6 +128,8 @@ PLACED_ERROR_KM = 20.0
 """How far our own record of the pin may be off (minimap matching, whole-pixel clicks)."""
 APART = 10.0
 """Markers closer than this (in 100%-scale pixels) overlap and can't be measured apart."""
+MAX_PINS = 12
+"""The most pins looked for on a multiplayer result map, one per player."""
 MATCH_WIDTH = 960
 """Result screenshots are shrunk to this width to recognise the world map quickly."""
 WHOLE_STEP = 0.25
@@ -204,18 +212,34 @@ def _window_std(image: np.ndarray, h: int, w: int) -> np.ndarray:
 
 def find_marker(shade: np.ndarray, name: str, scale: float) -> Marker:
     """Best match for the ``"pin"`` (in redness) or ``"flag"`` (in darkness) drawn at ``scale``."""
+    found = find_markers(shade, name, scale, most=1)
+    return found[0] if found else Marker(0.0, 0.0, -1.0)
+
+
+def find_markers(
+    shade: np.ndarray, name: str, scale: float, at_least: float = -1.0, most: int = MAX_PINS
+) -> list[Marker]:
+    """The best matches for a marker (see :func:`find_marker`) scoring ``at_least``, best first,
+    one to a place: up to ``most`` of them, like every player's pin on a result map."""
     template = _scaled_template(name, scale)
     th, tw = template.shape
     if th > shade.shape[0] or tw > shade.shape[1]:
-        return Marker(0.0, 0.0, -1.0)
+        return []
     blurred = cv2.GaussianBlur(shade, (0, 0), BLUR * scale)
     result = cv2.matchTemplate(blurred, template, cv2.TM_CCOEFF_NORMED)
     # Featureless windows would otherwise score a meaningless perfect match.
     result[_window_std(blurred, th, tw) < 0.05] = -1.0
-    _, score, _, (x, y) = cv2.minMaxLoc(result)
     base, (ax, ay) = MARKERS[name]
     sx, sy = tw / base.shape[1], th / base.shape[0]
-    return Marker(x + (ax + 0.5) * sx - 0.5, y + (ay + 0.5) * sy - 0.5, float(score))
+    found: list[Marker] = []
+    while len(found) < most:
+        _, score, _, (x, y) = cv2.minMaxLoc(result)
+        if score < at_least or (found and score <= -1.0):
+            break
+        found.append(Marker(x + (ax + 0.5) * sx - 0.5, y + (ay + 0.5) * sy - 0.5, float(score)))
+        # The same marker matches again a pixel or two off: look elsewhere for the next.
+        result[max(y - th // 2, 0) : y + th // 2 + 1, max(x - tw // 2, 0) : x + tw // 2 + 1] = -1.0
+    return found
 
 
 def find_scale(red: np.ndarray) -> float | None:
@@ -259,6 +283,8 @@ class _Level:
     flag: Marker | None
     halvings: float
     """How many times the map's scale had halved since the first level."""
+    pins: list[Marker] = field(default_factory=list)
+    """On a multiplayer result map, every pin, which ours is among."""
 
 
 class ResultReader:
@@ -274,14 +300,26 @@ class ResultReader:
         self.settle_checks = settle_checks
         self.scale: float | None = None
 
-    def read(self, placed_lat: float, placed_lon: float) -> Reading:
-        """Find the answer; ``placed_lat``/``placed_lon`` is where our pin was dropped."""
+    def read(
+        self,
+        placed_lat: float,
+        placed_lon: float,
+        *,
+        crowded: bool = False,
+        abort: Callable[[], bool] | None = None,
+    ) -> Reading:
+        """Find the answer; ``placed_lat``/``placed_lon`` is where our pin was dropped. With
+        ``crowded``, other players' pins show too. ``abort`` says when to stop zooming out,
+        as when the result map has gone and the next round begun."""
         centre = self.region.center
         self.controls.move(centre)
         reading = Reading(None, "the result map never lined up with the world map")
         levels: list[_Level] = []
         step = 1.0  # scale halvings per whole notch, re-measured whenever the markers allow
         for zoom_outs in range(self.max_zoom_outs + 1):
+            if abort is not None and abort():
+                reading.problem = "the result map went before the answer was read"
+                break
             if zoom_outs:
                 self.controls.scroll(centre, -1)
             rgb = self._settled_grab()
@@ -290,19 +328,24 @@ class ResultReader:
             elif np.abs(rgb.astype(np.int16) - levels[-1].rgb).mean() < 0.5:
                 break  # the map won't zoom out any further
             pin, flag = self._markers(rgb)
+            pins = []
+            if crowded:  # which pin is ours only the recognised map can say
+                pins, pin = self._pins(rgb), None
             halvings = 0.0
             if levels:
                 measured = self._halvings_between(levels[-1], pin, flag)
                 if measured is not None and measured.is_integer():
                     step = measured
                 halvings = levels[-1].halvings + (step if measured is None else measured)
-            levels.append(_Level(rgb, pin, flag, halvings))
+            levels.append(_Level(rgb, pin, flag, halvings, pins))
             projection = self._locate(rgb)
             # The first view is at a whole zoom level, so a world recognised on it at another
             # size is a wrong fit that only happened to put our pin where it is: look further out.
             if projection and len(levels) == 1 and self.scale:
                 if abs(_zoom_off(projection.world_px, self.scale)) > WHOLE_ZOOM_SLACK:
                     projection = None
+            if projection and crowded:
+                levels[-1].pin = self._our_pin(projection, levels[-1], placed_lat, placed_lon)
             if projection and self._shows_our_pin(projection, levels[-1], placed_lat, placed_lon):
                 reading.answer, reading.problem = self._answer(
                     levels, projection, placed_lat, placed_lon
@@ -334,6 +377,13 @@ class ResultReader:
         }
         pin, flag = (m if m.score >= MIN_SCORES[name] else None for name, m in found.items())
         return pin, flag
+
+    def _pins(self, rgb: np.ndarray) -> list[Marker]:
+        """Every pin on a result map, as on a multiplayer one, where all players' show."""
+        if self.scale is None:
+            return []
+        red, _ = marker_shades(rgb)
+        return find_markers(red, "pin", self.scale, MIN_SCORES["pin"])
 
     def _halvings_between(
         self, before: _Level, pin: Marker | None, flag: Marker | None
@@ -381,12 +431,34 @@ class ResultReader:
             target, slack = level.flag, APART * self.scale
         else:
             return False
-        x, y = projection.to_pixel(lat, lon, level.rgb.shape[1])
-        dx = x - target.x
+        off = self._off(projection, target, lat, lon, level.rgb.shape[1])
+        return off <= self._reach(projection, lat) + slack
+
+    def _our_pin(
+        self, projection: MapProjection, level: _Level, lat: float, lon: float
+    ) -> Marker | None:
+        """Of every pin on the level, the nearest to where the recognised map puts ours, if
+        any is within reach of it."""
+        width, reach = level.rgb.shape[1], self._reach(projection, lat)
+        offs = [(self._off(projection, pin, lat, lon, width), pin) for pin in level.pins]
+        near = [(off, pin) for off, pin in offs if off <= reach]
+        return min(near, key=lambda found: found[0])[1] if near else None
+
+    @staticmethod
+    def _off(
+        projection: MapProjection, marker: Marker, lat: float, lon: float, width: int
+    ) -> float:
+        """Pixels between ``marker`` and where the recognised map puts (``lat``, ``lon``)."""
+        x, y = projection.to_pixel(lat, lon, width)
+        dx = x - marker.x
         if projection.wraps:
             dx = (dx + projection.world_px / 2) % projection.world_px - projection.world_px / 2
-        tolerance = 4 * self.scale + slack + PLACED_ERROR_KM / _km_per_px(projection.world_px, lat)
-        return math.hypot(dx, y - target.y) <= tolerance
+        return math.hypot(dx, y - marker.y)
+
+    def _reach(self, projection: MapProjection, lat: float) -> float:
+        """How far from where we clicked our pin may be found: a marker's misplacement, plus
+        how far off our own record of it may be (see :data:`PLACED_ERROR_KM`)."""
+        return 4 * self.scale + PLACED_ERROR_KM / _km_per_px(projection.world_px, lat)
 
     def _answer(
         self, levels: list[_Level], projection: MapProjection, lat: float, lon: float

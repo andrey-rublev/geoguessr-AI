@@ -50,7 +50,9 @@ def test_words_cut_off_at_the_edge_of_a_sign_still_count():
 def test_a_word_inside_a_longer_one_read_nearby_is_the_same_sign_cut_off():
     twice = [TextLine("Calle Benito Juare", "latin", 0.94), TextLine("alle", "latin", 0.96)]
     assert text_clues(twice).notes == ["Spanish: calle"]  # not a Danish allé as well
-    assert text_clues([TextLine("Solvej Allé 12", "latin", 0.9)]).notes == ["Danish: allé"]
+    assert "Danish" in text_clues([TextLine("Solvej Allé 12", "latin", 0.9)]).notes[0]
+    cut = [TextLine("Allégatan", "latin", 0.99), TextLine("Allégata", "latin", 0.93)]
+    assert not any("Norwegian: …gata" in note for note in text_clues(cut).notes)
 
 
 def test_street_words_that_several_languages_share():
@@ -82,6 +84,7 @@ def test_road_words_written_onto_the_end_of_the_name():
     assert ratio(text_clues([TextLine("Eindstraat", "latin", 0.9)]), "NL", "FR") >= 2
     assert ratio(text_clues([TextLine("Ivalontie", "latin", 0.9)]), "FI", "SE") >= 2
     run_on = text_clues([TextLine("Bárðardalsvegurvest", "latin", 0.9)])  # words run together
+    assert ratio(text_clues([TextLine("Snæfjallastrandarvegu", "latin", 0.99)]), "IS", "DK") == 1
     assert ratio(run_on, "IS", "AR") >= 4 and "Icelandic: …vegur" in run_on.notes
     # Without its accent, Swedish gränd is inside every Spanish grande.
     assert not text_clues([TextLine("LLANOGRANDE", "latin", 0.9)]).notes
@@ -166,6 +169,8 @@ def test_local_phone_numbers_without_a_country_code():
     assert ratio(text_clues([TextLine("Tel (415) 555-0132", "latin", 0.9)]), "US", "GB") >= 3
     assert ratio(text_clues([TextLine("01 42 68 53 00", "latin", 0.9)]), "FR", "ES") >= 3
     assert ratio(text_clues([TextLine("8 (495) 123-45-67", "latin", 0.9)]), "RU", "PL") >= 3
+    croatian = text_clues([TextLine("Mob. 095/ 550 28 42", "latin", 0.95)])
+    assert ratio(croatian, "HR", "DE") == 1 and ratio(croatian, "HR", "IT") >= 3
     mobile = text_clues([TextLine("tel. 690 836 020", "latin", 0.9)])  # Spanish, or Polish
     assert ratio(mobile, "ES", "PL") == 1 and ratio(mobile, "PL", "DE") >= 3
     both = text_clues([TextLine("+55 (11) 99983-2915", "latin", 0.9)])
@@ -197,6 +202,8 @@ def test_prices_speeds_postcodes_and_road_numbers():
         ("Park Rd N", "GB", "AU"),  # the compass point after the name is British too
         ("10th Ave", "ZA", "AU"),
         ("14th St", "US", "GB"),
+        ("1st St", "IN", "BD"),  # Chennai's
+        ("State Rte 2019", "US", "FR"),  # Route, not French
         ("Ulitsa Gagarina", "RU", "PL"),
         ("Motiram Marg", "NP", "BD"),
         ("Cra. 71c", "CO", "PE"),

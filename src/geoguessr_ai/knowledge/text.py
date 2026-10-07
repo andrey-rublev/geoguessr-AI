@@ -152,8 +152,8 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "ğış",
         "sokak,sokağı,caddesi,cadde,mahallesi,bulvarı,yolu,çıkış,yasak,eczane,satılık,kiralık",
     ),
-    "sv": ("Swedish", "å", "gatan,vägen,gata,väg,torget,gränd,utfart,förbjudet,apotek,säljes"),
-    "no": ("Norwegian", "åæø", "gata,veien,vegen,plass,torget,utkjørsel,forbudt,apotek,selges"),
+    "sv": ("Swedish", "å", "gatan,vägen,gata,väg,torget,gränd,allé,utfart,förbjudet,apotek,säljes"),
+    "no": ("Norwegian", "åæø", "gata,veien,vegen,plass,torget,allé,utkjørsel,forbudt,apotek,selges"),
     "da": ("Danish", "åæø", "gade,vej,allé,plads,stræde,udkørsel,forbudt,apotek,sælges"),
     "fi": ("Finnish", "", "katu,kuja,polku,tori,liittymä,kielletty,apteekki,myydään"),
     "et": ("Estonian", "õ", "tänav,maantee,puiestee,väljak,väljasõit,keelatud,apteek,müüa"),
@@ -163,8 +163,8 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "ąęėįų",
         "gatvė,prospektas,aikštė,plentas,draudžiama,vaistinė,parduodamas",
     ),
-    "is": ("Icelandic", "þð", "gata,vegur,braut,stígur,apótek"),
-    "fo": ("Faroese", "ðø", "gøta,vegur"),
+    "is": ("Icelandic", "þðæ", "gata,vegur,braut,stígur,apótek"),
+    "fo": ("Faroese", "ðøæ", "gøta,vegur"),
     "mt": ("Maltese", "ħġċż", "triq,pjazza,sqaq"),
     "vi": (
         "Vietnamese",
@@ -252,7 +252,7 @@ ABBREVIATIONS = {  # counted only when written with a dot, as on street signs
     "av": "pt,es,fr,ca",
     "tv": "pt",
     "estr": "pt",  # Estrada, on nine Brazilian and Portuguese rounds out of nine
-    "rte": "fr",
+    "rte": "fr,en",  # Rte de Paris, and State Rte 2019 in Pennsylvania
     "c": "es",
     "cam": "es",
     "ctra": "es,ca",  # Carretera, in Spain and Andorra
@@ -288,7 +288,8 @@ LOCAL_PHONES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (r"010-\d{4}-\d{4}", ("KR",)),  # 010-1234-5678
     (r"\d{3}-\d{2}-\d{2}", ("RU", "UA", "BY", "KZ", "KG", "UZ", "TJ", "MD")),  # 123-45-67
     (r"[6-9]\d{4}\s\d{5}", ("IN",)),  # 98765 43210
-    (r"0\d{2,4}\s?/\s?\d{3,8}", ("DE", "AT", "CH", "LI")),  # 0221 / 123456
+    # 0221 / 123456, and 095/ 550 28 42 across the former Yugoslavia
+    (r"0\d{2,4}\s?/\s?\d{3,8}", ("DE", "AT", "CH", "LI", "HR", "BA", "RS", "ME", "MK", "SI")),
     (r"[69]\d{2}\s\d{3}\s\d{3}", ("ES", "PT", "PL", "CZ")),  # 612 345 678, and mobiles 690 836 020
 )
 _TOKEN = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*")
@@ -355,7 +356,7 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (rf"\b(?:us|{_US_ONLY_STATES})-\d{{1,3}}[a-z]?\b", "US highway", ("US",)),
     (r"\b(?:on|bc|sk|mb|qc|nb|ns|nl|yt|nt)-\d{1,3}[a-z]?\b", "Canadian highway", ("CA",)),
     (r"\bab-\d{1,3}\b", "Canadian highway", ("CA", "ES")),
-    (r"\bstate\s?(?:rd|road|route|hwy|highway)\s?\d", "state route", ("US", "AU")),
+    (r"\bstate\s?(?:rd|road|route|rte|hwy|highway)\s?\d", "state route", ("US", "AU")),
     (r"\bhwy\s?\d{1,3}\b", "numbered highway", ("US", "CA")),
     (r"\bm[a-z]?[eé]xico\s?\d{1,3}d?\b", "Mexican federal highway", ("MX",)),  # México 175D
     (r"\brn\s?(?:\d{1,3}|-\d{1,2})\b", "national route", ("AR", "CO", "GT")),  # not Brazil's RN-160
@@ -394,7 +395,7 @@ OFFICIAL_TEXT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         r"\b\d{1,3}(?:st|nd|rd|th)\s(?:st|ave|pl|ter|blvd|street|avenue|terrace)\b",
         "numbered street",
-        ("US", "CA", "PH", "NG", "ZA"),  # and Johannesburg's suburbs: 10th Ave
+        ("US", "CA", "PH", "NG", "ZA", "IN"),  # and Johannesburg's suburbs, and Chennai's
     ),
 )
 
@@ -706,6 +707,10 @@ def _language_signs(lines: Sequence[str]) -> dict[frozenset[str], set[str]]:
         if len(token) >= 3:  # a lone letter is too easily a misreading
             for letter in set(token) & letters.keys():
                 found.setdefault(letters[letter], set()).add(letter)
+        # And one that is the head of a longer one has lost its last letters, and so its true
+        # ending: Allégata beside Allégatan is a Swedish street, not a Norwegian one.
+        if any(other != token and other.startswith(token) for other in tokens):
+            continue
         for ending, languages in endings.items():
             if _ends_road(token, ending):
                 found.setdefault(languages, set()).add("…" + ending)

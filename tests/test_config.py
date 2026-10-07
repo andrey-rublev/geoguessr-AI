@@ -29,6 +29,21 @@ def test_layout_roundtrip(tmp_path):
     assert Layout.load(path) == layout
 
 
+def test_multiplayer_layout_roundtrip_without_continue(tmp_path):
+    layout = Layout(
+        view=Region(0, 80, 1920, 800),
+        map_hover=Point(1700, 850),
+        map_region=Region(1000, 400, 880, 600),
+        guess_button=Point(1700, 1040),
+        continue_button=None,
+        timer=Point(1850, 1010),
+        covered=(Region(0, 600, 300, 200),),
+    )
+    path = tmp_path / "layout-party.json"
+    layout.save(path)
+    assert Layout.load(path) == layout
+
+
 def test_layout_load_missing_file_explains_next_step(tmp_path):
     with pytest.raises(FileNotFoundError, match="calibrate"):
         Layout.load(tmp_path / "nope.json")

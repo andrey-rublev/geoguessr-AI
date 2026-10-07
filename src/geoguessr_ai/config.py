@@ -11,6 +11,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 DEFAULT_LAYOUT_PATH = Path("layout.json")
+PARTY_LAYOUT_PATH = Path("layout-party.json")
+"""Multiplayer rooms lay the game out differently, so they are calibrated apart."""
 
 
 @dataclass(frozen=True)
@@ -60,8 +62,14 @@ class Layout:
     map_region: Region
     """The expanded map (just the map tiles, not the bar underneath)."""
     guess_button: Point
-    continue_button: Point
-    """The "Continue" button on the round result screen."""
+    continue_button: Point | None
+    """The "Continue" button on the round result screen. Multiplayer layouts have none: there
+    the host presses it, for everyone."""
+    timer: Point | None = None
+    """Multiplayer: the round's timer, in the bar under the expanded map."""
+    covered: tuple[Region, ...] = ()
+    """Multiplayer: what the game draws over Street View, like the chat box, which is blanked out
+    of everything the bot looks at, so it is neither shown to the model nor read as a sign."""
 
     def save(self, path: Path = DEFAULT_LAYOUT_PATH) -> None:
         Path(path).write_text(json.dumps(asdict(self), indent=2) + "\n", encoding="utf-8")
@@ -72,10 +80,14 @@ class Layout:
         if not path.exists():
             raise FileNotFoundError(f"{path} not found. Run `geoguessr-ai calibrate` first.")
         raw = json.loads(path.read_text(encoding="utf-8"))
+        point = raw.get("continue_button")
+        timer = raw.get("timer")
         return cls(
             view=Region(**raw["view"]),
             map_hover=Point(**raw["map_hover"]),
             map_region=Region(**raw["map_region"]),
             guess_button=Point(**raw["guess_button"]),
-            continue_button=Point(**raw["continue_button"]),
+            continue_button=None if point is None else Point(**point),
+            timer=None if timer is None else Point(**timer),
+            covered=tuple(Region(**region) for region in raw.get("covered", ())),
         )

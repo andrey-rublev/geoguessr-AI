@@ -137,7 +137,7 @@ WHOLE_ZOOM_SLACK = 0.1
 """Halvings a first view may be off a whole zoom level before it is put on one. The markers'
 scale that the levels are reckoned from is measured to about 1% (1.243 for 1.25), or 0.01.
 A world recognised on the first view this far off one is a wrong fit: two in 900 rounds by
-30 September were, both 0.38 off, which put one answer in Turkey near Tehran instead."""
+30 September were, both 0.38 off, which put one answer near Tehran instead of in Syria."""
 
 
 @dataclass(frozen=True)

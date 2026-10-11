@@ -1,4 +1,5 @@
-"""Screen layout of the OpenGuessr UI, recorded once by ``geoguessr-ai calibrate``.
+"""Screen layout of the OpenGuessr UI, found on screen by ``geoguessr-ai calibrate`` (or pointed
+out by hand, with ``--manual``).
 
 All coordinates are physical screen pixels (the process is made DPI-aware before
 capturing or moving the mouse, so these match what mss and pyautogui see).
@@ -40,6 +41,14 @@ class Region:
         return cls(left, top, right - left, bottom - top)
 
     @property
+    def right(self) -> int:
+        return self.left + self.width
+
+    @property
+    def bottom(self) -> int:
+        return self.top + self.height
+
+    @property
     def center(self) -> Point:
         return Point(self.left + self.width // 2, self.top + self.height // 2)
 
@@ -70,6 +79,10 @@ class Layout:
     covered: tuple[Region, ...] = ()
     """Multiplayer: what the game draws over Street View, like the chat box, which is blanked out
     of everything the bot looks at, so it is neither shown to the model nor read as a sign."""
+    page: Region | None = None
+    """Where the game's page shows in the browser, when calibration found the game by itself."""
+    party: bool = False
+    """Whether this is a multiplayer room's layout."""
 
     def save(self, path: Path = DEFAULT_LAYOUT_PATH) -> None:
         Path(path).write_text(json.dumps(asdict(self), indent=2) + "\n", encoding="utf-8")
@@ -82,6 +95,7 @@ class Layout:
         raw = json.loads(path.read_text(encoding="utf-8"))
         point = raw.get("continue_button")
         timer = raw.get("timer")
+        page = raw.get("page")
         return cls(
             view=Region(**raw["view"]),
             map_hover=Point(**raw["map_hover"]),
@@ -90,4 +104,6 @@ class Layout:
             continue_button=None if point is None else Point(**point),
             timer=None if timer is None else Point(**timer),
             covered=tuple(Region(**region) for region in raw.get("covered", ())),
+            page=None if page is None else Region(**page),
+            party=raw.get("party", point is None),  # older multiplayer layouts had no Continue
         )

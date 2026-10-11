@@ -38,10 +38,24 @@ def test_multiplayer_layout_roundtrip_without_continue(tmp_path):
         continue_button=None,
         timer=Point(1850, 1010),
         covered=(Region(0, 600, 300, 200),),
+        page=Region(0, 0, 1920, 1080),
+        party=True,
     )
     path = tmp_path / "layout-party.json"
     layout.save(path)
     assert Layout.load(path) == layout
+
+
+def test_older_layouts_are_multiplayer_ones_when_they_have_no_continue(tmp_path):
+    path = tmp_path / "layout-party.json"
+    path.write_text(
+        '{"view": {"left": 0, "top": 80, "width": 1920, "height": 800},'
+        ' "map_hover": {"x": 1700, "y": 850},'
+        ' "map_region": {"left": 1000, "top": 400, "width": 880, "height": 600},'
+        ' "guess_button": {"x": 1700, "y": 1040}, "continue_button": null}'
+    )
+    layout = Layout.load(path)
+    assert layout.party and layout.page is None
 
 
 def test_layout_load_missing_file_explains_next_step(tmp_path):

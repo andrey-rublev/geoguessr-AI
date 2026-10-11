@@ -440,7 +440,7 @@ class OpenGuessrBot:
             print("Can't watch for other players' guesses: install RapidOCR")
             return None
         return GuessWatch(
-            notice_region(self.layout.view),
+            notice_region(self.layout),
             lambda image: reader.read_line(image, whole=False),
             self.controls.now,
         )

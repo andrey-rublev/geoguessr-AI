@@ -18,7 +18,7 @@ from contextlib import AbstractContextManager
 from PIL import Image
 
 from .buttons import button_region
-from .config import Point, Region
+from .config import Layout, Point, Region
 
 _TIMER = re.compile(r"(\d{1,2})\s*[:.;]\s*(\d{2})(?!\d)")
 _GUESSED = re.compile(r"player\s*has\s*gu|guessed", re.I)
@@ -27,8 +27,13 @@ NOTICE_WIDTH = 480
 """The middle of Street View is shrunk to this width to read what the game writes over it. The
 notice that a player has guessed is big, so it still reads, and a look takes about 30 ms when
 nothing is written there, on one thread."""
-NOTICE_BAND = (0.2, 0.3, 0.8, 0.68)
-"""Where in the view, as fractions of its width and height, the game writes its notices."""
+NOTICE_BAND = (0.2, 0.3, 0.8, 0.7)
+"""Where on the game's page, as fractions of its width and height, the game writes its notices:
+round the middle, the notice that a player has guessed from 0.43 to 0.57 of the way down."""
+VIEW_NOTICE_BAND = (0.2, 0.45, 1.0, 1.0)
+"""The same, as fractions of the view, for layouts made by hand, which don't know where the page
+is: the view reaches from near its top to about two thirds of the way down, and from its left
+to the map, so the page's middle is right of the view's."""
 
 
 def parse_timer(text: str) -> float | None:
@@ -57,14 +62,17 @@ def timer_region(point: Point) -> Region:
     return button_region(point)
 
 
-def notice_region(view: Region) -> Region:
-    """The middle of the view, where the game writes that a player has guessed."""
-    left, top, right, bottom = NOTICE_BAND
+def notice_region(layout: Layout) -> Region:
+    """The middle of the game's page, where it writes that a player has guessed."""
+    area, band = layout.page, NOTICE_BAND
+    if area is None:
+        area, band = layout.view, VIEW_NOTICE_BAND
+    left, top, right, bottom = band
     return Region(
-        view.left + round(view.width * left),
-        view.top + round(view.height * top),
-        round(view.width * (right - left)),
-        round(view.height * (bottom - top)),
+        area.left + round(area.width * left),
+        area.top + round(area.height * top),
+        round(area.width * (right - left)),
+        round(area.height * (bottom - top)),
     )
 
 
@@ -129,7 +137,7 @@ class RoundClock:
 
 class GuessWatch:
     """Watches ``region``, the middle of Street View, for the game saying another player has
-    guessed, which it says for only a few seconds: so in the background, a look every
+    guessed, which it says for only about two seconds: so in the background, a look every
     ``interval`` seconds while a round is on, reading with ``read_text`` (see
     :func:`parse_notice`). ``now`` is the time by a clock that only goes forward."""
 

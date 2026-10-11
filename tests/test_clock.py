@@ -3,8 +3,8 @@ import time
 
 from PIL import Image
 
-from geoguessr_ai.clock import RoundClock, parse_timer, timer_region
-from geoguessr_ai.config import Point
+from geoguessr_ai.clock import RoundClock, notice_region, parse_timer, timer_region
+from geoguessr_ai.config import Layout, Point, Region
 
 
 def test_reads_timers_as_the_recogniser_gives_them():
@@ -93,3 +93,14 @@ def test_watches_for_other_players_guesses_in_the_background_during_rounds():
     assert watch.guessed_at is not None and watch.cut_to == 15 and not watch.watching
     assert looks[0] == (480, 150)  # shrunk to read quickly
     assert parse_notice("A player has gu") == 15  # half-read, a duel's cut is assumed
+
+
+def test_looks_for_the_notice_that_a_player_guessed_round_the_middle_of_the_page():
+    # As found in a 1536 by 864 window, where the notice is written from 370 to 495 down
+    page, view = Region(0, 0, 1531, 864), Region(22, 70, 1129, 498)
+    layout = Layout(view, Point(1313, 655), Region(622, 257, 844, 475), Point(1313, 828), None)
+
+    found_by_hand = notice_region(layout)
+    for found in (notice_region(Layout(**{**layout.__dict__, "page": page})), found_by_hand):
+        assert found.top <= 370 and found.bottom >= 495
+        assert found.left <= 493 and found.right >= 1043  # "A player has guessed", as wide

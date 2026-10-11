@@ -523,6 +523,7 @@ PARTY = Layout(
     continue_button=None,  # the host presses it
     timer=Point(1800, 960),
     covered=(Region(0, 600, 300, 200),),  # the chat box
+    party=True,
 )
 
 
@@ -614,7 +615,7 @@ class MultiplayerRoom(TurningStreetView):
         self._pass(0.02)
         if region == timer_region(PARTY.timer):  # what it says is in timer_text
             return Image.new("RGB", (region.width, region.height), (50, 52, 60))
-        if region == notice_region(PARTY.view):  # and in notice_text
+        if region == notice_region(PARTY):  # and in notice_text
             return Image.new("RGB", (region.width, region.height), (120, 140, 160))
         if region.left != PARTY.view.left and self.phase != "round":  # no compass
             return Image.new("RGB", (region.width, region.height), (90, 110, 70))

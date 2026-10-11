@@ -10,7 +10,7 @@ import json
 import math
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -19,7 +19,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
-from .buttons import MIN_SIMILARITY, button_region, similarity
+from .buttons import HALF_HEIGHT, MIN_SIMILARITY, button_region, similarity
 from .camera import Camera, default_camera, ground_view, measure
 from .clock import GuessWatch, RoundClock, notice_region, timer_region
 from .compass import Compass, CompassReader, compass_region
@@ -30,6 +30,7 @@ from .geo import haversine_km
 from .knowledge.evidence import Evidence
 from .knowledge.sun import clear_sky, find_sun, latitude_likelihood
 from .knowledge.text import TextLine, text_clues
+from .locate import find_continue
 from .minimap import GuessMap, Placement
 from .model.predictor import Guess
 from .ocr import SignReader
@@ -202,11 +203,16 @@ class OpenGuessrBot:
         screen,
         controls,
         continue_image: Image.Image | None = None,
+        save_layout: Callable[[Layout, Image.Image], None] | None = None,
     ):
-        """``continue_image`` is calibration's snapshot of the Continue button. With it, the bot
-        won't click Continue while something else covers the button."""
+        """``continue_image`` is a snapshot of the Continue button. With it, the bot won't click
+        Continue while something else covers the button. A layout found by itself has neither
+        until the first result screen, where the bot finds them and hands them to
+        ``save_layout``."""
         self.layout = layout
         self.continue_image = continue_image
+        self.save_layout = save_layout
+        self._words = None
         self.predictor = predictor
         self.settings = settings
         self.screen = screen
@@ -754,9 +760,9 @@ class OpenGuessrBot:
         return image
 
     def _press_continue(self, folder: Path | None) -> None:
-        """Click Continue, but only once it looks as it did at calibration, not covered."""
+        """Click Continue, but only once it looks as it did at first, not covered."""
         if self.layout.continue_button is None:
-            raise ContinueBlocked("this layout has no Continue button: it is for multiplayer")
+            self._find_continue()
         if self.continue_image is None:
             self.controls.click(self.layout.continue_button)
             return
@@ -779,6 +785,27 @@ class OpenGuessrBot:
             "the Continue button stayed covered, maybe by an advert, so it wasn't clicked. "
             "Close whatever covers it and play again; if nothing does, re-run calibrate."
         )
+
+    def _find_continue(self) -> None:
+        """Find the Continue button by its name, on the first result screen, and remember it and
+        how it looks, for the rounds to come."""
+        guess, waited = self.layout.guess_button, 0.0
+        page = self.layout.page or self.screen.virtual_desktop()
+        row = Region(page.left, guess.y - 3 * HALF_HEIGHT, page.width, 6 * HALF_HEIGHT)
+        if self._words is None:
+            self._words = SignReader(models=["latin"], threads=2).words
+        corner = Point(row.left, row.top)
+        while (button := find_continue(self._words(self.screen.grab(row)), corner)) is None:
+            if waited >= self.settings.continue_timeout:
+                raise ContinueBlocked("couldn't find the Continue button on the result screen")
+            self.controls.sleep(1.0)
+            waited += 1.0
+        self.controls.move(self.layout.view.center)  # not hovered over, as it mostly isn't
+        self.controls.sleep(0.3)
+        self.continue_image = self.screen.grab(button_region(button))
+        self.layout = replace(self.layout, continue_button=button)
+        if self.save_layout is not None:
+            self.save_layout(self.layout, self.continue_image)
 
     def _wait_for_street_view(self) -> None:
         """Wait while Street View is still a black screen."""

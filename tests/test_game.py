@@ -18,6 +18,7 @@ from geoguessr_ai.knowledge.text import TextLine
 from geoguessr_ai.mapcal import MapProjection
 from geoguessr_ai.minimap import Placement
 from geoguessr_ai.model.predictor import Guess
+from geoguessr_ai.ocr import Word
 from geoguessr_ai.result import Answer, Reading, result_region
 
 LAYOUT = Layout(
@@ -100,7 +101,7 @@ class TurningStreetView(FakeScreen, FakeControls):
         self.ignored, self.presses = set(ignored), 0
 
     def grab(self, region):
-        if region.left != LAYOUT.view.left:
+        if region.left != LAYOUT.view.left and region.height >= 420:
             self.compass_at = Point(region.left + 90, region.top + 355)
             rgb = np.full((region.height, region.width, 3), (90, 110, 70), np.uint8)
             rgb[300:420, :160] = draw_compass(self.heading)
@@ -176,6 +177,10 @@ class FakeSignReader:
             return [TextLine("Avenida Paulista", "latin", 0.9)] if images else []
         self.scenes.extend(image.size for image in images)
         return [TextLine("Rua Augusta 12", "latin", 0.93)]
+
+    def words(self, image):
+        """On the result screen's row of buttons, Continue, 700 pixels from its left."""
+        return [Word("Continue", Region(670, image.height // 2 - 10, 60, 20))]
 
 
 class FakeReader:

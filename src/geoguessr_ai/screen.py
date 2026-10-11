@@ -50,6 +50,13 @@ class Screen:
         mon = self._sct.monitors[0]
         return Region(mon["left"], mon["top"], mon["width"], mon["height"])
 
+    def monitors(self) -> list[Region]:
+        """Each monitor's part of the desktop."""
+        return [
+            Region(mon["left"], mon["top"], mon["width"], mon["height"])
+            for mon in self._sct.monitors[1:]
+        ]
+
     def close(self) -> None:
         self._sct.close()
 

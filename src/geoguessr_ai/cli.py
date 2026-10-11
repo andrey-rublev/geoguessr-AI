@@ -48,15 +48,48 @@ def _predictor(args: argparse.Namespace):
     )
 
 
-def _calibrate(path: Path, friends: bool) -> None:
-    from .calibrate import run_calibration, run_party_calibration
+def _read_words():
+    """What reads the game's own words on screen, like Menu and Guess, to find it by."""
+    from .ocr import SignReader
 
-    (run_party_calibration if friends else run_calibration)(path)
+    return SignReader(models=["latin"], threads=2).words
+
+
+def _find_game(screen, controls, path: Path, party: bool, again: bool, read_words, delay: float):
+    """After ``delay`` seconds, the game's layout: as saved at ``path`` if the game still shows
+    there, else found on screen and saved. None if the bot was stopped meanwhile."""
+    from .calibrate import WrongGame, ensure_layout
+    from .controls import StopRequested
+    from .windows import bring_forward
+
+    try:
+        controls.sleep(delay)
+        return ensure_layout(
+            screen, controls, path, party, read_words, again=again, bring_forward=bring_forward
+        )
+    except StopRequested:
+        print("Stopped by user.")
+    except controls.failsafe:
+        print("Stopped: the mouse hit a screen corner.")
+    except WrongGame as wrong:
+        raise SystemExit(str(wrong)) from None
+    return None
 
 
 def cmd_calibrate(args: argparse.Namespace) -> None:
-    default = PARTY_LAYOUT_PATH if args.friends else DEFAULT_LAYOUT_PATH
-    _calibrate(args.layout or default, args.friends)
+    path = args.layout or (PARTY_LAYOUT_PATH if args.friends else DEFAULT_LAYOUT_PATH)
+    if args.manual:
+        from .calibrate import run_calibration, run_party_calibration
+
+        (run_party_calibration if args.friends else run_calibration)(path)
+        return
+    from .controls import Controls
+    from .screen import Screen
+
+    read_words = _read_words()
+    with Screen() as screen, Controls(stop_key=args.stop_key) as controls:
+        print(f"Looking for OpenGuessr in {args.start_delay:g}s: let go of the mouse.")
+        _find_game(screen, controls, path, args.friends, True, read_words, args.start_delay)
 
 
 def cmd_download(args: argparse.Namespace) -> None:
@@ -272,36 +305,43 @@ def cmd_locate_map(args: argparse.Namespace) -> None:
 
 
 def _run_bot(args: argparse.Namespace, settings) -> None:
-    """Show the bot where the game is on screen if it hasn't been shown, load everything, and
-    play."""
+    """Load everything, find the game on screen unless it's where it was last time, and play."""
     from PIL import Image
 
     from .buttons import button_image_path
-    from .config import Layout
     from .controls import Controls
     from .game import OpenGuessrBot
     from .screen import Screen
 
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Build a model with `geoguessr-ai train` first.")
-    if args.calibrate or not args.layout.exists():
-        if not args.calibrate:
-            print(f"First, show the bot where the game is on your screen ({args.layout}).\n")
-        _calibrate(args.layout, settings.party)
-        if not settings.party:
-            print("\nNow press Continue in the game, so that a round shows.")
-    layout = Layout.load(args.layout)
-    if layout.continue_button is None and not settings.party:
-        raise SystemExit(f"{args.layout} is a multiplayer layout: play it with `friends`.")
-    button = button_image_path(args.layout)
-    continue_image = Image.open(button).convert("RGB") if button.exists() else None
-    if continue_image is None and not settings.dry_run and not settings.party:
-        print("Re-run `geoguessr-ai play --calibrate` so the bot won't click adverts on Continue.")
     predictor = _predictor(args)
+    read_words = _read_words()
+    button = button_image_path(args.layout)
+
+    def save_layout(layout, continue_image) -> None:
+        layout.save(args.layout)
+        continue_image.save(button)
+
     with Screen() as screen, Controls(dry_run=settings.dry_run, stop_key=args.stop_key) as controls:
-        bot = OpenGuessrBot(layout, predictor, settings, screen, controls, continue_image)
-        print(f"Starting in {args.start_delay:g}s - switch to the OpenGuessr window.")
-        controls.sleep(args.start_delay)
+        print(f"Starting in {args.start_delay:g}s: let go of the mouse. The bot finds the game.")
+        layout = _find_game(
+            screen,
+            controls,
+            args.layout,
+            settings.party,
+            args.calibrate,
+            read_words,
+            args.start_delay,
+        )
+        if layout is None:
+            return
+        continue_image = None
+        if layout.continue_button is not None and button.exists():
+            continue_image = Image.open(button).convert("RGB")
+        bot = OpenGuessrBot(
+            layout, predictor, settings, screen, controls, continue_image, save_layout
+        )
         bot.play()
     if settings.record_answers and settings.debug_dir is not None and not settings.dry_run:
         print(
@@ -402,7 +442,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument(
             "--calibrate",
             action="store_true",
-            help="show the bot where the game is on screen again first (it asks the first time)",
+            help="find the game on screen afresh (it does by itself when the game has moved)",
         )
         p.add_argument(
             "--rounds",
@@ -521,8 +561,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = add(
         "calibrate",
         cmd_calibrate,
-        "Setup: show the bot where the game is on screen.",
-        "play and friends ask the first time; --calibrate on either redoes it.",
+        "Setup: find the game on screen and save where it is.",
+        "play and friends do this by themselves whenever the game has moved.",
     )
     p.add_argument(
         "--friends",
@@ -531,6 +571,13 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"in a multiplayer room instead (saved as {PARTY_LAYOUT_PATH} unless --layout)",
     )
     p.add_argument("--layout", type=Path, help=f"where to save it (default {DEFAULT_LAYOUT_PATH})")
+    p.add_argument(
+        "--manual",
+        action="store_true",
+        help="show the bot where each part of the game is yourself, by hovering over it",
+    )
+    p.add_argument("--start-delay", type=float, default=3.0)
+    p.add_argument("--stop-key", default="f8")
 
     p = add("download", cmd_download, "Setup: download OpenStreetView-5M photos.")
     p.add_argument("--root", type=Path, default=DEFAULT_DATA)

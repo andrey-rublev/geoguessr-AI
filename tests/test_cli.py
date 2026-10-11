@@ -1,5 +1,6 @@
 import json
 from contextlib import nullcontext
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -16,12 +17,15 @@ from test_game import (
     PartyReader,
     TurningStreetView,
 )
+from test_buttons import draw_button
 from test_mapcal import render_map
 
-from geoguessr_ai import calibrate, cli, controls, screen
+from geoguessr_ai import calibrate, cli, controls, screen, windows
 from geoguessr_ai import game as game_module
+from geoguessr_ai.buttons import HALF_HEIGHT, HALF_WIDTH
 from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
 from geoguessr_ai.clock import NOTICE_WIDTH
+from geoguessr_ai.config import Layout, Point, Region
 from geoguessr_ai.knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
 from geoguessr_ai.mapcal import MapProjection
 from geoguessr_ai.model import backbone, evaluate, predictor, rounds, train
@@ -32,6 +36,7 @@ from geoguessr_ai.model.geocells import (
 )
 from geoguessr_ai.model.head import Checkpoint, Ensemble, GeoHead
 from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings, is_test_round
+from geoguessr_ai.ocr import Word
 
 
 @pytest.mark.parametrize(
@@ -49,7 +54,7 @@ from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings, is_test_roun
         ["train", "--photos", "data/embeddings/*.npz", "--model", "models/other.pt"],
         ["calibrate"],
         ["calibrate", "--friends"],
-        ["calibrate", "--party"],
+        ["calibrate", "--party", "--manual"],
         ["download", "--shards", "0", "1"],
         ["embed", "--limit", "100"],
         ["embed", "--rounds"],
@@ -276,7 +281,9 @@ def test_train_downloads_and_embeds_only_shards_not_embedded_yet(tmp_path, monke
 @pytest.fixture
 def desk(tmp_path, monkeypatch):
     """The CLI's screen, mouse and model, faked: ``play(argv, street_view)`` runs a command on
-    ``street_view``, which serves as both screen and mouse."""
+    ``street_view``, which serves as both screen and mouse. The game shows where the layout
+    has it, saying Guess there, until ``play.moved`` is set; ``play.found`` are the times it
+    was looked for afresh, which finds it as ``play.layout`` has it."""
     model = tmp_path / "geoguessr.pt"
     model.write_bytes(b"a model")
     guesses = FakePredictor()
@@ -284,13 +291,25 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr(game_module, "SignReader", FakeSignReader)
     monkeypatch.setattr(game_module, "ResultReader", FakeReader)
     monkeypatch.setattr(predictor, "GeoPredictor", lambda *args: guesses)
+    monkeypatch.setattr(calibrate, "PREVIEW_PATH", tmp_path / "preview.png")
+    monkeypatch.setattr(windows, "bring_forward", lambda *args: pytest.fail("raised a window"))
+
+    def read_words(image):
+        return [] if play.moved else [Word("Guess", Region(200, 40, 60, 30))]
+
+    def find_layout(screen, controls, party, *args):
+        play.found.append(party)
+        return play.layout
+
+    monkeypatch.setattr(cli, "_read_words", lambda: read_words)
+    monkeypatch.setattr(calibrate, "find_layout", find_layout)
 
     def play(argv, street_view):
         monkeypatch.setattr(screen, "Screen", lambda: nullcontext(street_view))
         monkeypatch.setattr(controls, "Controls", lambda **kwargs: nullcontext(street_view))
         main([*argv, "--model", str(model), "--start-delay", "0", "--runs", str(tmp_path / "runs")])
 
-    play.predictor = guesses
+    play.predictor, play.moved, play.found, play.layout = guesses, False, [], LAYOUT
     return play
 
 
@@ -320,29 +339,74 @@ def test_play_learn_saves_every_answer_for_train(desk, tmp_path, capsys):
         desk(["play", "--learn", "--no-save", "--layout", str(layout)], TurningStreetView())
 
 
-def test_play_asks_where_the_game_is_the_first_time(desk, tmp_path, monkeypatch, capsys):
+def test_play_finds_the_game_when_it_isnt_where_it_was(desk, tmp_path, capsys):
     layout = tmp_path / "layout.json"
-    calibrated = []
+    argv = ["play", "--rounds", "1", "--layout", str(layout), "--no-look-up"]
 
-    def run_calibration(path):
-        calibrated.append(path)
-        LAYOUT.save(path)
+    desk(argv, TurningStreetView())
+    assert desk.found == [False] and Layout.load(layout) == LAYOUT  # the first time
+    assert "saved where it is" in capsys.readouterr().out
 
-    monkeypatch.setattr(calibrate, "run_calibration", run_calibration)
-    desk(["play", "--rounds", "1", "--layout", str(layout), "--no-look-up"], TurningStreetView())
-    assert calibrated == [layout] and "press Continue" in capsys.readouterr().out
+    desk(argv, TurningStreetView())
+    assert desk.found == [False]  # still there
+    desk.moved = True  # as when a laptop is docked
+    desk(argv, TurningStreetView())
+    assert desk.found == [False, False] and "isn't where it was" in capsys.readouterr().out
+    desk.moved = False
+    desk([*argv, "--calibrate"], TurningStreetView())
+    assert desk.found == [False, False, False]  # or when asked
 
-    desk(["play", "--rounds", "1", "--layout", str(layout), "--no-look-up"], TurningStreetView())
-    assert calibrated == [layout]  # only the first time
-    desk(["play", "--calibrate", "--rounds", "1", "--layout", str(layout)], TurningStreetView())
-    assert calibrated == [layout, layout]  # or when asked
 
-
-def test_play_wont_use_a_multiplayer_layout(desk, tmp_path):
-    layout = tmp_path / "layout-party.json"
+def test_play_finds_a_singleplayer_game_where_a_multiplayer_layout_was(desk, tmp_path):
+    layout = tmp_path / "layout.json"
     PARTY.save(layout)
+
+    desk(["play", "--rounds", "1", "--layout", str(layout), "--no-look-up"], TurningStreetView())
+
+    assert desk.found == [False] and not Layout.load(layout).party
+
+
+def test_play_wont_play_a_multiplayer_room(desk, tmp_path, monkeypatch):
+    def find_layout(*args):
+        raise calibrate.WrongGame("OpenGuessr is showing a multiplayer room: play it with friends")
+
+    monkeypatch.setattr(calibrate, "find_layout", find_layout)
     with pytest.raises(SystemExit, match="friends"):
-        desk(["play", "--layout", str(layout)], TurningStreetView())
+        desk(["play", "--layout", str(tmp_path / "layout.json")], TurningStreetView())
+
+
+def test_play_stops_while_looking_for_the_game(desk, tmp_path, monkeypatch, capsys):
+    room = TurningStreetView()
+
+    def find_layout(*args):
+        raise controls.StopRequested("Stop key pressed")
+
+    monkeypatch.setattr(calibrate, "find_layout", find_layout)
+    desk(["play", "--layout", str(tmp_path / "layout.json")], room)
+
+    assert "Stopped by user" in capsys.readouterr().out and room.clicks == []
+
+
+class ResultScreen(TurningStreetView):
+    """Shows the Continue button wherever the bot looks for a button."""
+
+    def grab(self, region):
+        if (region.width, region.height) == (2 * HALF_WIDTH, 2 * HALF_HEIGHT):
+            return draw_button()
+        return super().grab(region)
+
+
+def test_play_finds_continue_on_the_first_result_screen_and_keeps_it(desk, tmp_path):
+    layout = tmp_path / "layout.json"
+    desk.layout = replace(LAYOUT, continue_button=None, page=Region(0, 0, 2000, 1200))
+    street_view = ResultScreen()
+
+    desk(["play", "--rounds", "2", "--layout", str(layout), "--no-look-up"], street_view)
+
+    kept = Layout.load(layout)
+    assert kept.continue_button == Point(700, LAYOUT.guess_button.y)
+    assert street_view.clicks.count(kept.continue_button) == 2
+    assert (tmp_path / "layout-continue.png").exists()  # to tell when an advert covers it
 
 
 def test_friends_plays_each_round_the_host_starts_without_pressing_continue(

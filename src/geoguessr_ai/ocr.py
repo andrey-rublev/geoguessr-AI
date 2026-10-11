@@ -11,11 +11,13 @@ import math
 import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
 from PIL import Image
 
+from .config import Region
 from .knowledge.text import TextLine
 
 RECOGNISERS = {  # RapidOCR recognition model: the script it reads, besides Latin
@@ -35,6 +37,9 @@ MIN_TEXT_HEIGHT = 10
 """Pixels; smaller text can't be read reliably anyway."""
 MAX_LINES = 12
 """Only the biggest lines of text in an image are read."""
+WORDS_WIDTH = 1600
+"""The game's own words, like Menu and Guess, are looked for on a copy of the screen at most
+this wide: about a second for a whole screen, and they still show."""
 WIDTH_STEP = 4
 """Lines are padded to a width that is a multiple of this many heights (see _pad_width)."""
 _RANGES = {
@@ -53,6 +58,14 @@ _NOT_A_SIGN = re.compile(
     r"|player has guessed|time reduced",  # what a multiplayer round says over Street View
     re.I,
 )
+
+
+@dataclass(frozen=True)
+class Word:
+    """A line of text read in a picture, and the box round it there, in its pixels."""
+
+    text: str
+    box: Region
 
 
 def script_of(char: str) -> str | None:
@@ -213,6 +226,32 @@ class SignReader:
         recognise = self._recognisers.get("latin") or next(iter(self._recognisers.values()))
         result = recognise(TextRecInput(img=[_pad_width(crop) for crop in crops]))
         return " ".join(str(text) for text in result.txts or ())
+
+    def words(self, image: Image.Image, min_score: float = 0.5) -> list[Word]:
+        """Every line of text in ``image``, read in Latin letters and digits, and where it is:
+        for finding the game's own words on screen, like Menu and Guess."""
+        from rapidocr.ch_ppocr_rec import TextRecInput
+        from rapidocr.utils.process_img import get_rotate_crop_image
+
+        bgr = _bgr(image)
+        h, w = bgr.shape[:2]
+        scale = min(1.0, WORDS_WIDTH / w)
+        small = cv2.resize(bgr, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
+        found = self._detect(small if scale < 1 else bgr)
+        if found.boxes is None:
+            return []
+        boxes = [np.asarray(box, dtype=np.float32) / scale for box in found.boxes]
+        crops = [_pad_width(get_rotate_crop_image(bgr, box)) for box in boxes]
+        recognise = self._recognisers.get("latin") or next(iter(self._recognisers.values()))
+        result = recognise(TextRecInput(img=crops))
+        words = []
+        for box, text, score in zip(boxes, result.txts, result.scores, strict=True):
+            if score < min_score or not str(text).strip():
+                continue
+            (x0, y0), (x1, y1) = box.min(axis=0), box.max(axis=0)
+            region = Region(round(x0), round(y0), max(round(x1 - x0), 1), max(round(y1 - y0), 1))
+            words.append(Word(str(text).strip(), region))
+        return words
 
     def _find_lines(self, bgr: np.ndarray, min_box_score: float) -> list[np.ndarray]:
         """Corners of the biggest confidently detected lines of text, in full-size pixels."""

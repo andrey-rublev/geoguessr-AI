@@ -35,9 +35,10 @@ class Compass:
 
 
 def compass_region(layout: Layout, desktop: Region) -> Region:
-    """Where to look for the compass: right of the expanded minimap, down to the Guess button."""
-    left = layout.map_region.left + layout.map_region.width - 20
-    right = desktop.left + desktop.width
+    """Where to look for the compass: right of the expanded minimap, as far as the game's page
+    goes (or the desktop, if that isn't known), down to the Guess button."""
+    left = layout.map_region.right - 20
+    right = (desktop if layout.page is None else layout.page).right
     bottom = max(layout.guess_button.y, layout.map_region.top + layout.map_region.height)
     return Region(left, layout.view.top, max(right - left, 1), bottom - layout.view.top)
 

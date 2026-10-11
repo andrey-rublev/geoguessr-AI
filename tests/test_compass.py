@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from geoguessr_ai.compass import NEEDLE_TO_RADIUS, CompassReader, find_compass
-from geoguessr_ai.config import Region
+from geoguessr_ai.compass import NEEDLE_TO_RADIUS, CompassReader, compass_region, find_compass
+from geoguessr_ai.config import Layout, Point, Region
 
 BACKGROUND = (86, 110, 64)
 CENTER = (90, 55)
@@ -62,3 +62,13 @@ def test_reader_gives_screen_positions_and_the_clockwise_button():
     assert compass is not None and abs(compass.heading - 90) < 6
     assert math.dist((compass.center.x, compass.center.y), (1890, 355)) <= 2
     assert compass.clockwise.x > compass.center.x + 15 and compass.clockwise.y == compass.center.y
+
+
+def test_looks_for_the_compass_only_as_far_as_the_games_page_goes():
+    view, opened = Region(22, 70, 1129, 498), Region(622, 257, 844, 475)
+    layout = Layout(view, Point(1313, 655), opened, Point(1313, 828), None)
+    desktop = Region(0, 0, 3456, 1080)  # with another screen to its right
+
+    assert compass_region(layout, desktop).right == 3456
+    page = Layout(**{**layout.__dict__, "page": Region(0, 0, 1531, 864)})
+    assert compass_region(page, desktop) == Region(1446, 70, 85, 758)

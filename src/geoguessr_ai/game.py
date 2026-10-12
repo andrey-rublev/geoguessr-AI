@@ -17,7 +17,7 @@ from typing import Protocol
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from .buttons import HALF_HEIGHT, MIN_SIMILARITY, button_region, similarity
 from .camera import Camera, default_camera, ground_view, measure
@@ -57,6 +57,12 @@ CAMERA_DRAG = 0.35
 GROUND_BOX_SCORE = 0.5
 """Road names seen from above are found less surely than signs: a Paraguayan one scored 0.52
 and 0.55, under the 0.6 that signs need."""
+MAP_BLUR = 1 / 6
+"""How much the collapsed map is blurred, as a share of its height: beyond recognition, as a
+smudge of its own colours. Shown Street View down to the map's bottom in a 1280 by 650 window,
+the model scored 2,337 on 300 held-out photos with the map blurred, 2,352 inpainted, 2,333
+painted over in one colour, 2,307 left as it is, and 1,451 shown only the view above the map;
+in a 1536 by 864 one, on 150, 2,339 blurred, 2,346 inpainted, but 2,205 in one colour."""
 SHARPNESS_WIDTH, BLURRED = 968, 15.0
 """A view less sharp than this (see :func:`sharpness`) is still being drawn. Of 12,944 saved
 views, the plainest real ones (hazy desert) measured 21 and up, and all 12 captured before
@@ -744,9 +750,9 @@ class OpenGuessrBot:
         look.drawn.append(drawn)
 
     def _grab(self, region: Region) -> Image.Image:
-        """A screenshot of ``region`` with whatever the game draws over Street View, like the
-        collapsed map or a multiplayer room's chat box, painted over in the picture's middling
-        colour: the chat is no sign to read, and the model never saw either in a photo."""
+        """A screenshot of ``region`` with whatever the game draws over Street View hidden: the
+        collapsed map blurred (see :data:`MAP_BLUR`), and a multiplayer room's chat box painted
+        over in the picture's middling colour, as it is no sign to read."""
         image = self.screen.grab(region)
         overlaps = []
         for area in self.layout.hidden:
@@ -754,13 +760,20 @@ class OpenGuessrBot:
             right = min(area.left + area.width, region.left + region.width) - region.left
             bottom = min(area.top + area.height, region.top + region.height)
             if right > left and bottom > top:
-                overlaps.append((left, top - region.top, right - 1, bottom - region.top - 1))
-        if overlaps:
-            fill = tuple(int(v) for v in np.median(np.asarray(image).reshape(-1, 3), axis=0))
-            draw = ImageDraw.Draw(image)
-            for box in overlaps:
-                draw.rectangle(box, fill=fill)
-        return image
+                box = (left, top - region.top, right - 1, bottom - region.top - 1)
+                overlaps.append((box, area == self.layout.minimap))
+        if not overlaps:
+            return image
+        fill = tuple(int(v) for v in np.median(np.asarray(image).reshape(-1, 3), axis=0))
+        pixels = np.array(image)
+        for (left, top, right, bottom), blur in overlaps:
+            patch = pixels[top : bottom + 1, left : right + 1]
+            if blur:
+                sigma = max(MAP_BLUR * self.layout.minimap.height, 1.0)
+                patch[:] = cv2.GaussianBlur(patch, (0, 0), sigma)
+            else:
+                patch[:] = fill
+        return Image.fromarray(pixels)
 
     def _press_continue(self, folder: Path | None) -> None:
         """Click Continue, but only once it looks as it did at first, not covered."""

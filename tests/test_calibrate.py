@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pytest
 from PIL import Image
@@ -93,7 +95,8 @@ def test_finds_the_game_on_whichever_screen_shows_it_and_how_far_its_map_opens()
     assert layout.view == docked(22, 70, 1129, 498)
     assert layout.map_region == docked(OPENED.left, OPENED.top, OPENED.width, OPENED.height)
     assert layout.guess_button == Point(DOCKED.left + 1313, DOCKED.top + 828)
-    assert layout.map_hover == docked(1160, 577, 306, 155).center
+    assert layout.minimap == docked(1160, 577, 306, 155)
+    assert layout.map_hover == layout.minimap.center
     assert layout.page == docked(0, 0, 1536, 864)
     assert layout.continue_button is None and not layout.party  # Continue is found later
     assert desk.clicks == [] and desk.raised == 0
@@ -164,3 +167,11 @@ def test_keeps_the_saved_layout_while_the_game_is_still_there(tmp_path, preview)
     desk.showing = "tab"  # gone to another tab: found again
     assert ensure_layout(desk, desk, path, False, desk.read_words) == layout
     assert desk.clicks == [TAB.box.center]
+
+
+def test_finds_the_game_again_when_it_was_found_before_its_map_was_kept(tmp_path, preview):
+    desk, path = Desk(), tmp_path / "layout.json"
+    layout = ensure_layout(desk, desk, path, False, desk.read_words)
+    replace(layout, minimap=None).save(path)
+
+    assert ensure_layout(desk, desk, path, False, desk.read_words) == layout

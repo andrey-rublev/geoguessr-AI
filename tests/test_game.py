@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import cv2
 import numpy as np
@@ -723,3 +724,17 @@ def test_the_chat_box_is_blanked_out_of_what_the_bot_sees():
 
     chat = np.asarray(look.views[0])[500:700, 0:300]  # where it covers the view
     assert chat.std() == 0 and np.asarray(look.views[0])[500:700, 300:600].std() > 10
+
+
+def test_the_model_sees_down_to_the_bottom_of_the_map_with_the_map_painted_over():
+    layout = replace(LAYOUT, minimap=Region(1610, 700, 235, 233))  # in the bottom right
+    street_view = TurningStreetView()
+    settings = BotSettings(rounds=1, views=1, record_answers=False, debug_dir=None)
+    bot = OpenGuessrBot(layout, FakePredictor(), settings, street_view, street_view)
+
+    look = bot.look_around()
+
+    view = np.asarray(look.views[0])
+    assert view.shape[:2] == (833, 1845)  # beside the map and down to its bottom, past 800
+    assert view[600:, 1610:].std() == 0 and view[720:, :1500].std() > 10
+    assert look.scenes[0].size == (1600, 860)  # what's read: as before

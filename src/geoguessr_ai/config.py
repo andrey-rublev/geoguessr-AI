@@ -65,7 +65,8 @@ class Region:
 @dataclass(frozen=True)
 class Layout:
     view: Region
-    """Street View area to look at. Keep it clear of the minimap and buttons."""
+    """Street View area to work in: to drag, click and look up. Clear of the minimap and
+    buttons."""
     map_hover: Point
     """A point on the collapsed minimap; hovering it expands the map."""
     map_region: Region
@@ -83,6 +84,27 @@ class Layout:
     """Where the game's page shows in the browser, when calibration found the game by itself."""
     party: bool = False
     """Whether this is a multiplayer room's layout."""
+    minimap: Region | None = None
+    """The collapsed map, when calibration found the game by itself. The model is then shown
+    Street View down to its bottom and across to its right, with it covered over."""
+
+    @property
+    def picture(self) -> Region:
+        """What the model is shown: the view, and on down to the bottom of the collapsed map
+        and across to its right side, when that is known. The map comes down to two thirds
+        of the window in a big one, but only halfway in a small one, where the view above
+        it would be mostly sky."""
+        if self.minimap is None:
+            return self.view
+        right = max(self.view.right, self.minimap.right)
+        bottom = max(self.view.bottom, self.minimap.bottom)
+        return Region(self.view.left, self.view.top, right - self.view.left, bottom - self.view.top)
+
+    @property
+    def hidden(self) -> tuple[Region, ...]:
+        """What covers Street View in the picture, to be painted over: the chat box and the
+        collapsed map."""
+        return self.covered if self.minimap is None else (*self.covered, self.minimap)
 
     def save(self, path: Path = DEFAULT_LAYOUT_PATH) -> None:
         Path(path).write_text(json.dumps(asdict(self), indent=2) + "\n", encoding="utf-8")
@@ -96,6 +118,7 @@ class Layout:
         point = raw.get("continue_button")
         timer = raw.get("timer")
         page = raw.get("page")
+        minimap = raw.get("minimap")
         return cls(
             view=Region(**raw["view"]),
             map_hover=Point(**raw["map_hover"]),
@@ -106,4 +129,5 @@ class Layout:
             covered=tuple(Region(**region) for region in raw.get("covered", ())),
             page=None if page is None else Region(**page),
             party=raw.get("party", point is None),  # older multiplayer layouts had no Continue
+            minimap=None if minimap is None else Region(**minimap),
         )

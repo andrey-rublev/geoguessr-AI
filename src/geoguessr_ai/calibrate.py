@@ -52,9 +52,13 @@ def ensure_layout(
     regardless. Raises :class:`WrongGame` if the game found is the other kind."""
     if not again and Path(path).exists():
         layout = Layout.load(path)
-        if layout.party == party and still_there(screen, read_words, layout):
+        outdated = layout.page is not None and layout.minimap is None  # found before it was kept
+        if outdated:
+            print("Looking for the game again, to show the model more of Street View.")
+        elif layout.party == party and still_there(screen, read_words, layout):
             return layout
-        print("The game isn't where it was last time: looking for it.")
+        else:
+            print("The game isn't where it was last time: looking for it.")
     said = False
     while True:
         layout = find_layout(screen, controls, party, read_words, bring_forward, expand_wait)
@@ -120,6 +124,7 @@ def find_layout(
         covered=() if sighting.chat is None else (sighting.chat,),
         page=sighting.page,
         party=party,
+        minimap=sighting.panel,
     )
 
 
@@ -183,8 +188,8 @@ def _save_preview(screen: Screen, layout: Layout, path: Path) -> None:
     def rel(p: Point) -> tuple[int, int]:
         return p.x - desktop.left, p.y - desktop.top
 
-    boxes = [(layout.view, "lime"), (layout.map_region, "cyan")]
-    boxes += [(region, "red") for region in layout.covered]
+    boxes = [(layout.picture, "lime"), (layout.map_region, "cyan")]
+    boxes += [(region, "red") for region in layout.hidden]
     if layout.timer is not None:
         boxes.append((timer_region(layout.timer), "yellow"))
     for region, colour in boxes:

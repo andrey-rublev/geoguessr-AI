@@ -218,6 +218,8 @@ class OpenGuessrBot:
         self.screen = screen
         self.controls = controls
         self.scene = scene_region(layout)
+        self.frame = _union(self.scene, layout.picture)
+        """What is grabbed of each view: the picture for the model, and the scene to read."""
         self.camera: Camera = default_camera(layout.view)
         self.camera_tries = 0
         self.compass = CompassReader(screen, compass_region(layout, screen.virtual_desktop()))
@@ -724,12 +726,13 @@ class OpenGuessrBot:
         return look
 
     def _capture(self, look: Look, heading: float | None) -> None:
-        """Save what the view shows, once Street View has drawn it: after a turn it can take a
-        few seconds to replace its blur with the panorama's tiles."""
+        """Save what Street View shows, once it has drawn it: after a turn it can take a few
+        seconds to replace its blur with the panorama's tiles."""
         waited = 0.0
         while True:
-            scene = self._grab(self.scene)
-            view = scene.crop((0, 0, self.layout.view.width, self.layout.view.height))
+            shot = self._grab(self.frame)
+            scene = shot.crop(_box(self.scene, self.frame))
+            view = shot.crop(_box(self.layout.picture, self.frame))
             drawn = _is_drawn(view)
             if drawn or waited >= self.settings.view_draw_timeout:
                 break
@@ -741,12 +744,12 @@ class OpenGuessrBot:
         look.drawn.append(drawn)
 
     def _grab(self, region: Region) -> Image.Image:
-        """A screenshot of ``region`` with whatever the game draws over Street View, like a
-        multiplayer room's chat box, painted over in the picture's middling colour: the chat
-        is no sign to read, and the model never saw one in a photo."""
+        """A screenshot of ``region`` with whatever the game draws over Street View, like the
+        collapsed map or a multiplayer room's chat box, painted over in the picture's middling
+        colour: the chat is no sign to read, and the model never saw either in a photo."""
         image = self.screen.grab(region)
         overlaps = []
-        for area in self.layout.covered:
+        for area in self.layout.hidden:
             left, top = max(area.left, region.left) - region.left, max(area.top, region.top)
             right = min(area.left + area.width, region.left + region.width) - region.left
             bottom = min(area.top + area.height, region.top + region.height)
@@ -886,6 +889,17 @@ def _write_round(path: Path, info: dict) -> None:
     behind if the machine goes down mid-write."""
     text = json.dumps(info, indent=2, ensure_ascii=False)
     write_safely(path, lambda file: file.write(text.encode("utf-8")))
+
+
+def _union(a: Region, b: Region) -> Region:
+    left, top = min(a.left, b.left), min(a.top, b.top)
+    return Region(left, top, max(a.right, b.right) - left, max(a.bottom, b.bottom) - top)
+
+
+def _box(inner: Region, outer: Region) -> tuple[int, int, int, int]:
+    """Where ``inner`` is in a screenshot of ``outer``, as a box to crop."""
+    left, top = inner.left - outer.left, inner.top - outer.top
+    return left, top, left + inner.width, top + inner.height
 
 
 def _describe(guess: Guess) -> str:

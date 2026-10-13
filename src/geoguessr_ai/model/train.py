@@ -11,9 +11,11 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 from ..files import write_safely
 from ..geo import EARTH_RADIUS_KM, geoguessr_score, haversine_km, to_unit_vectors
+from ..thermal import cpu_temperature
 from .backbone import pick_device
 from .geocells import DEFAULT_PRIOR_STRENGTH, GeoCells, debias
 from .head import Checkpoint, GeoHead
@@ -110,19 +112,59 @@ def summarize(distances_km: np.ndarray) -> dict[str, float]:
     }
 
 
+COOL_BY = 7.0
+"""How many degrees below ``max_temp`` a hot CPU must cool before work carries on."""
+CHECK_EVERY_S = 2.0
+"""How often the temperature is read while working: Windows updates it every 4 seconds."""
+WAIT_S = 5.0
+"""How long each wait for a hot CPU to cool lasts before it's read again."""
+SAY_EVERY_S = 600.0
+"""How often a pause to cool is reported, at most, as they can come every few seconds."""
+
+
 class Pacer:
     """Rests ``rest`` times as long as the work since it last rested, so the CPU runs that much
-    cooler on average. Pauses wait for a stretch of work long enough for the clock to keep."""
+    cooler on average. Pauses wait for a stretch of work long enough for the clock to keep.
 
-    def __init__(self, rest: float = 0.0):
-        self.rest = rest
-        self.since = time.perf_counter()
+    With ``max_temp``, it also waits whenever the CPU reaches that many °C until it has cooled
+    :data:`COOL_BY` degrees, however hot whatever else runs makes it: a laptop went down with
+    a fatal hardware error when a shard was embedded beside other work."""
+
+    def __init__(
+        self,
+        rest: float = 0.0,
+        max_temp: float | None = None,
+        read_temperature: Callable[[], float | None] = cpu_temperature,
+    ):
+        self.rest, self.max_temp, self.read_temperature = rest, max_temp, read_temperature
+        self.since = self.checked = time.perf_counter()
+        self.said, self.cooled = -SAY_EVERY_S, 0.0
 
     def __call__(self) -> None:
         worked = time.perf_counter() - self.since
         if self.rest and worked >= 0.05:
             time.sleep(self.rest * worked)
             self.since = time.perf_counter()
+        if self.max_temp and time.perf_counter() - self.checked >= CHECK_EVERY_S:
+            self._cool()
+            self.checked = time.perf_counter()
+
+    def _cool(self) -> None:
+        temperature = self.read_temperature()
+        if temperature is None or temperature < self.max_temp:
+            return
+        start = time.perf_counter()
+        if start - self.said >= SAY_EVERY_S:
+            self.said = start
+            tqdm.write(
+                f"The CPU is at {temperature:.0f} °C: waiting for it to cool to "
+                f"{self.max_temp - COOL_BY:.0f} °C ({self.cooled / 60:.0f} min waited so far)"
+            )
+        while temperature is not None and temperature > self.max_temp - COOL_BY:
+            time.sleep(WAIT_S)
+            temperature = self.read_temperature()
+        self.since = time.perf_counter()
+        self.cooled += self.since - start
 
 
 @torch.inference_mode()
@@ -158,15 +200,17 @@ def train(
     device: str = "auto",
     log: Callable[[str], None] = print,
     rest: float = 0.0,
+    max_temp: float | None = None,
 ) -> dict[str, float]:
     """Train and save the best checkpoint (by validation mean score). Returns its metrics.
 
     ``rounds_path`` is an embedded rounds file (see :mod:`.rounds`). Its training rounds are
     mixed into every batch; its test rounds are never used. ``rest`` pauses that many times as
-    long as each stretch of work took (see :class:`Pacer`): slower, but cooler.
+    long as each stretch of work took (see :class:`Pacer`): slower, but cooler. ``max_temp``
+    waits whenever the CPU gets that hot.
     """
     cfg = cfg or TrainConfig()
-    pace = Pacer(rest)
+    pace = Pacer(rest, max_temp)
     x, lat, lon, backbone = load_embeddings(embedding_files)
     if len(x) < 50:
         raise ValueError(f"Need at least 50 embedded images to train, got {len(x)}")

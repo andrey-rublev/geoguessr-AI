@@ -112,6 +112,43 @@ def test_pacer_rests_as_long_as_it_has_worked(monkeypatch):
     assert slept == [pytest.approx(0.12)]
 
 
+def test_pacer_waits_for_a_hot_cpu_to_cool_a_few_degrees(monkeypatch):
+    from geoguessr_ai.model import train as training
+
+    now, slept = [0.0], []
+
+    def sleep(seconds):
+        slept.append(seconds)
+        now[0] += seconds
+
+    monkeypatch.setattr(training.time, "perf_counter", lambda: now[0])
+    monkeypatch.setattr(training.time, "sleep", sleep)
+    readings = iter([84.0, 86.0, 83.0, 79.0, 78.0, 90.0])
+    pace = training.Pacer(max_temp=85.0, read_temperature=lambda: next(readings))
+
+    now[0] = 1.0
+    pace()  # too soon to read again
+    now[0] = 3.0
+    pace()  # 84: cool enough
+    now[0] = 4.0
+    pace()
+    now[0] = 6.0
+    pace()  # 86: waits through 83 and 79 until 78, seven degrees under
+
+    assert slept == [training.WAIT_S] * 3
+    assert pace.cooled == pytest.approx(3 * training.WAIT_S)
+    assert next(readings) == 90.0  # read no more than that
+
+
+def test_pacer_carries_on_where_the_temperature_cant_be_read(monkeypatch):
+    from geoguessr_ai.model import train as training
+
+    monkeypatch.setattr(training.time, "sleep", lambda s: pytest.fail("waited"))
+    pace = training.Pacer(max_temp=85.0, read_temperature=lambda: None)
+    pace.checked = -10.0
+    pace()
+
+
 def test_spatial_split_keeps_blocks_on_one_side():
     rng = np.random.default_rng(0)
     lat, lon = rng.uniform(-60, 70, 5000), rng.uniform(-180, 180, 5000)

@@ -24,6 +24,9 @@ DEFAULT_RUNS = Path("runs")
 # cool it: the cores left boost harder.
 DEFAULT_THREADS = max(1, (os.cpu_count() or 1) // 4)
 DEFAULT_REST = 1.0
+# Even so, it went down again embedding beside other work, which alone kept it at 80 to 90 C:
+# long jobs wait whenever the CPU reaches this, until it has cooled a few degrees.
+DEFAULT_MAX_TEMP = 85.0
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
@@ -120,7 +123,13 @@ def cmd_embed(args: argparse.Namespace) -> None:
     if args.images:
         out_path = out_dir / f"folder-{args.images.name}.npz"
         embed_folder(
-            encoder, args.images, args.labels, out_path, batch_size=args.batch_size, rest=args.rest
+            encoder,
+            args.images,
+            args.labels,
+            out_path,
+            batch_size=args.batch_size,
+            rest=args.rest,
+            max_temp=args.max_temp,
         )
         return
     for shard in args.shards:
@@ -133,6 +142,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
             limit=args.limit,
             batch_size=args.batch_size,
             rest=args.rest,
+            max_temp=args.max_temp,
         )
 
 
@@ -186,7 +196,15 @@ def cmd_train(args: argparse.Namespace) -> None:
     )
     out = args.model if first else args.model.with_name(f"{args.model.stem}-retrained.pt")
     out.parent.mkdir(parents=True, exist_ok=True)
-    train(photos, out, config, rounds_path=rounds_path, device=args.device, rest=args.rest)
+    train(
+        photos,
+        out,
+        config,
+        rounds_path=rounds_path,
+        device=args.device,
+        rest=args.rest,
+        max_temp=args.max_temp,
+    )
     if first:
         print(f"Saved {args.model}. Now play with `geoguessr-ai play`.")
     else:
@@ -202,7 +220,9 @@ def _embed_photos(args: argparse.Namespace, encoder, folder: Path) -> None:
     if missing:
         download_osv5m(args.data, "train", missing)
     for shard in missing:
-        embed_osv5m_shard(encoder, args.data, "train", shard, folder, rest=args.rest)
+        embed_osv5m_shard(
+            encoder, args.data, "train", shard, folder, rest=args.rest, max_temp=args.max_temp
+        )
 
 
 def _keep_the_better(args: argparse.Namespace, retrained: Path, test_rounds: Path | None) -> None:
@@ -420,6 +440,13 @@ def build_parser() -> argparse.ArgumentParser:
             help="pause this many times as long as each stretch of work took, so the CPU "
             f"runs cooler (default {DEFAULT_REST:g}, half the load; 0 = flat out, which has "
             "overheated a laptop)",
+        )
+        p.add_argument(
+            "--max-temp",
+            type=float,
+            default=DEFAULT_MAX_TEMP,
+            help=f"wait whenever the CPU gets this hot, in C, until it cools a little (default "
+            f"{DEFAULT_MAX_TEMP:g}; 0 = never wait). Read on Windows only",
         )
 
     def add_prior_strength(p: argparse.ArgumentParser) -> None:

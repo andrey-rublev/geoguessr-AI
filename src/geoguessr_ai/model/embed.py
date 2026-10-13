@@ -45,11 +45,13 @@ def embed_items(
     batch_size: int = 64,
     workers: int = 4,
     rest: float = 0.0,
+    max_temp: float | None = None,
 ) -> int:
     """Embed ``items`` and save ``ids``, ``lat``, ``lon``, ``embeddings``, ``backbone`` to npz.
-    ``rest`` pauses that many times as long as each stretch of work took, as training does
-    (see :class:`.train.Pacer`): a shard takes hours, which a laptop can't take flat out."""
-    pace = Pacer(rest)
+    ``rest`` pauses that many times as long as each stretch of work took, and ``max_temp``
+    waits whenever the CPU gets that hot, as training does (see :class:`.train.Pacer`): a
+    shard takes hours, which a laptop can't take flat out."""
+    pace = Pacer(rest, max_temp)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     ids: list[str] = []
@@ -105,6 +107,7 @@ def embed_osv5m_shard(
     limit: int | None = None,
     batch_size: int = 64,
     rest: float = 0.0,
+    max_temp: float | None = None,
 ) -> Path:
     out_path = osv5m_embedding_path(out_dir, split, shard)
     if out_path.exists():
@@ -129,7 +132,13 @@ def embed_osv5m_shard(
 
     total = min(len(coords), limit) if limit else len(coords)
     embed_items(
-        encoder, islice(items(), limit), out_path, total=total, batch_size=batch_size, rest=rest
+        encoder,
+        islice(items(), limit),
+        out_path,
+        total=total,
+        batch_size=batch_size,
+        rest=rest,
+        max_temp=max_temp,
     )
     return out_path
 
@@ -142,7 +151,16 @@ def embed_folder(
     *,
     batch_size: int = 64,
     rest: float = 0.0,
+    max_temp: float | None = None,
 ) -> Path:
     items = list(iter_folder_images(folder, labels_csv))
-    embed_items(encoder, items, out_path, total=len(items), batch_size=batch_size, rest=rest)
+    embed_items(
+        encoder,
+        items,
+        out_path,
+        total=len(items),
+        batch_size=batch_size,
+        rest=rest,
+        max_temp=max_temp,
+    )
     return Path(out_path)

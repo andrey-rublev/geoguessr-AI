@@ -100,6 +100,7 @@ def test_round_options():
     assert parser.parse_args(["train"]).threads == cli.DEFAULT_THREADS >= 1
     assert parser.parse_args(["train"]).rest == 1.0  # half the load, so the CPU stays cool
     assert parser.parse_args(["train", "--rest", "0"]).rest == 0.0
+    assert parser.parse_args(["embed"]).max_temp == 85.0  # waits for the CPU to cool from there
     assert parser.parse_args(["train", "--threads", "2"]).threads == 2
     old = parser.parse_args(["play", "--debug-dir", "old-runs", "--no-debug"])
     assert str(old.runs) == "old-runs" and old.no_save
@@ -148,7 +149,9 @@ def test_train_switches_to_the_retrained_model_with_the_last_unless_they_score_w
     monkeypatch.setattr(rounds, "embed_rounds", lambda encoder, root, out: Rounds())
     monkeypatch.setattr(train, "resolve_embedding_files", lambda patterns: ["photos.npz"])
     monkeypatch.setattr(
-        train, "train", lambda files, out, cfg, rounds_path, device, rest: trained(2.0).save(out)
+        train,
+        "train",
+        lambda files, out, cfg, rounds_path, device, rest, max_temp: trained(2.0).save(out),
     )
     scores = {model: 2000.0, retrained: retrained_score}
     monkeypatch.setattr(
@@ -267,7 +270,9 @@ def test_train_downloads_and_embeds_only_shards_not_embedded_yet(tmp_path, monke
     monkeypatch.setattr(
         embed,
         "embed_osv5m_shard",
-        lambda encoder, root, split, shard, out, rest: embedded.append((shard, out, rest)),
+        lambda encoder, root, split, shard, out, rest, max_temp: embedded.append(
+            (shard, out, rest, max_temp)
+        ),
     )
     monkeypatch.setattr(train, "train", lambda *args, **kwargs: {})
     model = tmp_path / "m.pt"
@@ -275,7 +280,7 @@ def test_train_downloads_and_embeds_only_shards_not_embedded_yet(tmp_path, monke
     options = ["--model", str(model), "--embeddings", str(embeddings), "--threads", "1"]
     main(["train", "--shards", "0", "3", "--runs", str(tmp_path / "runs"), *options])
 
-    assert fetched == [3] and embedded == [(3, folder, 1.0)]  # resting, as training does
+    assert fetched == [3] and embedded == [(3, folder, 1.0, 85.0)]  # resting, as training does
 
 
 @pytest.fixture

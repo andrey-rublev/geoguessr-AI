@@ -22,6 +22,7 @@ from .data import (
     osv5m_shard_path,
     zip_image_ids,
 )
+from .train import Pacer
 
 # (image_id, JPEG bytes or file path, lat, lon)
 Item = tuple[str, "bytes | Path", float, float]
@@ -43,8 +44,12 @@ def embed_items(
     total: int | None = None,
     batch_size: int = 64,
     workers: int = 4,
+    rest: float = 0.0,
 ) -> int:
-    """Embed ``items`` and save ``ids``, ``lat``, ``lon``, ``embeddings``, ``backbone`` to npz."""
+    """Embed ``items`` and save ``ids``, ``lat``, ``lon``, ``embeddings``, ``backbone`` to npz.
+    ``rest`` pauses that many times as long as each stretch of work took, as training does
+    (see :class:`.train.Pacer`): a shard takes hours, which a laptop can't take flat out."""
+    pace = Pacer(rest)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     ids: list[str] = []
@@ -67,6 +72,7 @@ def embed_items(
                     lats.append(lat)
                     lons.append(lon)
             bar.update(len(batch))
+            pace()
 
     if not ids:
         raise RuntimeError(f"No images could be embedded for {out_path}")
@@ -98,6 +104,7 @@ def embed_osv5m_shard(
     *,
     limit: int | None = None,
     batch_size: int = 64,
+    rest: float = 0.0,
 ) -> Path:
     out_path = osv5m_embedding_path(out_dir, split, shard)
     if out_path.exists():
@@ -121,13 +128,21 @@ def embed_osv5m_shard(
                 yield image_id, data, float(lat), float(lon)
 
     total = min(len(coords), limit) if limit else len(coords)
-    embed_items(encoder, islice(items(), limit), out_path, total=total, batch_size=batch_size)
+    embed_items(
+        encoder, islice(items(), limit), out_path, total=total, batch_size=batch_size, rest=rest
+    )
     return out_path
 
 
 def embed_folder(
-    encoder: ImageEncoder, folder: Path, labels_csv: Path, out_path: Path, *, batch_size: int = 64
+    encoder: ImageEncoder,
+    folder: Path,
+    labels_csv: Path,
+    out_path: Path,
+    *,
+    batch_size: int = 64,
+    rest: float = 0.0,
 ) -> Path:
     items = list(iter_folder_images(folder, labels_csv))
-    embed_items(encoder, items, out_path, total=len(items), batch_size=batch_size)
+    embed_items(encoder, items, out_path, total=len(items), batch_size=batch_size, rest=rest)
     return Path(out_path)

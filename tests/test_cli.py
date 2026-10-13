@@ -267,7 +267,7 @@ def test_train_downloads_and_embeds_only_shards_not_embedded_yet(tmp_path, monke
     monkeypatch.setattr(
         embed,
         "embed_osv5m_shard",
-        lambda encoder, root, split, shard, out: embedded.append((shard, out)),
+        lambda encoder, root, split, shard, out, rest: embedded.append((shard, out, rest)),
     )
     monkeypatch.setattr(train, "train", lambda *args, **kwargs: {})
     model = tmp_path / "m.pt"
@@ -275,7 +275,7 @@ def test_train_downloads_and_embeds_only_shards_not_embedded_yet(tmp_path, monke
     options = ["--model", str(model), "--embeddings", str(embeddings), "--threads", "1"]
     main(["train", "--shards", "0", "3", "--runs", str(tmp_path / "runs"), *options])
 
-    assert fetched == [3] and embedded == [(3, folder)]
+    assert fetched == [3] and embedded == [(3, folder, 1.0)]  # resting, as training does
 
 
 @pytest.fixture

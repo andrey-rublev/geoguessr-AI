@@ -1,4 +1,5 @@
 import io
+import itertools
 import zipfile
 
 import pytest
@@ -45,3 +46,26 @@ def test_folder_images(tmp_path):
 def test_download_validates_shards(tmp_path):
     with pytest.raises(ValueError, match="0..4"):
         download_osv5m(tmp_path, "test", [5])
+
+
+def test_embedding_rests_after_each_batch_to_keep_a_laptop_cool(tmp_path, monkeypatch):
+    import torch
+
+    from geoguessr_ai.model import train as training
+    from geoguessr_ai.model.embed import embed_items
+
+    class Encoder:
+        name = "fake"
+
+        def encode(self, images):
+            return torch.ones(len(images), 4)
+
+    clock, slept = itertools.count(step=0.1), []
+    monkeypatch.setattr(training.time, "perf_counter", lambda: next(clock))
+    monkeypatch.setattr(training.time, "sleep", slept.append)
+    jpeg = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(jpeg, "JPEG")
+    items = [(f"photo{i}", jpeg.getvalue(), 1.0, 2.0) for i in range(5)]
+
+    assert embed_items(Encoder(), items, tmp_path / "x.npz", batch_size=2, rest=1.0) == 5
+    assert len(slept) == 3  # after each batch of two, as long as it took

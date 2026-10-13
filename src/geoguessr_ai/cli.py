@@ -105,6 +105,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
 
     if args.images and not args.labels:
         raise SystemExit("--images needs --labels (a CSV of filename,latitude,longitude)")
+    _limit_threads(args.threads)
     encoder = ImageEncoder(args.backbone, args.device)
     out_dir = _embedding_dir(args.out, args.backbone)
     print(f"Embedding with {args.backbone} on {encoder.device} into {out_dir}")
@@ -118,7 +119,9 @@ def cmd_embed(args: argparse.Namespace) -> None:
         return
     if args.images:
         out_path = out_dir / f"folder-{args.images.name}.npz"
-        embed_folder(encoder, args.images, args.labels, out_path, batch_size=args.batch_size)
+        embed_folder(
+            encoder, args.images, args.labels, out_path, batch_size=args.batch_size, rest=args.rest
+        )
         return
     for shard in args.shards:
         embed_osv5m_shard(
@@ -129,6 +132,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
             out_dir,
             limit=args.limit,
             batch_size=args.batch_size,
+            rest=args.rest,
         )
 
 
@@ -198,7 +202,7 @@ def _embed_photos(args: argparse.Namespace, encoder, folder: Path) -> None:
     if missing:
         download_osv5m(args.data, "train", missing)
     for shard in missing:
-        embed_osv5m_shard(encoder, args.data, "train", shard, folder)
+        embed_osv5m_shard(encoder, args.data, "train", shard, folder, rest=args.rest)
 
 
 def _keep_the_better(args: argparse.Namespace, retrained: Path, test_rounds: Path | None) -> None:
@@ -407,13 +411,13 @@ def build_parser() -> argparse.ArgumentParser:
             "--threads",
             type=int,
             default=DEFAULT_THREADS,
-            help=f"CPU threads to train with (default {DEFAULT_THREADS}, a quarter of them)",
+            help=f"CPU threads to work with (default {DEFAULT_THREADS}, a quarter of them)",
         )
         p.add_argument(
             "--rest",
             type=float,
             default=DEFAULT_REST,
-            help="pause this many times as long as each stretch of training took, so the CPU "
+            help="pause this many times as long as each stretch of work took, so the CPU "
             f"runs cooler (default {DEFAULT_REST:g}, half the load; 0 = flat out, which has "
             "overheated a laptop)",
         )
@@ -602,6 +606,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", type=Path, default=DEFAULT_EMBEDDINGS)
     p.add_argument("--batch-size", type=int, default=64)
     add_device(p)
+    add_threads(p)
 
     p = add("predict", cmd_predict, "Test: guess where some images were taken.")
     p.add_argument("images", type=Path, nargs="+")

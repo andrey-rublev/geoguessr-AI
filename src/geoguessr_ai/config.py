@@ -87,6 +87,9 @@ class Layout:
     minimap: Region | None = None
     """The collapsed map, when calibration found the game by itself. The model is then shown
     Street View down to its bottom and across to its right, with it covered over."""
+    found_by: int = 0
+    """Which version of the finder (see :data:`.locate.VERSION`) found this layout: 0 for one
+    pointed out by hand, or found before the finder had versions."""
 
     @property
     def picture(self) -> Region:
@@ -130,4 +133,5 @@ class Layout:
             page=None if page is None else Region(**page),
             party=raw.get("party", point is None),  # older multiplayer layouts had no Continue
             minimap=None if minimap is None else Region(**minimap),
+            found_by=raw.get("found_by", 0),
         )

@@ -51,6 +51,10 @@ CHAT_BOX = (-0.6, -5.4, 10.0, 0.6)
 from the word's left, its top from the word's top, its right side from the word's left, and its
 bottom from the word's bottom. Measured -0.4, -5.2, 9.7 and 0.4 in a 2560 by 1440 window and
 -0.4, -5.0, 9.6 and 0.3 in a 1536 by 864 one."""
+VERSION = 1
+"""Goes up whenever the game is found better, so that layouts found before are found again:
+1 once the browser's tab was no longer taken for the game's logo, nor the chat box's message
+field for all of it."""
 
 
 @dataclass(frozen=True)

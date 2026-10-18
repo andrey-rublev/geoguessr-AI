@@ -16,7 +16,7 @@ from .buttons import button_image_path, button_region
 from .clock import parse_timer, timer_region
 from .config import DEFAULT_LAYOUT_PATH, PARTY_LAYOUT_PATH, Layout, Point, Region
 from .controls import Controls
-from .locate import Sighting, find_game, find_tab, measure_map, shows_guess
+from .locate import VERSION, Sighting, find_game, find_tab, measure_map, shows_guess
 from .mapcal import MapNotFound, locate_world
 from .ocr import Word
 from .screen import Screen
@@ -52,9 +52,9 @@ def ensure_layout(
     regardless. Raises :class:`WrongGame` if the game found is the other kind."""
     if not again and Path(path).exists():
         layout = Layout.load(path)
-        outdated = layout.page is not None and layout.minimap is None  # found before it was kept
+        outdated = layout.page is not None and layout.found_by < VERSION  # by an older finder
         if outdated:
-            print("Looking for the game again, to show the model more of Street View.")
+            print("Looking for the game again: the bot finds it better now.")
         elif layout.party == party and still_there(screen, read_words, layout):
             return layout
         else:
@@ -125,6 +125,7 @@ def find_layout(
         page=sighting.page,
         party=party,
         minimap=sighting.panel,
+        found_by=VERSION,
     )
 
 

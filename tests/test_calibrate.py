@@ -111,6 +111,7 @@ def test_finds_a_multiplayer_rooms_timer_and_chat_box():
     (chat,) = layout.covered  # all of the chat box, from corner to corner
     assert chat.contains(Point(DOCKED.left + 12, DOCKED.top + 597))
     assert chat.contains(Point(DOCKED.left + 309, DOCKED.top + 786))
+    assert layout.found_by == calibrate.VERSION
 
 
 def test_switches_to_the_games_tab_when_the_game_isnt_showing(capsys):
@@ -171,9 +172,20 @@ def test_keeps_the_saved_layout_while_the_game_is_still_there(tmp_path, preview)
     assert desk.clicks == [TAB.box.center]
 
 
-def test_finds_the_game_again_when_it_was_found_before_its_map_was_kept(tmp_path, preview):
+@pytest.mark.parametrize("kept_map", [True, False])
+def test_finds_the_game_again_when_an_older_finder_found_it(tmp_path, preview, kept_map):
     desk, path = Desk(), tmp_path / "layout.json"
     layout = ensure_layout(desk, desk, path, False, desk.read_words)
-    replace(layout, minimap=None).save(path)
+    older = replace(layout, view=docked(800, 70, 351, 498), found_by=0)  # took the tab for the logo
+    (older if kept_map else replace(older, minimap=None)).save(path)
 
     assert ensure_layout(desk, desk, path, False, desk.read_words) == layout
+
+
+def test_keeps_a_layout_pointed_out_by_hand(tmp_path, preview):
+    desk, path = Desk(), tmp_path / "layout.json"
+    found = ensure_layout(desk, desk, path, False, desk.read_words)
+    by_hand = replace(found, page=None, minimap=None, found_by=0)
+    by_hand.save(path)
+
+    assert ensure_layout(desk, desk, path, False, desk.read_words) == by_hand

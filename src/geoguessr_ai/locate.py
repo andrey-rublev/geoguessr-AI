@@ -34,7 +34,7 @@ TAB = re.compile(r"open\s*guessr\s*\W\s*free", re.I)
 
 PANEL_TOLERANCE = 18
 """How far a pixel's colour may be from a panel's to count as part of it: the panels are see-
-through, so a little tinted by what's behind them, and the chat box shades by up to 15."""
+through, so a little tinted by what's behind them."""
 PANEL_INSET = 0.3
 """How far inside its panel the bar's word starts, in word heights (9 pixels of 30)."""
 EDGE_STEP, EDGE_SHARE = 25, 0.7
@@ -46,6 +46,11 @@ CHANGED = 40
 TIMER_FROM_RIGHT = 1.7
 """Where the timer sits in a multiplayer room's bar, in word heights from its right end, for
 when no round is on to show it."""
+CHAT_BOX = (-0.6, -5.4, 10.0, 0.6)
+"""A multiplayer room's chat box, in word heights from its message field's word: its left side
+from the word's left, its top from the word's top, its right side from the word's left, and its
+bottom from the word's bottom. Measured -0.4, -5.2, 9.7 and 0.4 in a 2560 by 1440 window and
+-0.4, -5.0, 9.6 and 0.3 in a 1536 by 864 one."""
 
 
 @dataclass(frozen=True)
@@ -135,7 +140,7 @@ def find_game(
         chats = [w for w in words if CHAT.search(w.text) and w.box.right < left]
         if chats:
             bottom = back.box.top if back is not None else page_bottom
-            chat = _chat_box(rgb, chats[0].box, h, bottom)
+            chat = _chat_box(chats[0].box, h, bottom)
 
     def screen(region: Region) -> Region:
         return Region(origin.x + region.left, origin.y + region.top, region.width, region.height)
@@ -258,29 +263,16 @@ def _map_top(rgb: np.ndarray, left: int, right: int, bar_top: int) -> int:
     return bar_top - round(0.5 * width)
 
 
-def _chat_box(rgb: np.ndarray, box: Region, h: int, bottom: int) -> Region:
-    """The chat box round its message field, whose word is in ``box``: a panel as wide as the
-    row of its colour just above the field, and as tall as its colour goes near its right side,
-    where messages seldom reach, but not below ``bottom``, where Return is."""
-    rgb = rgb[..., :3]
-    y = box.top - h // 3
-    colour = np.median(rgb[y - 1 : y + 2, box.left : box.left + h].reshape(-1, 3), axis=0)
-    colour = colour.astype(np.int16)
-    row = _matches(rgb[y], colour)
-    left = right = box.left + h // 2
-    while left > 0 and row[left - 1]:
-        left -= 1
-    while right < len(row) - 1 and row[right + 1]:
-        right += 1
-    columns = rgb[:, max(right - h // 3, left) : right + 1]
-    top = bottom_edge = y
-    while top > max(y - 10 * h, 0) and _matches(columns[top - 1], colour).mean() >= 0.5:
-        top -= 1
-    while bottom_edge < bottom - 1 and _matches(columns[bottom_edge + 1], colour).mean() >= 0.5:
-        bottom_edge += 1
-    if right - left < 4 * h:  # not the panel's colour after all: just round the field
-        return Region(box.left - h // 2, box.top - h, box.width + h, 2 * h)
-    return Region(left, top, right + 1 - left, bottom_edge + 1 - top)
+def _chat_box(box: Region, h: int, bottom: int) -> Region:
+    """The chat box round its message field, whose word is in ``box``, but not below
+    ``bottom``, where Return is. It is drawn to the size of the game's words, so it is measured
+    in their heights, with a little to spare: by its colour it can't be, since what shows
+    through it shades it by up to 28."""
+    left, top, right, low = (round(v * h) for v in CHAT_BOX)
+    top = max(box.top + top, 0)
+    left = max(box.left + left, 0)
+    low = min(box.bottom + low, bottom)
+    return Region(left, top, box.left + right - left, low - top)
 
 
 def _reach(share: np.ndarray, start: int, gap: int = 4) -> int | None:

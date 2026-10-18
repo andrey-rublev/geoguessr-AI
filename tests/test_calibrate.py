@@ -108,7 +108,9 @@ def test_finds_a_multiplayer_rooms_timer_and_chat_box():
     layout = find_layout(desk, desk, True, desk.read_words)
 
     assert layout.party and layout.timer == Point(DOCKED.left + 1415, DOCKED.top + 760)
-    assert layout.covered == (docked(12, 597, 298, 190),)
+    (chat,) = layout.covered  # all of the chat box, from corner to corner
+    assert chat.contains(Point(DOCKED.left + 12, DOCKED.top + 597))
+    assert chat.contains(Point(DOCKED.left + 309, DOCKED.top + 786))
 
 
 def test_switches_to_the_games_tab_when_the_game_isnt_showing(capsys):

@@ -112,7 +112,20 @@ def test_finds_a_multiplayer_room_its_timer_and_its_chat_box():
     game = find_game(words, rgb)
 
     assert game.party and game.timer == Point(1415, 760)
-    assert game.chat == Region(12, 597, 298, 190)
+    chat, h = Region(12, 597, 298, 190), 30
+    assert game.chat.left <= chat.left and game.chat.top <= chat.top
+    assert game.chat.right >= chat.right and game.chat.bottom >= chat.bottom
+    assert chat.left - game.chat.left < h and chat.top - game.chat.top < h
+    assert game.chat.right - chat.right < h and game.chat.bottom - chat.bottom < h
+    assert game.chat.bottom <= 800  # Return's panel, below it
+
+
+def test_covers_the_whole_chat_box_however_what_shows_through_shades_it():
+    rgb, words = draw_game(party=True)
+    shade = np.linspace(0, 28, 298).astype(np.uint8)[None, :, None]
+    rgb[597:787, 12:310] = (57, 52, 50) - np.minimum(shade, (28, 23, 12))  # as a real one did
+
+    assert find_game(words, rgb).chat.right >= 310
 
 
 def test_before_a_round_the_timer_is_taken_to_be_at_the_bars_right_end():

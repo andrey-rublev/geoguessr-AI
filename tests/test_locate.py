@@ -9,6 +9,7 @@ from geoguessr_ai.locate import (
     find_tab,
     measure_map,
     shows_guess,
+    shows_narrow_game,
 )
 from geoguessr_ai.ocr import Word
 
@@ -178,3 +179,20 @@ def test_finds_the_tab_continue_and_guess_by_name():
     assert find_continue(words) == Point(1432, 828)
     assert shows_guess(words) and not shows_guess(words[:2])
     assert find_tab([Word("OpenGuessr", Region(0, 0, 9, 9))]) is None  # the logo is no tab
+
+
+NARROW = [  # as read off an 800 by 600 window
+    Word("OpenGuessr", Region(21, 21, 165, 31)),
+    Word("Menu", Region(691, 24, 80, 27)),
+    Word("Return", Region(59, 549, 61, 28)),
+    Word("Map", Region(590, 550, 63, 28)),
+    Word("Keyboard snortcuts", Region(500, 587, 90, 12)),
+]
+
+
+def test_tells_a_window_too_narrow_to_play_in():
+    assert shows_narrow_game(NARROW)
+    assert not shows_narrow_game(draw_game()[1])
+    assert not shows_narrow_game([*NARROW, Word("Guess", Region(600, 500, 56, 30))])
+    sign = Word("MAP", Region(300, 200, 60, 28))  # on a shop, say: nowhere near Google's line
+    assert not shows_narrow_game([w for w in NARROW if w.text != "Map"] + [sign])

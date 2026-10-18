@@ -16,7 +16,15 @@ from .buttons import button_image_path, button_region
 from .clock import parse_timer, timer_region
 from .config import DEFAULT_LAYOUT_PATH, PARTY_LAYOUT_PATH, Layout, Point, Region
 from .controls import Controls
-from .locate import VERSION, Sighting, find_game, find_tab, measure_map, shows_guess
+from .locate import (
+    VERSION,
+    Sighting,
+    find_game,
+    find_tab,
+    measure_map,
+    shows_guess,
+    shows_narrow_game,
+)
 from .mapcal import MapNotFound, locate_world
 from .ocr import Word
 from .screen import Screen
@@ -34,6 +42,10 @@ ReadWords = Callable[[Image.Image], list[Word]]
 class WrongGame(Exception):
     """The game on screen is a multiplayer room where a singleplayer game was wanted, or the
     other way round."""
+
+
+class TooNarrow(Exception):
+    """The game shows, but laid out for a window too narrow for the bot to play."""
 
 
 def ensure_layout(
@@ -59,15 +71,19 @@ def ensure_layout(
             return layout
         else:
             print("The game isn't where it was last time: looking for it.")
-    said = False
+    kind = "join a multiplayer room" if party else "start a Singleplayer game"
+    said = None
     while True:
-        layout = find_layout(screen, controls, party, read_words, bring_forward, expand_wait)
+        try:
+            layout = find_layout(screen, controls, party, read_words, bring_forward, expand_wait)
+            why = f"Can't see an OpenGuessr round on screen yet: {kind}."
+        except TooNarrow as narrow:
+            layout, why = None, str(narrow)
         if layout is not None:
             break
-        if not said:
-            kind = "join a multiplayer room" if party else "start a Singleplayer game"
-            print(f"Can't see an OpenGuessr round on screen yet: {kind}. (F8 stops.)")
-            said = True
+        if why != said:  # each once
+            print(f"{why} (F8 stops.)")
+            said = why
         controls.sleep(LOOK_AGAIN_S)
     layout.save(path)
     button_image_path(path).unlink(missing_ok=True)  # the bot snapshots Continue when it shows
@@ -93,16 +109,22 @@ def find_layout(
 ) -> Layout | None:
     """Find the game on whichever screen shows it; if none does, click its browser tab, or have
     ``bring_forward`` bring its window to the front, and look again. Then hover over the map
-    to see how far it opens. None if the game can't be found."""
-    sightings, tabs = _look(screen, read_words)
+    to see how far it opens. None if the game can't be found; raises :class:`TooNarrow` if it
+    shows in a window too narrow to play it in."""
+    sightings, tabs, narrow = _look(screen, read_words)
     if not sightings and tabs:
         print("Found OpenGuessr's tab: switching to it.")
         controls.click(tabs[0])
         controls.sleep(TAB_WAIT_S)
-        sightings, tabs = _look(screen, read_words)
-    if not sightings and bring_forward is not None and bring_forward():
+        sightings, tabs, narrow = _look(screen, read_words)
+    if not sightings and not narrow and bring_forward is not None and bring_forward():
         controls.sleep(TAB_WAIT_S)
-        sightings, tabs = _look(screen, read_words)
+        sightings, tabs, narrow = _look(screen, read_words)
+    if not sightings and narrow:
+        raise TooNarrow(
+            "OpenGuessr's window is too narrow: it hides the map behind a Map button, which the "
+            "bot can't play. Widen the browser window until the map shows in its bottom right."
+        )
     if not sightings:
         return None
     wanted = [s for s in sightings if s.party == party]
@@ -129,9 +151,10 @@ def find_layout(
     )
 
 
-def _look(screen, read_words: ReadWords) -> tuple[list[Sighting], list[Point]]:
-    """The game wherever it shows, on any screen, and where OpenGuessr's browser tabs are."""
-    sightings, tabs = [], []
+def _look(screen, read_words: ReadWords) -> tuple[list[Sighting], list[Point], bool]:
+    """The game wherever it shows, on any screen, where OpenGuessr's browser tabs are, and
+    whether it shows anywhere laid out for a window too narrow to play it in."""
+    sightings, tabs, narrow = [], [], False
     for monitor in screen.monitors():
         image = screen.grab(monitor)
         words = read_words(image)
@@ -139,9 +162,11 @@ def _look(screen, read_words: ReadWords) -> tuple[list[Sighting], list[Point]]:
         sighting = find_game(words, np.asarray(image.convert("RGB")), corner)
         if sighting is not None:
             sightings.append(sighting)
+        elif shows_narrow_game(words):
+            narrow = True
         elif (tab := find_tab(words, corner)) is not None:
             tabs.append(tab)
-    return sightings, tabs
+    return sightings, tabs, narrow
 
 
 def _open_map(screen, controls, sighting: Sighting, expand_wait: float) -> Region:

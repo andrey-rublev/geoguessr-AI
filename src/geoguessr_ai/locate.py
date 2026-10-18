@@ -31,6 +31,10 @@ CHAT = re.compile(r"your\s*mess", re.I)
 CONTINUE = re.compile(r"^\W*continue\W*$", re.I)
 TAB = re.compile(r"open\s*guessr\s*\W\s*free", re.I)
 """The browser tab's title, "OpenGuessr - Free GeoGuessr Alternative", however cut short."""
+MAP_BUTTON = re.compile(r"^\W*map\W*$", re.I)
+"""The button a narrow window shows instead of the map and the Guess button."""
+KEYS = re.compile(r"keyboard", re.I)
+"""Google's "Keyboard shortcuts", along the bottom of Street View."""
 
 PANEL_TOLERANCE = 18
 """How far a pixel's colour may be from a panel's to count as part of it: the panels are see-
@@ -205,6 +209,17 @@ def find_continue(words: Sequence[Word], origin: Point = Point(0, 0)) -> Point |
 def shows_guess(words: Sequence[Word]) -> bool:
     """Whether the Guess button (Locked in, in a multiplayer lobby) is among ``words``."""
     return any(GUESS.search(word.text) for word in words)
+
+
+def shows_narrow_game(words: Sequence[Word]) -> bool:
+    """Whether ``words`` show the game laid out for a window too narrow for the bot: below about
+    850 pixels wide (at 100% scaling) it has no Guess button, and hides its map behind a Map
+    button just above Google's line along the bottom of Street View."""
+    if shows_guess(words):
+        return False
+    maps = [w for w in words if MAP_BUTTON.search(w.text)]
+    keys = [w for w in words if KEYS.search(w.text)]
+    return any(0 < k.box.top - m.box.top < 3 * m.box.height for m in maps for k in keys)
 
 
 def _guess_and_bar(words: Sequence[Word]) -> tuple[Word, Word] | None:

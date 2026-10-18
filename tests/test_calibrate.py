@@ -3,7 +3,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from PIL import Image
-from test_locate import OPENED, draw_game
+from test_locate import NARROW, OPENED, draw_game
 
 from geoguessr_ai import calibrate
 from geoguessr_ai.calibrate import WrongGame, ensure_layout, find_layout
@@ -23,8 +23,9 @@ class Desk:
     ``"window"`` nothing of it, until its window is brought forward. Its map opens while the
     mouse is over the collapsed one, or the opened one."""
 
-    def __init__(self, showing="game", party=False, hidden_looks=0):
+    def __init__(self, showing="game", party=False, hidden_looks=0, narrow_looks=0):
         self.showing, self.party, self.hidden_looks = showing, party, hidden_looks
+        self.narrow_looks = narrow_looks
         self.mouse, self.clicks, self.grabbed, self.raised = Point(0, 0), [], None, 0
         self.collapsed, self.words = draw_game(party=party)
         self.opened, _ = draw_game(party=party, opened=True)
@@ -57,6 +58,9 @@ class Desk:
         if not self._shows():
             return []
         if self.grabbed == DOCKED:
+            if self.narrow_looks:  # a window too narrow, until it's widened
+                self.narrow_looks -= 1
+                return list(NARROW)
             return list(self.words)
         guess = Region(DOCKED.left + 1285, DOCKED.top + 813, 56, 30)
         if self.grabbed.contains(guess.center):
@@ -157,6 +161,16 @@ def test_waits_for_the_game_to_show_then_saves_where_it_is(tmp_path, preview, ca
     assert out.count("Can't see an OpenGuessr round") == 1 and "saved where it is" in out
     assert Layout.load(path) == layout and preview.exists()
     assert not (tmp_path / "layout-continue.png").exists()  # snapshotted afresh when it shows
+
+
+def test_says_when_the_window_is_too_narrow_to_play_in(tmp_path, preview, capsys):
+    desk = Desk(narrow_looks=3)
+
+    layout = ensure_layout(desk, desk, tmp_path / "layout.json", False, desk.read_words)
+
+    out = capsys.readouterr().out
+    assert out.count("too narrow") == 1 and "Can't see" not in out
+    assert layout.view == docked(22, 70, 1129, 498) and desk.raised == 0
 
 
 def test_keeps_the_saved_layout_while_the_game_is_still_there(tmp_path, preview):

@@ -38,6 +38,7 @@ def test_predict_uses_every_crop_and_returns_likeliest_place(tmp_path, monkeypat
     guess = model.predict(views)
 
     assert model.encoder.seen == 4  # a 2:1 view gives itself plus two square tiles
+    assert model.source.startswith("model.pt, saved 20")  # which model, saved with each round
     assert (guess.lat, guess.lon) == pytest.approx(tuple(CENTROIDS[1]))
     assert guess.top_cells[0][2] > 0.9
     assert guess.expected_score > 4000

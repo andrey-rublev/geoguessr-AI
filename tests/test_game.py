@@ -703,10 +703,10 @@ def test_stops_looking_round_as_soon_as_another_player_guesses(party, capsys):
     assert room.locked[0] is not None and room.locked[0] < 6 + 15
 
 
-def test_keeps_the_signs_it_read_when_walking_on_leaves_no_time_to_read_again(party):
+def test_keeps_the_signs_it_read_when_walking_on_leaves_no_time_to_read_again(party, tmp_path):
     room = MultiplayerRoom(rounds=1, length=120.0, others_guess=200.0)
     predictor = FakePredictor(expected=(1000.0, 3000.0))  # unsure: walks on once
-    bot = party(room, predictor, record_answers=False)
+    bot = party(room, predictor, debug_dir=tmp_path, record_answers=False)
     time_for, asked = bot._time_for, []
 
     def no_time_to_read_again(*steps):
@@ -719,6 +719,23 @@ def test_keeps_the_signs_it_read_when_walking_on_leaves_no_time_to_read_again(pa
     assert room.keys and len(bot.signs.scenes) == 4  # walked on, but read only the first spot
     clued = predictor.evidence[-1].countries  # the sign read there still counts
     assert clued is not None and clued.max() > clued.min()
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    assert saved["text"][0]["text"] == "Rua Augusta 12" and saved["short_of_time"] == ["read"]
+    assert saved["party"] is True and saved["others_guessed"] is False
+    assert 100 < saved["seconds_at_start"] <= 120 and 0 < saved["seconds_left_to_guess"] < 120
+
+
+def test_saves_how_a_singleplayer_round_was_played(tmp_path):
+    settings = BotSettings(rounds=1, record_answers=False, debug_dir=tmp_path)
+    predictor = FakePredictor()
+    predictor.source = "geoguessr.pt, saved 2026-10-02 23:07"
+
+    OpenGuessrBot(LAYOUT, predictor, settings, FakeScreen(), FakeControls()).play()
+
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    assert saved["party"] is False and saved["short_of_time"] == []
+    assert saved["model"] == "geoguessr.pt, saved 2026-10-02 23:07"
+    assert "seconds_at_start" not in saved  # no timer to read
 
 
 def test_gives_up_a_round_whose_time_runs_out_and_plays_the_next(party, capsys):

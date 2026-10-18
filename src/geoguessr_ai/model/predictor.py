@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -77,6 +78,9 @@ class GeoPredictor:
         self.prior_strength = prior_strength
         self.game_prior_strength = game_prior_strength
         self.coverage_strength = coverage_strength
+        saved = datetime.fromtimestamp(Path(checkpoint_path).stat().st_mtime)
+        self.source = f"{Path(checkpoint_path).name}, saved {saved:%Y-%m-%d %H:%M}"
+        """Which model this is, to tell rounds played by different models apart."""
         self.model = Ensemble.load(checkpoint_path)
         self.encoder = ImageEncoder(self.model.backbone, device)
         self.model.to(self.encoder.device)

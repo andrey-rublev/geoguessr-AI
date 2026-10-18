@@ -254,6 +254,10 @@ class OpenGuessrBot:
         """In a multiplayer room, what watches for another player's guess."""
         self.others_guessed = False
         """Whether another player has guessed this round, as far as the bot has noticed."""
+        self.short_of_time: list[str] = []
+        """The steps this round left out for want of time: "view", "read" or "walk"."""
+        self.seconds_at_start: float | None = None
+        """In a multiplayer room, the time this round had when the bot began looking."""
         self.took = dict(STEP_SECONDS, guess=GUESS_SECONDS)
         """How long each step of a multiplayer round has taken, lately."""
         if settings.party:
@@ -286,7 +290,7 @@ class OpenGuessrBot:
     def play_round(self, number: int, run_dir: Path | None = None) -> Placement:
         s = self.settings
         print(f"\nRound {number}")
-        self.others_guessed = False
+        self.others_guessed, self.short_of_time = False, []
         if self.watch is not None:
             self.watch.begin_round()
         try:
@@ -304,7 +308,7 @@ class OpenGuessrBot:
         self._read_clock()  # it may have been cut short while looking
         read = self._time_for("read")
         if not read:
-            print("  short of time: not reading the signs")
+            self._short_of_time("read", "short of time: not reading the signs")
         with self._timing("read" if read else None):
             evidence, lines = self.notice(look, read=read)
         read_up_to = len(look.scenes) if read else 0
@@ -315,7 +319,8 @@ class OpenGuessrBot:
                 break
             self._read_clock()
             if not self._time_for("walk"):
-                print(f"  unsure (~{guess.expected_score:,.0f} points), but short of time to walk")
+                unsure = f"unsure (~{guess.expected_score:,.0f} points)"
+                self._short_of_time("walk", f"{unsure}, but short of time to walk")
                 break
             again = " again" if len(sure) > 1 else ""
             print(f"  unsure (~{guess.expected_score:,.0f} points): walking on to look{again}")
@@ -324,7 +329,7 @@ class OpenGuessrBot:
                 look.extend(self.look_around())
                 read = self._time_for("read")
                 if not read:
-                    print("  short of time: not reading the signs here")
+                    self._short_of_time("read", "short of time: not reading the signs here")
                 evidence, lines = self.notice(look, read, lines, read_up_to)
                 read_up_to = len(look.scenes) if read else read_up_to
                 guess = self.predictor.predict(look.seen(), evidence)
@@ -345,7 +350,9 @@ class OpenGuessrBot:
             folder = None
             if run_dir is not None:
                 folder = run_dir / f"round_{number:02d}"
-                self._save_round(folder, look, lines, evidence, guess, placement, sure, self.camera)
+                self._save_round(
+                    folder, look, lines, evidence, guess, placement, sure, self.camera, self._how()
+                )
 
             self.controls.sleep(0.4)
             self._check_round()  # Guess sits near Continue, which a finished round shows
@@ -505,6 +512,7 @@ class OpenGuessrBot:
             print(f"  couldn't read the timer: assuming {left:.0f} s are left")
         elif left is not None:
             print(f"  {left:.0f} s on the clock")
+        self.seconds_at_start = left
 
     def _read_clock(self) -> float | None:
         """Read the multiplayer round's timer, saying if it was cut short since the last time,
@@ -526,6 +534,27 @@ class OpenGuessrBot:
             return False
         need = sum(self.took[step] for step in steps) + self.took["guess"] + SPARE_SECONDS
         return self.clock.left() >= need
+
+    def _short_of_time(self, step: str, saying: str) -> None:
+        """Leave out ``step`` for want of time, saying so."""
+        self.short_of_time.append(step)
+        print(f"  {saying}")
+
+    def _how(self) -> dict:
+        """How this round was played, saved with it to compare singleplayer and multiplayer
+        rounds by: which model guessed, and in a room, how much time there was, whether
+        anything was left out for want of it, and whether another player guessed first."""
+        how = {
+            "party": self.settings.party,
+            "model": getattr(self.predictor, "source", None),
+            "short_of_time": list(self.short_of_time),
+        }
+        if self.clock is not None:
+            left = self.clock.left()
+            how["seconds_at_start"] = self.seconds_at_start
+            how["seconds_left_to_guess"] = round(left, 1) if math.isfinite(left) else None
+            how["others_guessed"] = self.others_guessed
+        return how
 
     @contextmanager
     def _timing(self, step: str | None) -> Iterator[None]:
@@ -553,7 +582,8 @@ class OpenGuessrBot:
         look = Look()
         for turn in range(min(s.views, 4)):
             if turn and not self._time_for("view"):
-                print(f"  short of time: looked {turn} way{'s' if turn > 1 else ''} round")
+                ways = f"{turn} way{'s' if turn > 1 else ''}"
+                self._short_of_time("view", f"short of time: looked {ways} round")
                 break
             with self._timing("view"):
                 heading = self._face(compass, 90.0 * turn)
@@ -862,6 +892,7 @@ class OpenGuessrBot:
         placement: Placement,
         sure: Sequence[float] = (),
         camera: Camera | None = None,
+        how: dict | None = None,
     ) -> None:
         folder.mkdir(parents=True, exist_ok=True)
         for i, view in enumerate(look.views):
@@ -891,6 +922,7 @@ class OpenGuessrBot:
             "pin": asdict(placement.click),
             "placed": {"lat": placement.lat, "lon": placement.lon},
             "pin_seen": placement.confirmed,
+            **(how or {}),
         }
         _write_round(folder / "round.json", info)
 

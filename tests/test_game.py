@@ -281,7 +281,7 @@ def test_walks_on_and_looks_again_when_unsure(tmp_path):
     sky = controls.clicks[0]  # gives Street View the keyboard
     assert LAYOUT.view.contains(sky) and sky.y < LAYOUT.view.top + LAYOUT.view.height // 10
     assert predictor.view_counts == [4, 8]  # the guess uses both spots
-    assert len(bot.signs.scenes) == 4 + 8
+    assert len(bot.signs.scenes) == 4 + 4  # only the new spot's views: the first's were read
     saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
     assert saved["walked"] is True and len(saved["headings"]) == 8
     assert saved["walks"] == 1 and saved["expected_each_look"] == [900.0, 3100.0]
@@ -701,6 +701,24 @@ def test_stops_looking_round_as_soon_as_another_player_guesses(party, capsys):
     assert "another player guessed, leaving 1" in out  # seen while it said so, for 3 seconds
     assert predictor.view_counts[0] < 4 and room.keys == []  # stopped looking, didn't walk
     assert room.locked[0] is not None and room.locked[0] < 6 + 15
+
+
+def test_keeps_the_signs_it_read_when_walking_on_leaves_no_time_to_read_again(party):
+    room = MultiplayerRoom(rounds=1, length=120.0, others_guess=200.0)
+    predictor = FakePredictor(expected=(1000.0, 3000.0))  # unsure: walks on once
+    bot = party(room, predictor, record_answers=False)
+    time_for, asked = bot._time_for, []
+
+    def no_time_to_read_again(*steps):
+        asked.append(steps)
+        return time_for(*steps) and asked.count(("read",)) < 2
+
+    bot._time_for = no_time_to_read_again
+    bot.play()
+
+    assert room.keys and len(bot.signs.scenes) == 4  # walked on, but read only the first spot
+    clued = predictor.evidence[-1].countries  # the sign read there still counts
+    assert clued is not None and clued.max() > clued.min()
 
 
 def test_gives_up_a_round_whose_time_runs_out_and_plays_the_next(party, capsys):

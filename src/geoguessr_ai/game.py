@@ -307,6 +307,7 @@ class OpenGuessrBot:
             print("  short of time: not reading the signs")
         with self._timing("read" if read else None):
             evidence, lines = self.notice(look, read=read)
+        read_up_to = len(look.scenes) if read else 0
         guess = self.predictor.predict(look.seen(), evidence)
         sure = [guess.expected_score]  # after each look, saved to judge walking by later
         for below in () if s.dry_run else (s.walk_below, s.walk_again_below):
@@ -321,7 +322,11 @@ class OpenGuessrBot:
             with self._timing("walk"):
                 self._walk()
                 look.extend(self.look_around())
-                evidence, lines = self.notice(look, read=self._time_for("read"))
+                read = self._time_for("read")
+                if not read:
+                    print("  short of time: not reading the signs here")
+                evidence, lines = self.notice(look, read, lines, read_up_to)
+                read_up_to = len(look.scenes) if read else read_up_to
                 guess = self.predictor.predict(look.seen(), evidence)
             sure.append(guess.expected_score)
         for note in evidence.notes:
@@ -679,13 +684,18 @@ class OpenGuessrBot:
                 break
         return heading
 
-    def notice(self, look: Look, read: bool = True) -> tuple[Evidence, list[TextLine]]:
+    def notice(
+        self, look: Look, read: bool = True, known: Sequence[TextLine] = (), start: int = 0
+    ) -> tuple[Evidence, list[TextLine]]:
         """Read the signs every way, and the road's name from above, and look for the sun:
-        clues the model can't see. Without ``read``, only look for the sun, which is quick."""
-        lines: list[TextLine] = []
+        clues the model can't see. Without ``read``, only look for the sun, which is quick.
+        ``known`` lines were read before, in the scenes up to ``start``, which aren't read again:
+        so when walking on leaves no time to read, the signs read before still count."""
+        lines = list(known)
         if self.signs is not None and read:
-            lines = self.signs.read(look.scenes)
-            lines += self.signs.read(self._ground_views(look), min_box_score=GROUND_BOX_SCORE)
+            scenes = look.scenes[start:]
+            lines += self.signs.read(scenes)
+            lines += self.signs.read(self._ground_views(scenes), min_box_score=GROUND_BOX_SCORE)
         clues = text_clues(lines)
         evidence = Evidence(countries=clues.likelihood, notes=clues.notes)
         level = [
@@ -708,14 +718,14 @@ class OpenGuessrBot:
                 break
         return evidence, lines
 
-    def _ground_views(self, look: Look) -> list[Image.Image]:
-        """The road round the car from above in each level view, where Street View's road names
-        come out straight for reading (see :func:`.camera.ground_view`). Only once the camera
-        has been measured, since a guessed one bends them."""
+    def _ground_views(self, scenes: Sequence[Image.Image]) -> list[Image.Image]:
+        """The road round the car from above in each of ``scenes``, where Street View's road
+        names come out straight for reading (see :func:`.camera.ground_view`). Only once the
+        camera has been measured, since a guessed one bends them."""
         if not self.camera.measured:
             return []
         corner = Point(self.scene.left, self.scene.top)
-        grounds = (ground_view(scene, corner, self.camera) for scene in look.scenes)
+        grounds = (ground_view(scene, corner, self.camera) for scene in scenes)
         return [ground for ground in grounds if ground is not None]
 
     def _drag_around(self) -> Look:

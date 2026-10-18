@@ -55,6 +55,11 @@ CHAT_BOX = (-0.6, -5.4, 10.0, 0.6)
 from the word's left, its top from the word's top, its right side from the word's left, and its
 bottom from the word's bottom. Measured -0.4, -5.2, 9.7 and 0.4 in a 2560 by 1440 window and
 -0.4, -5.0, 9.6 and 0.3 in a 1536 by 864 one."""
+CHAT_ABOVE_RETURN = (-2.0, -7.9, 9.2, -0.6)
+"""The chat box from the Return button's word just below it, for when the message field's words
+are too small to read, as on a screen 3440 pixels wide: its left side, top, right side and
+bottom from the word's left, top, left and top. Measured -1.7, -7.5, 8.4 and -1.0 in a 2560 by
+1440 window and -1.5, -7.2, 8.4 and -0.8 in a 1536 by 864 one."""
 VERSION = 1
 """Goes up whenever the game is found better, so that layouts found before are found again:
 1 once the browser's tab was no longer taken for the game's logo, nor the chat box's message
@@ -149,6 +154,8 @@ def find_game(
         if chats:
             bottom = back.box.top if back is not None else page_bottom
             chat = _chat_box(chats[0].box, h, bottom)
+        elif back is not None:
+            chat = _chat_above(back.box, h)
 
     def screen(region: Region) -> Region:
         return Region(origin.x + region.left, origin.y + region.top, region.width, region.height)
@@ -292,6 +299,13 @@ def _chat_box(box: Region, h: int, bottom: int) -> Region:
     left = max(box.left + left, 0)
     low = min(box.bottom + low, bottom)
     return Region(left, top, box.left + right - left, low - top)
+
+
+def _chat_above(back: Region, h: int) -> Region:
+    """The chat box above the Return button, whose word is in ``back``."""
+    left, top, right, low = (round(v * h) for v in CHAT_ABOVE_RETURN)
+    left, top = max(back.left + left, 0), max(back.top + top, 0)
+    return Region(left, top, back.left + right - left, back.top + low - top)
 
 
 def _reach(share: np.ndarray, start: int, gap: int = 4) -> int | None:

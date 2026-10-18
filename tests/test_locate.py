@@ -121,6 +121,16 @@ def test_finds_a_multiplayer_room_its_timer_and_its_chat_box():
     assert game.chat.bottom <= 800  # Return's panel, below it
 
 
+def test_finds_the_chat_box_above_return_when_its_words_are_too_small_to_read():
+    rgb, words = draw_game(party=True)
+    words = [word for word in words if not word.text.startswith("Your message")]
+
+    chat, h = find_game(words, rgb).chat, 30
+
+    assert chat.left <= 12 and chat.top <= 597 and chat.right >= 310 and chat.bottom >= 787
+    assert 597 - chat.top < h and chat.right - 310 < h and chat.bottom < 800  # clear of Return
+
+
 def test_covers_the_whole_chat_box_however_what_shows_through_shades_it():
     rgb, words = draw_game(party=True)
     shade = np.linspace(0, 28, 298).astype(np.uint8)[None, :, None]

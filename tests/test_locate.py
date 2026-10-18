@@ -74,6 +74,38 @@ def test_finds_a_singleplayer_round_by_its_words_and_panels():
     assert game.page == at(0, 0, 1536, 864)  # past Menu and the Guess button, to the edge
 
 
+def in_browser(rgb, words, tab="OpenGuessr - Free GeoGue", chrome=120):
+    """The game as a browser shows it, below its tabs and address bar, one tab named ``tab``."""
+    bar = np.full((chrome, rgb.shape[1], 3), 32, np.uint8)
+    moved = [
+        Word(w.text, Region(w.box.left, w.box.top + chrome, w.box.width, w.box.height))
+        for w in words
+    ]
+    return np.vstack([bar, rgb]), [Word(tab, Region(500, 10, 200, 20)), *moved]
+
+
+@pytest.mark.parametrize("tab", ["OpenGuessr - Free GeoGue", "OpenGuessr"])
+@pytest.mark.parametrize("menu", [True, False])
+def test_the_browsers_tab_is_no_logo(tab, menu):
+    rgb, words = in_browser(*draw_game(party=True), tab=tab)
+    if not menu:
+        words = [word for word in words if word.text != "Menu"]
+
+    game = find_game(words, rgb)
+
+    assert game.page.left == 0 and game.page.top == 120  # round the logo, not the tab
+    assert game.view.left == 22 and game.view.width == 1129
+
+
+def test_the_tab_is_no_logo_even_when_the_logo_cant_be_read():
+    rgb, words = in_browser(*draw_game(party=True), tab="OpenGuessr")
+    words = [word for word in words if word.text != "OpenGuessr" or word.box.top < 100]
+
+    game = find_game(words, rgb)
+
+    assert game.page.left < 30 and game.view.left < 40  # by Return, below it
+
+
 def test_finds_a_multiplayer_room_its_timer_and_its_chat_box():
     rgb, words = draw_game(party=True)
 

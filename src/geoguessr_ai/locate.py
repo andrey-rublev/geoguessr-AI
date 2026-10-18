@@ -96,7 +96,11 @@ def find_game(
     logos = [w for w in above if LOGO.search(w.text) and w.box.right < left]
     backs = [w for w in words if RETURN.search(w.text) and w.box.top > bar.box.top]
     menu = min(menus, key=lambda w: w.box.top, default=None)
-    logo = min(logos, key=lambda w: w.box.top, default=None)
+    # The browser's tab is named after the game too, above the page: the logo is level with
+    # Menu, and lowest. Taking the tab for it once cut the view down to its right half.
+    if menu is not None:
+        logos = [w for w in logos if abs(w.box.center.y - menu.box.center.y) < h]
+    logo = max(logos, key=lambda w: w.box.top, default=None)
     back = min(backs, key=lambda w: w.box.left, default=None)
     tops = [w for w in (menu, logo) if w is not None]
     if not tops or (logo is None and back is None):

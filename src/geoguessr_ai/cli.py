@@ -220,8 +220,9 @@ def cmd_train(args: argparse.Namespace) -> None:
 
     config = TrainConfig(
         n_cells=args.cells,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
+        # Rounds alone are a few thousand crops: smaller batches, and more passes over them.
+        epochs=args.epochs or (30 if photos else 40),
+        batch_size=args.batch_size or (1024 if photos else 256),
         lr=args.lr,
         tau_km=args.tau_km,
         real_fraction=args.real_fraction,
@@ -684,9 +685,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="the image model to see through, e.g. geolocal/StreetCLIP (default: the current "
         "model's); a model that sees through another replaces it only if it scores better",
     )
-    p.add_argument("--epochs", type=int, default=30)
+    p.add_argument(
+        "--epochs", type=int, help="passes over the data (default 30, or 40 on rounds alone)"
+    )
     p.add_argument("--cells", type=int, help="number of geocells (default: auto)")
-    p.add_argument("--batch-size", type=int, default=1024)
+    p.add_argument("--batch-size", type=int, help="default 1024, or 256 on rounds alone")
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--tau-km", type=float, default=100.0)
     p.add_argument(

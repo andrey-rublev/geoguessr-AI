@@ -38,7 +38,12 @@ from geoguessr_ai.model.head import Ensemble
 from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings, is_test_round
 
 SUN_NOTE = re.compile(r"sun to the [\w-]+ \((\d+) deg\), (-?\d+) deg up")
-DEFAULT_EMBEDDINGS = Path("data/embeddings/openai__clip-vit-base-patch32") / ROUNDS_FILE
+
+
+def model_rounds(model: Path) -> Path:
+    """Where the rounds are embedded as ``model``'s image model sees them."""
+    folder = Ensemble.load(model).backbone.replace("/", "__")
+    return Path("data/embeddings") / folder / ROUNDS_FILE
 
 
 def saved_rounds(root: Path) -> dict[str, dict]:
@@ -54,9 +59,10 @@ def saved_rounds(root: Path) -> dict[str, dict]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rounds", type=Path, default=Path("runs"))
-    parser.add_argument("--embeddings", type=Path, default=DEFAULT_EMBEDDINGS)
+    parser.add_argument("--embeddings", type=Path, help="default: the model's")
     parser.add_argument("--model", type=Path, default=Path("models/geoguessr.pt"))
     args = parser.parse_args()
+    args.embeddings = args.embeddings or model_rounds(args.model)
     if not args.embeddings.exists():
         sys.exit(f"{args.embeddings} not found: run `geoguessr-ai embed --rounds` first")
 

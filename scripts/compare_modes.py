@@ -30,7 +30,13 @@ from geoguessr_ai.model.head import Ensemble
 from geoguessr_ai.model.predictor import guess_from_embeddings
 from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings, is_test_round
 
-DEFAULT_EMBEDDINGS = Path("data/embeddings/openai__clip-vit-base-patch32") / ROUNDS_FILE
+
+def model_rounds(model: Path) -> Path:
+    """Where the rounds are embedded as ``model``'s image model sees them."""
+    folder = Ensemble.load(model).backbone.replace("/", "__")
+    return Path("data/embeddings") / folder / ROUNDS_FILE
+
+
 MODES = ("singleplayer", "multiplayer")
 
 
@@ -168,7 +174,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rounds", type=Path, default=Path("runs"))
     parser.add_argument("--model", type=Path, default=Path("models/geoguessr.pt"))
-    parser.add_argument("--embeddings", type=Path, default=DEFAULT_EMBEDDINGS)
+    parser.add_argument("--embeddings", type=Path, help="default: the model's")
     parser.add_argument(
         "--multiplayer",
         action="append",
@@ -180,6 +186,7 @@ def main() -> None:
         "--since", default="", metavar="SESSION", help="leave out sessions before this one"
     )
     args = parser.parse_args()
+    args.embeddings = args.embeddings or model_rounds(args.model)
     rounds = played(args.rounds, set(args.multiplayer), args.since)
     as_played(rounds)
     replayed(rounds, args.model, args.embeddings)

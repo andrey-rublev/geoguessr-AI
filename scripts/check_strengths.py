@@ -39,12 +39,11 @@ from geoguessr_ai.model.geocells import (
     DEFAULT_PRIOR_STRENGTH,
 )
 from geoguessr_ai.model.head import Ensemble
-from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings, is_test_round
+from geoguessr_ai.model.rounds import RoundEmbeddings, is_test_round
 
 sys.path.insert(0, str(Path(__file__).parent))
-from check_clues import SUN_NOTE, saved_rounds  # noqa: E402
+from check_clues import SUN_NOTE, model_rounds, saved_rounds  # noqa: E402
 
-DEFAULT_EMBEDDINGS = Path("data/embeddings/openai__clip-vit-base-patch32") / ROUNDS_FILE
 NOW = (DEFAULT_PRIOR_STRENGTH, DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_COVERAGE_STRENGTH)
 TRIED = ((0.0, 0.15, 0.3, 0.45, 0.6, 0.75, 1.0), (0.0, 0.25, 0.5, 0.75, 1.0), (0.25, 0.5, 1.0))
 
@@ -57,9 +56,10 @@ def choosing(round_id: str) -> bool:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rounds", type=Path, default=Path("runs"))
-    parser.add_argument("--embeddings", type=Path, default=DEFAULT_EMBEDDINGS)
+    parser.add_argument("--embeddings", type=Path, help="default: the model's")
     parser.add_argument("--model", type=Path, default=Path("models/geoguessr.pt"))
     args = parser.parse_args()
+    args.embeddings = args.embeddings or model_rounds(args.model)
     if not args.embeddings.exists():
         sys.exit(f"{args.embeddings} not found: run `geoguessr-ai embed --rounds` first")
 

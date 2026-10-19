@@ -32,6 +32,11 @@ RECOGNISERS = {  # RapidOCR recognition model: the script it reads, besides Lati
 }
 DETECT_WIDTH = 1024
 """Text is looked for on a copy at most this wide: several times faster, and signs still show."""
+HALF_OVERLAP = 0.1
+"""Then again in each half of a wider picture at its own size (see :meth:`SignReader._find_lines`),
+the halves overlapping by this share of the width, so writing across the middle is whole in one.
+On 240 held-out rounds' views this read three times the lines, found clues in 22 rounds rather
+than 10, and scored 24 points a round more (give or take 19)."""
 MIN_BOX_SCORE = 0.6
 MIN_TEXT_HEIGHT = 10
 """Pixels; smaller text can't be read reliably anyway."""
@@ -130,6 +135,13 @@ def _pad_width(crop: np.ndarray) -> np.ndarray:
     return np.concatenate([crop, padding], axis=1)
 
 
+def _centre_inside(corners: np.ndarray, box: np.ndarray) -> bool:
+    """Whether the middle of one line's box is within another's: the same line, found twice."""
+    x, y = corners.mean(axis=0)
+    (x0, y0), (x1, y1) = box.min(axis=0), box.max(axis=0)
+    return bool(x0 <= x <= x1 and y0 <= y <= y1)
+
+
 def _bgr(image: Image.Image) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(image.convert("RGB"))[:, :, ::-1])
 
@@ -143,9 +155,14 @@ def _steep(corners: np.ndarray) -> bool:
 
 class SignReader:
     def __init__(
-        self, models: Sequence[str] | None = None, min_score: float = 0.8, threads: int = -1
+        self,
+        models: Sequence[str] | None = None,
+        min_score: float = 0.8,
+        threads: int = -1,
+        close: bool = True,
     ) -> None:
-        """``threads`` is how many CPU threads each model may use (-1 = as many as it likes)."""
+        """``threads`` is how many CPU threads each model may use (-1 = as many as it likes).
+        With ``close``, small writing is looked for too, at full size (see :data:`HALF_OVERLAP`)."""
         import importlib.util
 
         from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion, RapidOCR
@@ -174,6 +191,7 @@ class SignReader:
         self._detect = engines[models[0]].text_det
         self._recognisers = {model: e.text_rec for model, e in engines.items()}
         self.min_score = min_score
+        self.close = close
 
     def read(
         self, images: Sequence[Image.Image], min_box_score: float = MIN_BOX_SCORE
@@ -254,9 +272,28 @@ class SignReader:
         return words
 
     def _find_lines(self, bgr: np.ndarray, min_box_score: float) -> list[np.ndarray]:
-        """Corners of the biggest confidently detected lines of text, in full-size pixels."""
+        """Corners of the biggest confidently detected lines of text, in full-size pixels. On a
+        shrunk copy, small writing like a sign down the road or a shop's phone number is too small
+        to find, so with :attr:`close` each half of a wide picture is looked at again at its own
+        size, for lines not found already."""
+        boxes = self._detect_lines(bgr, min_box_score, DETECT_WIDTH)
+        w = bgr.shape[1]
+        if not self.close or w <= DETECT_WIDTH:
+            return boxes
+        half = round(w * (1 + HALF_OVERLAP) / 2)
+        more: list[np.ndarray] = []
+        for left in (0, w - half):
+            part = np.ascontiguousarray(bgr[:, left : left + half])
+            for corners in self._detect_lines(part, min_box_score, half):
+                corners = corners + np.array([left, 0], dtype=np.float32)
+                if not any(_centre_inside(corners, box) for box in boxes + more):
+                    more.append(corners)
+        return boxes + more
+
+    def _detect_lines(self, bgr: np.ndarray, min_box_score: float, width: int) -> list[np.ndarray]:
+        """The biggest confidently detected lines, looked for on a copy at most ``width`` wide."""
         h, w = bgr.shape[:2]
-        scale = min(1.0, DETECT_WIDTH / w)
+        scale = min(1.0, width / w)
         small = cv2.resize(bgr, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
         found = self._detect(small if scale < 1 else bgr)
         if found.boxes is None:

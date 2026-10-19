@@ -32,6 +32,9 @@ LANGUAGE_FLOORS = (0.2, 0.1, 0.05)
 """For a country that doesn't speak a language, after one, two, or three or more signs of it."""
 ENGLISH_FLOOR = 0.7
 """English is on signs everywhere, so it barely counts."""
+PLAIN_ELSEWHERE = {"grand"}
+"""Sign words that, without their accents, are everyday words of other languages: GRAND on a
+hotel in Uganda isn't Swedish gränd."""
 CUT_OFF_LETTERS, CUT_OFF_MISSING = 5, 3
 """A word at the end of a line of text may be cut off by the frame: count it as a sign word
 when it has at least this many letters and the sign word only this many more."""
@@ -599,7 +602,7 @@ def _indexes() -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
             letters.setdefault(letter, set()).add(code)
         for word in common.split(","):
             words.setdefault(word, set()).add(code)
-            if len(plain := _without_accents(word)) >= 4:
+            if len(plain := _without_accents(word)) >= 4 and plain not in PLAIN_ELSEWHERE:
                 words.setdefault(plain, set()).add(code)
     for abbreviation, codes in ABBREVIATIONS.items():
         words.setdefault(abbreviation + ".", set()).update(codes.split(","))

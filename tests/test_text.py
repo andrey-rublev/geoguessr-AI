@@ -89,6 +89,8 @@ def test_road_words_written_onto_the_end_of_the_name():
     # Without its accent, Swedish gränd is inside every Spanish grande.
     assert not text_clues([TextLine("LLANOGRANDE", "latin", 0.9)]).notes
     assert text_clues([TextLine("Kyrkogrand", "latin", 0.9)]).notes == ["Swedish: …grand"]
+    assert not text_clues([TextLine("GRAND", "latin", 0.9)]).notes  # a hotel's, in Uganda
+    assert text_clues([TextLine("Gränd", "latin", 0.9)]).notes  # still, with its accent
 
 
 def test_a_short_road_ending_needs_a_name_before_it():

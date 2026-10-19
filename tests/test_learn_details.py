@@ -62,6 +62,10 @@ def test_keeps_no_expert_when_the_details_say_nothing(tmp_path):
     for number in range(1, 41):  # every roadside alike
         save_round(runs, "s1", number, answer=PARIS if number % 2 else TOKYO, views=4)
     head = GeoHead(embed_dim=3, n_cells=2, hidden=4)
+    with torch.no_grad():
+        for p in head.parameters():
+            p.zero_()
+        head.net[-1].bias.copy_(torch.tensor([0.0, 1.0]))  # leans Tokyo, not a coin toss
     model = tmp_path / "model.pt"
     Checkpoint(head, GeoCells(np.array([PARIS, TOKYO])), "fake/backbone").save(model)
     detail_path(model).write_bytes(b"an old one")

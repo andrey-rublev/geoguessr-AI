@@ -4,8 +4,10 @@ Every saved round with an answer is grouped by how it was played, which rounds h
 since 18 October 2026 (mark multiplayer sessions from before then with --multiplayer), and by
 the model that guessed, since a better model alone moves the scores. Two comparisons:
 
-* As played: the points each kind of round scored, what the model expected of the places, and,
-  in multiplayer, how often the timer left steps out or another player guessed first.
+* As played: the points each kind of round scored, in OpenGuessr's own scoring before its streak
+  bonus, what the model expected of the places (in rounds saved since 19 October 2026, when the
+  estimate was put on the same scale), and, in multiplayer, how often the timer left steps out
+  or another player guessed first.
 * Replayed: the current model guessing again from each round's saved views alone, on rounds it
   never trained on. Places or pictures that are harder in multiplayer show up here; what the
   timer took away shows up only as played.
@@ -23,7 +25,7 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-from geoguessr_ai.geo import geoguessr_score, haversine_km
+from geoguessr_ai.geo import haversine_km, openguessr_score
 from geoguessr_ai.model.head import Ensemble
 from geoguessr_ai.model.predictor import guess_from_embeddings
 from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings, is_test_round
@@ -52,9 +54,9 @@ def played(root: Path, multiplayer: set[str], since: str) -> list[dict]:
                 "id": f"{session}/{path.parent.name}",
                 "mode": MODES[party],
                 "model": info.get("model") or "not saved (rounds before 18 October 2026)",
-                "points": None if km is None else geoguessr_score(km),
+                "points": None if km is None else openguessr_score(km),
                 "unreadable": "answer" in info and not answer,  # recording, but couldn't read it
-                "expected": info["guess"]["expected_score"],
+                "expected": info["guess"]["expected_score"] if "expected_in" in info else None,
                 "views": len(info["headings"]),
                 "read": bool(info.get("text")),
                 "walked": info.get("walks", 0) > 0,
@@ -96,11 +98,12 @@ def as_played(rounds: list[dict]) -> None:
             scored[mode] = points
             shown = "-" if not points else "{:,.0f} ± {:,.0f}".format(*mean_error(points))
             unreadable = sum(r["unreadable"] for r in group)
-            expected = statistics.mean(r["expected"] for r in group)
+            estimates = [r["expected"] for r in group if r["expected"] is not None]
+            expected = f"{statistics.mean(estimates):,.0f}" if estimates else "-"
             views = statistics.mean(r["views"] for r in group)
             print(
                 f"  {mode:13}{len(group):7}{len(points):9}{unreadable:11}{shown:>16}"
-                f"{expected:9,.0f}{views:6.1f}{share(group, 'read'):>6}{share(group, 'walked'):>7}"
+                f"{expected:>9}{views:6.1f}{share(group, 'read'):>6}{share(group, 'walked'):>7}"
                 f"{share(group, 'short'):>14}{share(group, 'others'):>13}"
             )
         if any(r["unreadable"] for r in some):
@@ -142,7 +145,7 @@ def replayed(rounds: list[dict], model_path: Path, embeddings: Path) -> None:
         where = data.groups == round_id
         guess = guess_from_embeddings(model, data.embeddings[where])
         km = haversine_km(guess.lat, guess.lon, data.lat[where][0], data.lon[where][0])
-        points[mode].append(geoguessr_score(km))
+        points[mode].append(openguessr_score(km))
     print(f"\nReplayed by {model_path}, from the views alone, on rounds it never trained on")
     for mode in MODES:
         if points[mode]:

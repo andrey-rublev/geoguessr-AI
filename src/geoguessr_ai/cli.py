@@ -122,7 +122,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
     _limit_threads(args.threads)
     encoder = ImageEncoder(args.backbone, args.device)
     out_dir = _embedding_dir(args.out, args.backbone)
-    print(f"Embedding with {args.backbone} on {encoder.device} into {out_dir}")
+    print(f"Embedding with {args.backbone} on {encoder.where} into {out_dir}")
     if args.rounds:
         data = embed_rounds(encoder, args.rounds, out_dir / ROUNDS_FILE, batch_size=args.batch_size)
         train, test = data.split()

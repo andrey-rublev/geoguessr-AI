@@ -1,19 +1,27 @@
 """A frozen, pretrained CLIP image encoder that turns images into embeddings.
 
-Training only the small head on top keeps training fast enough for a laptop CPU.
-Swap in ``geolocal/StreetCLIP`` (CLIP pretrained for geolocation) for better
-accuracy if you have a GPU or patience.
+Training only the small head on top keeps training fast enough for a laptop CPU. On an Intel
+GPU, with OpenVINO installed, the encoder runs there instead (see :class:`ImageEncoder`).
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import os
+import threading
+from collections.abc import Callable, Sequence
+from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
 
 DEFAULT_BACKBONE = "openai/clip-vit-base-patch32"
+OPENVINO_DIR = Path.home() / ".cache" / "geoguessr-ai" / "openvino"
+"""Where encoders converted to run on an Intel GPU are kept: converting one takes minutes."""
+OPENVINO_BATCH = 16
+"""Images the GPU encodes at once. Its model is built for exactly this many, so fewer are
+padded out: a look round (4 views of 3 crops) fits in one batch."""
 
 
 def pick_device(name: str = "auto") -> torch.device:
@@ -45,28 +53,111 @@ def square_crops(image: Image.Image, max_crops: int = 3) -> list[Image.Image]:
 
 
 class ImageEncoder:
+    """CLIP's image tower. With ``device="auto"``, it runs on an Intel GPU through OpenVINO
+    (``pip install openvino``) when there is one: on an Arc 140V that embeds about 30 views a
+    second with StreetCLIP, which takes 2.3 s a view on the CPU beside it, and leaves the CPU
+    free. Otherwise it runs in PyTorch, on whatever :func:`pick_device` finds."""
+
     def __init__(self, name: str = DEFAULT_BACKBONE, device: str = "auto") -> None:
-        from transformers import AutoImageProcessor, CLIPVisionModelWithProjection
+        from transformers import AutoImageProcessor
         from transformers.utils import logging as hf_logging
 
         # Loading only the vision tower of a full CLIP checkpoint lists every unused text weight.
         hf_logging.set_verbosity_error()
         self.name = name
-        self.device = pick_device(device)
         self.processor = AutoImageProcessor.from_pretrained(name)
-        self.model = CLIPVisionModelWithProjection.from_pretrained(name).to(self.device).eval()
+        size = self.processor.crop_size["height"]
+        self._gpu = _intel_gpu(name, size) if device == "auto" else None
+        self._lock = threading.Lock()
+        if self._gpu is not None:
+            self.device = torch.device("cpu")  # for whatever runs on the embeddings
+            self.where = "the Intel GPU"
+            self._request = self._gpu.create_infer_request()
+            self._dim = int(self._gpu.outputs[0].get_partial_shape()[1].get_length())
+        else:
+            self.device = pick_device(device)
+            self.where = str(self.device)
+            self.model = _clip_vision(name).to(self.device)
+            self._dim = self.model.config.projection_dim
 
     @property
     def dim(self) -> int:
-        return self.model.config.projection_dim
+        return self._dim
 
     @torch.inference_mode()
     def encode(self, images: Sequence[Image.Image]) -> torch.Tensor:
         """L2-normalised embeddings, shape (N, dim), on the CPU."""
-        inputs = self.processor(images=[im.convert("RGB") for im in images], return_tensors="pt")
-        pixels = inputs["pixel_values"].to(self.device)
-        embeds = self.model(pixel_values=pixels).image_embeds
+        rgb = [im.convert("RGB") for im in images]
+        if self._gpu is not None:
+            pixels = self.processor(images=rgb, return_tensors="np")["pixel_values"]
+            with self._lock:
+                embeds = torch.from_numpy(in_batches(pixels, OPENVINO_BATCH, self._infer))
+        else:
+            pixels = self.processor(images=rgb, return_tensors="pt")["pixel_values"]
+            embeds = self.model(pixel_values=pixels.to(self.device)).image_embeds
         return F.normalize(embeds.float(), dim=-1).cpu()
+
+    def _infer(self, batch: np.ndarray) -> np.ndarray:
+        return self._request.infer({0: batch})[0]
+
+
+def in_batches(
+    pixels: np.ndarray, size: int, infer: Callable[[np.ndarray], np.ndarray]
+) -> np.ndarray:
+    """``infer`` on ``pixels`` in batches of exactly ``size``, the last padded with blanks
+    whose results are dropped."""
+    out = []
+    for start in range(0, len(pixels), size):
+        batch = pixels[start : start + size].astype(np.float32)
+        n = len(batch)
+        if n < size:
+            batch = np.concatenate([batch, np.zeros((size - n, *batch.shape[1:]), np.float32)])
+        out.append(np.asarray(infer(batch))[:n])
+    return np.concatenate(out)
+
+
+def _clip_vision(name: str):
+    from transformers import CLIPVisionModelWithProjection
+
+    return CLIPVisionModelWithProjection.from_pretrained(name).eval()
+
+
+def _intel_gpu(name: str, size: int):
+    """``name``'s image tower compiled for an Intel GPU, converted the first time; or None
+    without OpenVINO or such a GPU."""
+    try:
+        import openvino as ov
+    except ImportError:
+        return None
+    core = ov.Core()
+    if "GPU" not in core.available_devices:
+        return None
+    xml = OPENVINO_DIR / f"{name.replace('/', '__')}-{OPENVINO_BATCH}.xml"
+    if not xml.exists():
+        print(f"Converting {name} to run on the GPU (once, a minute or two)...")
+        _convert(ov, name, size, xml)
+    return core.compile_model(core.read_model(xml), "GPU", {"INFERENCE_PRECISION_HINT": "f16"})
+
+
+def _convert(ov, name: str, size: int, xml: Path) -> None:
+    class Embed(torch.nn.Module):
+        def __init__(self, tower) -> None:
+            super().__init__()
+            self.tower = tower
+
+        def forward(self, pixels: torch.Tensor) -> torch.Tensor:
+            return self.tower(pixel_values=pixels).image_embeds
+
+    shape = (OPENVINO_BATCH, 3, size, size)
+    model = ov.convert_model(
+        Embed(_clip_vision(name)), example_input=torch.zeros(shape), input=[shape]
+    )
+    xml.parent.mkdir(parents=True, exist_ok=True)
+    partial = xml.with_name(f"{xml.stem}.partial.xml")
+    ov.save_model(model, partial)  # weights saved as 16-bit floats
+    # The weights beside it, then the model itself: a model file only ever has its weights.
+    os.replace(partial.with_suffix(".bin"), xml.with_suffix(".bin"))
+    os.replace(partial, xml)
 
 
 class LazyEncoder:

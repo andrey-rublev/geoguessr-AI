@@ -157,6 +157,23 @@ def cmd_embed(args: argparse.Namespace) -> None:
         )
 
 
+def cmd_train_details(args: argparse.Namespace) -> None:
+    """Learn what close-ups of the views say: bollards, poles, road lines, kerbs and signs."""
+    from .model.backbone import ImageEncoder
+    from .model.head import Ensemble
+    from .model.learn_details import learn_details
+    from .model.train import Pacer
+
+    if not args.model.exists():
+        raise SystemExit(f"{args.model} not found. Build a model with `geoguessr-ai train` first.")
+    _limit_threads(args.threads)
+    backbone = Ensemble.load(args.model).backbone
+    encoder = ImageEncoder(backbone, args.device)
+    folder = _embedding_dir(args.embeddings, backbone)
+    pace = Pacer(args.rest, args.max_temp or None)
+    learn_details(args.model, args.runs, folder, encoder, pace)
+
+
 def cmd_train(args: argparse.Namespace) -> None:
     """Train on the photos and on every round saved with its answer: a first model, or a new
     one that replaces the current one only if it scores better on held-out rounds."""
@@ -651,6 +668,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="share of each batch taken from your rounds (0 = don't use them)",
     )
     add_prior_strength(p)
+    add_device(p)
+    add_threads(p)
+
+    p = add(
+        "train-details",
+        cmd_train_details,
+        "Learn the small things players tell countries by, from your saved rounds.",
+        "Bollards, poles, road lines, kerbs and signs: a classifier on close-ups of each view, "
+        "kept only if it adds points on held-out rounds. The first run embeds every round's "
+        "close-ups, which takes a while; later runs only new rounds'.",
+    )
+    p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    p.add_argument(
+        "--runs", type=Path, default=DEFAULT_RUNS, help="where play and friends save rounds"
+    )
+    p.add_argument("--embeddings", type=Path, default=DEFAULT_EMBEDDINGS)
     add_device(p)
     add_threads(p)
 

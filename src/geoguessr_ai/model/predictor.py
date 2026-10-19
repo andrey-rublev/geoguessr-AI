@@ -93,6 +93,8 @@ class GeoPredictor:
             self.detail = DetailExpert.load(detail)
             if self.detail.backbone != self.model.backbone:
                 self.detail = None  # learned from another encoder's embeddings
+        self._details: tuple[tuple[int, ...], np.ndarray] | None = None
+        """The last views' close-ups' say, kept: walking on, the same first views come again."""
 
     def predict(self, images: Sequence[Image.Image], evidence: Evidence | None = None) -> Guess:
         """Guess one location from several views of the same place."""
@@ -113,8 +115,11 @@ class GeoPredictor:
     def _with_details(self, views: Sequence[Image.Image], evidence: Evidence | None) -> Evidence:
         """``evidence``, and what close-ups of ``views`` say of each country."""
         detail = self.detail
-        close = [tile for view in views for tile in tiles(view, detail.rows, detail.cols)]
-        likelihood = detail.likelihood(self.encoder.encode(close).numpy())
+        key = tuple(id(view) for view in views)
+        if self._details is None or self._details[0] != key:
+            close = [tile for view in views for tile in tiles(view, detail.rows, detail.cols)]
+            self._details = key, detail.likelihood(self.encoder.encode(close).numpy())
+        likelihood = self._details[1]
         evidence = evidence or Evidence()
         countries = likelihood if evidence.countries is None else evidence.countries * likelihood
         codes = country_codes()

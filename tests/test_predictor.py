@@ -172,3 +172,8 @@ def test_close_ups_of_the_views_reweigh_places_once_a_detail_expert_is_learned(
     assert (before.lat, before.lon) == pytest.approx(tuple(CENTROIDS[1]))
     assert (after.lat, after.lon) == pytest.approx(tuple(CENTROIDS[0]))
     assert model.encoder.seen == 3 + ROWS * COLS  # the model's crops, then the close-ups
+    looked = [Image.new("RGB", (800, 400)) for _ in range(4)]
+    model.predict(looked)
+    seen = model.encoder.seen
+    model.predict([*looked, *(Image.new("RGB", (800, 400)) for _ in range(4))])  # walked on
+    assert model.encoder.seen == seen + 8 * 3  # the first look's close-ups weren't read again

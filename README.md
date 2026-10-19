@@ -26,6 +26,8 @@ The last line builds the first model: it downloads about 5.4 GB of street photos
 1. Open the game in your browser: a Singleplayer game for `play`, a multiplayer room for `friends`.
 2. Run the command and let go of the mouse. Press **F8** to stop.
 
+Add `--browser` to play in a Chrome window of the bot's own instead, so your mouse and screen stay free (`pip install playwright` first). Start the game in that window.
+
 The bot finds the game by itself, on any screen, and switches to its tab if another tab is showing. When the game has moved, for example after you dock your laptop, it finds it again. To check what it found, open `calibration_preview.png`.
 
 **With friends:** the bot needs a browser of its own. A friend hosts the room on their own device, and you join it in the bot's browser. The bot plays each round the host starts, keeps to the timer, and waits for the host to press Continue.

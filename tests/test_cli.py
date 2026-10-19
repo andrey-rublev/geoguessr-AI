@@ -1,6 +1,7 @@
 import json
 from contextlib import nullcontext
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -106,14 +107,24 @@ def test_round_options():
     assert str(old.runs) == "old-runs" and old.no_save
 
 
+def test_can_play_in_a_browser_of_its_own_with_a_layout_of_its_own():
+    parser = build_parser()
+    play = parser.parse_args(["play", "--browser", "--window", "1280x800"])
+    assert play.browser and play.window == (1280, 800)
+    assert not parser.parse_args(["friends"]).browser
+    assert parser.parse_args(["calibrate", "--browser"]).window == (1600, 900)
+    assert cli._browser_layout(Path("layout-party.json"), True).name == "layout-party-browser.json"
+    assert cli._browser_layout(Path("layout.json"), False).name == "layout.json"
+
+
 def test_friends_plays_until_stopped_in_its_own_layout():
     parser = build_parser()
     for name in ("friends", "party"):
         friends = parser.parse_args([name])
         assert friends.func is cli.cmd_friends
-        assert friends.rounds == 0 and friends.layout.name == "layout-party.json"
+        assert friends.rounds == 0 and friends.default_layout.name == "layout-party.json"
         assert friends.round_time == 0.0 and not friends.no_answers
-    assert parser.parse_args(["play"]).layout.name == "layout.json"
+    assert parser.parse_args(["play"]).default_layout.name == "layout.json"
     assert parser.parse_args(["play"]).rounds == 5
     assert parser.parse_args(["calibrate", "--party"]).friends
 

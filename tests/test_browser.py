@@ -1,0 +1,102 @@
+import io
+
+import pytest
+from PIL import Image
+
+from geoguessr_ai.browser import WHEEL_DELTA, BrowserControls, BrowserScreen
+from geoguessr_ai.config import Point, Region
+
+
+class FakePage:
+    """Records what the bot's browser was asked to do, and shows a page with a red left half."""
+
+    def __init__(self, size):
+        self.size, self.done = size, []
+        self.mouse, self.keyboard = self, self
+
+    def screenshot(self, clip, animations):
+        page = Image.new("RGB", self.size, (0, 0, 255))
+        page.paste((255, 0, 0), (0, 0, self.size[0] // 2, self.size[1]))
+        box = (clip["x"], clip["y"], clip["x"] + clip["width"], clip["y"] + clip["height"])
+        out = io.BytesIO()
+        page.crop(box).save(out, format="PNG")
+        return out.getvalue()
+
+    def move(self, x, y, steps=1):
+        self.done.append(("move", x, y))
+
+    def click(self, x, y):
+        self.done.append(("click", x, y))
+
+    def down(self):
+        self.done.append(("down",))
+
+    def up(self):
+        self.done.append(("up",))
+
+    def wheel(self, dx, dy):
+        self.done.append(("wheel", dy))
+
+    def press(self, key):
+        self.done.append(("press", key))
+
+
+class FakeSession:
+    def __init__(self, size=(400, 300)):
+        self.size, self.page = size, FakePage(size)
+
+    def call(self, work):
+        return work(self.page)
+
+
+@pytest.fixture
+def session():
+    return FakeSession()
+
+
+@pytest.fixture
+def controls(session):
+    controls = BrowserControls(session)
+    controls.sleep = lambda seconds: None
+    yield controls
+    controls.close()
+
+
+def test_screenshots_are_of_the_page_and_black_beyond_it(session):
+    shot = BrowserScreen(session).grab(Region(150, 100, 300, 50))
+    assert shot.size == (300, 50)
+    assert shot.getpixel((10, 10)) == (255, 0, 0)  # left half
+    assert shot.getpixel((100, 10)) == (0, 0, 255)  # right half
+    assert shot.getpixel((280, 10)) == (0, 0, 0)  # off the page's right edge
+    assert BrowserScreen(session).virtual_desktop() == Region(0, 0, 400, 300)
+
+
+def test_wheel_zooms_maps_in_and_out_a_notch_at_a_time(session, controls):
+    controls.scroll(Point(50, 60), 2)
+    controls.scroll(Point(50, 60), -1)
+    wheels = [d[1] for d in session.page.done if d[0] == "wheel"]
+    assert wheels == [-WHEEL_DELTA, -WHEEL_DELTA, WHEEL_DELTA]
+    assert ("move", 50, 60) in session.page.done
+
+
+def test_keys_go_by_playwrights_names_and_drags_let_go(session, controls):
+    controls.press("up")
+    controls.drag(Point(10, 10), 30, 5)
+    assert ("press", "ArrowUp") in session.page.done
+    assert [d[0] for d in session.page.done[-3:]] == ["down", "move", "up"]
+    assert session.page.done[-2] == ("move", 40, 15) and controls.position() == Point(40, 15)
+
+
+def test_leaving_steps_out_of_the_window_so_the_map_closes(session, controls):
+    controls.leave(Point(200, 100))
+    assert session.page.done[:2] == [("move", -10, -10), ("move", 200, 100)]
+
+
+def test_dry_run_clicks_and_presses_nothing(session):
+    controls = BrowserControls(session, dry_run=True)
+    try:
+        controls.click(Point(5, 5))
+        controls.press("up")
+    finally:
+        controls.close()
+    assert [d[0] for d in session.page.done] == ["move"]

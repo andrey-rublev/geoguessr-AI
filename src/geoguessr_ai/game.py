@@ -364,7 +364,7 @@ class OpenGuessrBot:
             self.watch.end_round()  # nothing to hurry for now
         if not s.dry_run:
             if s.party:
-                self.controls.move(self.layout.view.center)  # closes the map, to see it end
+                self.controls.leave(self.layout.view.center)  # closes the map, to see it end
                 if self.clock is not None and math.isfinite(spare := self.clock.left()):
                     print(f"  locked in with {spare:.0f} s to spare; waiting for the round to end")
                 self._wait_for(lambda: not self._round_on())
@@ -573,7 +573,7 @@ class OpenGuessrBot:
     def look_around(self) -> Look:
         """See every direction: north, east, south and west by the compass, if it can be found."""
         s = self.settings
-        self.controls.move(self.layout.view.center)  # also collapses the minimap if it was open
+        self.controls.leave(self.layout.view.center)  # also collapses the minimap if it was open
         self.controls.sleep(s.view_settle_wait)
         self._wait_for_street_view()
         compass = None if s.dry_run else self.compass.read()

@@ -78,6 +78,9 @@ class FakeControls:
     def move(self, p):
         pass
 
+    def leave(self, p):
+        self.move(p)
+
     def click(self, p):
         if self.slam_on_click is not None and len(self.clicks) == self.slam_on_click:
             raise CornerSlam("mouse in a corner")

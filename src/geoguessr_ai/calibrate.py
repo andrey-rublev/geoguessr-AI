@@ -181,7 +181,7 @@ def _open_map(screen, controls, sighting: Sighting, expand_wait: float) -> Regio
     controls.move(sighting.map_hover.offset(-panel.width / 4, 0))  # stay over it, so it stays
     controls.sleep(expand_wait)
     opened = np.asarray(screen.grab(area).convert("RGB"))
-    controls.move(sighting.view.center)
+    controls.leave(sighting.view.center)
     found = measure_map(collapsed, opened, area, sighting)
     if found is None or found.width <= panel.width or found.height <= panel.height:
         print("  couldn't see how far the map opens; if guesses go astray, find the game again")

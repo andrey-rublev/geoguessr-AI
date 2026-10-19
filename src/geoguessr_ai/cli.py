@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
 
 from .config import DEFAULT_LAYOUT_PATH, PARTY_LAYOUT_PATH
@@ -58,9 +59,12 @@ def _read_words():
     return SignReader(models=["latin"], threads=2).words
 
 
-def _find_game(screen, controls, path: Path, party: bool, again: bool, read_words, delay: float):
+def _find_game(
+    screen, controls, path: Path, party: bool, again: bool, read_words, delay: float, own=False
+):
     """After ``delay`` seconds, the game's layout: as saved at ``path`` if the game still shows
-    there, else found on screen and saved. None if the bot was stopped meanwhile."""
+    there, else found on screen and saved. None if the bot was stopped meanwhile. ``own``: in a
+    browser of the bot's own, which has no window to bring forward."""
     from .calibrate import WrongGame, ensure_layout
     from .controls import StopRequested
     from .windows import bring_forward
@@ -68,7 +72,13 @@ def _find_game(screen, controls, path: Path, party: bool, again: bool, read_word
     try:
         controls.sleep(delay)
         return ensure_layout(
-            screen, controls, path, party, read_words, again=again, bring_forward=bring_forward
+            screen,
+            controls,
+            path,
+            party,
+            read_words,
+            again=again,
+            bring_forward=None if own else bring_forward,
         )
     except StopRequested:
         print("Stopped by user.")
@@ -80,19 +90,20 @@ def _find_game(screen, controls, path: Path, party: bool, again: bool, read_word
 
 
 def cmd_calibrate(args: argparse.Namespace) -> None:
-    path = args.layout or (PARTY_LAYOUT_PATH if args.friends else DEFAULT_LAYOUT_PATH)
+    path = args.layout or _browser_layout(
+        PARTY_LAYOUT_PATH if args.friends else DEFAULT_LAYOUT_PATH, args.browser
+    )
     if args.manual:
         from .calibrate import run_calibration, run_party_calibration
 
         (run_party_calibration if args.friends else run_calibration)(path)
         return
-    from .controls import Controls
-    from .screen import Screen
-
     read_words = _read_words()
-    with Screen() as screen, Controls(stop_key=args.stop_key) as controls:
-        print(f"Looking for OpenGuessr in {args.start_delay:g}s: let go of the mouse.")
-        _find_game(screen, controls, path, args.friends, True, read_words, args.start_delay)
+    with _devices(args) as (screen, controls):
+        if not args.browser:
+            print(f"Looking for OpenGuessr in {args.start_delay:g}s: let go of the mouse.")
+        delay = 0.0 if args.browser else args.start_delay
+        _find_game(screen, controls, path, args.friends, True, read_words, delay, args.browser)
 
 
 def cmd_download(args: argparse.Namespace) -> None:
@@ -333,12 +344,12 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
     from PIL import Image
 
     from .buttons import button_image_path
-    from .controls import Controls
     from .game import OpenGuessrBot
-    from .screen import Screen
 
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Build a model with `geoguessr-ai train` first.")
+    if args.layout is None:
+        args.layout = _browser_layout(args.default_layout, args.browser)
     predictor = _predictor(args)
     read_words = _read_words()
     button = button_image_path(args.layout)
@@ -347,8 +358,11 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
         layout.save(args.layout)
         continue_image.save(button)
 
-    with Screen() as screen, Controls(dry_run=settings.dry_run, stop_key=args.stop_key) as controls:
-        print(f"Starting in {args.start_delay:g}s: let go of the mouse. The bot finds the game.")
+    with _devices(args, settings.dry_run) as (screen, controls):
+        if not args.browser:
+            print(
+                f"Starting in {args.start_delay:g}s: let go of the mouse. The bot finds the game."
+            )
         layout = _find_game(
             screen,
             controls,
@@ -356,7 +370,8 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
             settings.party,
             args.calibrate,
             read_words,
-            args.start_delay,
+            0.0 if args.browser else args.start_delay,
+            args.browser,
         )
         if layout is None:
             return
@@ -372,6 +387,40 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
             f"\nThe rounds are saved with their answers in {settings.debug_dir}: "
             "`geoguessr-ai train` learns from them."
         )
+
+
+@contextmanager
+def _devices(args: argparse.Namespace, dry_run: bool = False):
+    """``(screen, controls)``: yours, or with ``--browser`` a Chrome window of the bot's own."""
+    from .controls import Controls
+    from .screen import Screen
+
+    if not args.browser:
+        with Screen() as screen, Controls(dry_run=dry_run, stop_key=args.stop_key) as controls:
+            yield screen, controls
+        return
+    from .browser import BrowserControls, BrowserScreen, BrowserSession
+
+    session = BrowserSession(size=args.window)
+    print(
+        "Opened a browser of the bot's own. In it, start a Singleplayer game, or join the room; "
+        "the bot finds the game and plays, leaving your mouse and screen free."
+    )
+    try:
+        with BrowserControls(session, dry_run=dry_run, stop_key=args.stop_key) as controls:
+            yield BrowserScreen(session), controls
+    finally:
+        session.close()
+
+
+def _browser_layout(path: Path, browser: bool) -> Path:
+    """Where to keep the layout: the bot's own browser has one of its own, apart from yours."""
+    return path.with_name(f"{path.stem}-browser{path.suffix}") if browser else path
+
+
+def _window(text: str) -> tuple[int, int]:
+    width, _, height = text.lower().partition("x")
+    return int(width), int(height)
 
 
 def _bot_settings(args: argparse.Namespace, **settings):
@@ -449,6 +498,20 @@ def build_parser() -> argparse.ArgumentParser:
             f"{DEFAULT_MAX_TEMP:g}; 0 = never wait). Read on Windows only",
         )
 
+    def add_browser(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "--browser",
+            action="store_true",
+            help="play in a Chrome window of the bot's own, leaving your mouse and screen free",
+        )
+        p.add_argument(
+            "--window",
+            type=_window,
+            default=(1600, 900),
+            metavar="WIDTHxHEIGHT",
+            help="the size of that window's page (default 1600x900)",
+        )
+
     def add_prior_strength(p: argparse.ArgumentParser) -> None:
         p.add_argument(
             "--prior-strength",
@@ -511,11 +574,13 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument(
             "--layout",
             type=Path,
-            default=layout,
-            help=f"where the game is on screen (default {layout})",
+            help=f"where the game is on screen (default {layout}, or with --browser "
+            f"{_browser_layout(layout, True)})",
         )
+        p.set_defaults(default_layout=layout)
         p.add_argument("--start-delay", type=float, default=5.0)
         p.add_argument("--stop-key", default="f8")
+        add_browser(p)
         add_prior_strength(p)
         add_device(p)
 
@@ -609,6 +674,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--start-delay", type=float, default=3.0)
     p.add_argument("--stop-key", default="f8")
+    add_browser(p)
 
     p = add("download", cmd_download, "Setup: download OpenStreetView-5M photos.")
     p.add_argument("--root", type=Path, default=DEFAULT_DATA)

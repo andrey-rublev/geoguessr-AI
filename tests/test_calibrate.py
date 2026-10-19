@@ -77,6 +77,9 @@ class Desk:
     def move(self, p, duration=0.15):
         self.mouse = p
 
+    def leave(self, p):
+        self.move(p)
+
     def click(self, p):
         self.mouse = p
         self.clicks.append(p)

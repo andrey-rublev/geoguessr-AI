@@ -30,11 +30,16 @@ class Controls:
     def __init__(self, *, dry_run: bool = False, stop_key: str = "f8") -> None:
         enable_dpi_awareness()
         import pyautogui  # imported lazily: it touches the display on import
-        from pynput import keyboard
 
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0.05
         self._gui = pyautogui
+        self._listen(dry_run, stop_key)
+
+    def _listen(self, dry_run: bool, stop_key: str) -> None:
+        """Listen for the stop key, from anywhere."""
+        from pynput import keyboard
+
         self.dry_run = dry_run
         self._stop = threading.Event()
 
@@ -76,6 +81,11 @@ class Controls:
     def move(self, p: Point, duration: float = 0.15) -> None:
         self.check()
         self._gui.moveTo(p.x, p.y, duration=duration)
+
+    def leave(self, p: Point) -> None:
+        """Move to ``p``, leaving what the mouse was over, like the map, which closes once the
+        mouse has left it."""
+        self.move(p)
 
     def click(self, p: Point) -> None:
         """Click at ``p``. In dry-run mode the mouse only moves there."""

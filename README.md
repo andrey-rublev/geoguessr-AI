@@ -39,7 +39,7 @@ The bot finds the game by itself, on any screen, and switches to its tab if anot
 
 ## How it works
 
-It looks around, reads signs and checks the sun. A CLIP image encoder and a classifier trained on OpenStreetView-5M and its own rounds rank regions of the world, and the clues reweigh them. On recent live rounds it averages about 3,450 of 5,000 points.
+It looks around, reads signs and checks the sun. A CLIP image encoder and a classifier trained on OpenStreetView-5M and its own rounds rank regions of the world, and the clues reweigh them. On recent live rounds it averages about 3,100 of OpenGuessr's 5,000 points a round, before the game's streak bonus.
 
 Data: OpenStreetView-5M (CC-BY-SA 4.0), GeoNames (CC BY 4.0), Natural Earth, `global-land-mask`. Models: OpenAI CLIP, RapidOCR with PaddleOCR (Apache 2.0).
 

@@ -75,3 +75,12 @@ def test_best_guess_confident_prediction():
     lat, lon, expected = cells.best_guess(np.array([0.0, 0.0, 1.0]))
     assert (lat, lon) == TOKYO
     assert expected == pytest.approx(5000.0)
+
+
+def test_expected_points_count_every_cell_in_openguessr_points():
+    cells = GeoCells(np.array([PARIS, BRUSSELS, TOKYO]))
+    lat, lon, expected = cells.best_guess(np.array([0.5, 0.5, 0.0]), top_n=1)
+    # Brussels counts, though only the likeliest cell was a candidate: half the time the answer
+    # is there, a guess in Paris off by the distance between them.
+    apart = haversine_km(*PARIS, *BRUSSELS)
+    assert expected == pytest.approx(2500.0 + 2500.0 * 0.999**apart)

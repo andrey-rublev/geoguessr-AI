@@ -133,14 +133,17 @@ class BotSettings:
     Nothing uses these views yet: a yellow-line detector on 23 live rounds mistook cars, walls
     and grass for paint as often as it found lines, and road numbers written on the road are
     too distorted to read."""
-    walk_below: float = 1750.0
-    """When the model expects fewer points than this, walk on along the road and look round again
-    before guessing, as players do when a place gives nothing away (0 = never). On 128 held-out
-    rounds that walked, the second look was worth +221 points (give or take 88): +232 where the
-    model had expected 1,250 to 1,750 before walking, but +10 above 1,750."""
-    walk_again_below: float = 1000.0
+    walk_below: float = 2650.0
+    """When the model expects fewer OpenGuessr points than this, walk on along the road and look
+    round again before guessing, as players do when a place gives nothing away (0 = never). On 142
+    held-out rounds that walked, the second look was worth +270 to +310 points (give or take 120 to
+    280) where the model had expected under 2,650 before walking, but -11 (give or take 89) at
+    2,650 to 3,000. This is where
+    1,750 was on the model's estimate before it counted every cell (see
+    :data:`.geocells.ESTIMATE_SHARPNESS`)."""
+    walk_again_below: float = 2200.0
     """Still expecting fewer points than this after walking on, walk on once more. The least sure
-    rounds gained the most from the first walk (+331 to +381 below 1,250)."""
+    rounds gain the most from walking; this is where 1,000 was on the estimate before."""
     walk_steps: int = 5
     """Presses of the Up key when walking on: Street View moves about 10 metres each."""
     step_wait: float = 0.8
@@ -547,6 +550,7 @@ class OpenGuessrBot:
         how = {
             "party": self.settings.party,
             "model": getattr(self.predictor, "source", None),
+            "expected_in": "openguessr points",  # before 19 October 2026, an estimate ~900 lower
             "short_of_time": list(self.short_of_time),
         }
         if self.clock is not None:

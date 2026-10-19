@@ -24,7 +24,8 @@ class Guess:
     lat: float
     lon: float
     expected_score: float
-    """The model's own estimate of the points this guess earns (0-5000)."""
+    """The model's own estimate of the points this guess earns in OpenGuessr (0-5000), before
+    its streak and supporter bonuses (see :meth:`.GeoCells.expected_points`)."""
     top_cells: list[tuple[float, float, float]]
     """The five likeliest geocells as (lat, lon, probability)."""
     countries: list[tuple[str, float]] = field(default_factory=list)

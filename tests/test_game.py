@@ -140,7 +140,7 @@ class TurningStreetView(FakeScreen, FakeControls):
 class FakePredictor:
     """Guesses Lagos, expecting each of ``expected`` points in turn, then the last again."""
 
-    def __init__(self, expected=(2500.0,)):
+    def __init__(self, expected=(3000.0,)):
         self.view_counts, self.evidence, self.expected = [], [], list(expected)
 
     def predict(self, images, evidence=None):
@@ -292,7 +292,7 @@ def test_walks_on_and_looks_again_when_unsure(tmp_path):
     [
         ((600.0, 800.0, 2000.0), 3),  # still very unsure after walking: walks on once more
         ((600.0, 800.0, 700.0, 650.0), 3),  # but not a third time
-        ((1400.0, 1200.0), 2),  # unsure, but not very unsure after walking
+        ((2400.0, 2300.0), 2),  # unsure, but not very unsure after walking
     ],
 )
 def test_walks_on_once_more_when_still_very_unsure(tmp_path, expected, looks):
@@ -309,7 +309,7 @@ def test_walks_on_once_more_when_still_very_unsure(tmp_path, expected, looks):
 
 def test_sure_rounds_and_dry_runs_dont_walk():
     for settings, expected in (
-        (BotSettings(rounds=1, record_answers=False, debug_dir=None), 1800.0),
+        (BotSettings(rounds=1, record_answers=False, debug_dir=None), 2800.0),
         (BotSettings(rounds=1, dry_run=True, debug_dir=None), 900.0),
         (BotSettings(rounds=1, record_answers=False, walk_below=0.0, debug_dir=None), 600.0),
     ):
@@ -740,6 +740,7 @@ def test_saves_how_a_singleplayer_round_was_played(tmp_path):
     assert saved["party"] is False and saved["short_of_time"] == []
     assert saved["model"] == "geoguessr.pt, saved 2026-10-02 23:07"
     assert "seconds_at_start" not in saved  # no timer to read
+    assert saved["expected_in"] == "openguessr points"
 
 
 def test_gives_up_a_round_whose_time_runs_out_and_plays_the_next(party, capsys):

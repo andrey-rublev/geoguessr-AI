@@ -13,7 +13,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..geo import EARTH_RADIUS_KM, SCORE_SCALE_KM, from_unit_vectors, to_unit_vectors
+from ..geo import (
+    EARTH_RADIUS_KM,
+    SCORE_SCALE_KM,
+    from_unit_vectors,
+    openguessr_score,
+    to_unit_vectors,
+)
 
 # Measured on held-out rounds by ``scripts/check_strengths.py``: half of them chose these and
 # the other half said they were worth about 95 points a round over the 0.6 and 0.5 before.
@@ -22,6 +28,11 @@ from ..geo import EARTH_RADIUS_KM, SCORE_SCALE_KM, from_unit_vectors, to_unit_ve
 # where the game really goes.
 DEFAULT_PRIOR_STRENGTH = 0.0
 DEFAULT_GAME_PRIOR_STRENGTH = 0.25
+ESTIMATE_SHARPNESS = 1.25
+"""The model spreads its probabilities too evenly to say how a guess will score, so they are
+raised to this power first. On 1,052 held-out rounds the estimate came to 3,031 OpenGuessr points
+against 3,096 really scored, and within about 300 at every level of confidence; unsharpened it
+said 2,723, and counting only the likeliest cells, as before, 2,300."""
 
 
 def debias(
@@ -118,7 +129,10 @@ class GeoCells:
     def best_guess(self, probs: np.ndarray, top_n: int = 64) -> tuple[float, float, float]:
         """Choose the candidate centre that maximises expected score.
 
-        Returns ``(lat, lon, expected_score)``; candidates are the ``top_n`` likeliest cells.
+        Returns ``(lat, lon, expected_points)``: candidates are the ``top_n`` likeliest cells, and
+        ``expected_points`` what the guess should score in OpenGuessr (see :meth:`expected_points`).
+        Choosing for OpenGuessr's own curve, or against every cell, did no better on held-out
+        rounds (-1 and -86 points a round, give or take 9 and 19), so the choice is as it was.
         """
         probs = np.asarray(probs, dtype=np.float64)
         top = np.argsort(-probs)[:top_n]
@@ -126,4 +140,13 @@ class GeoCells:
         dist = EARTH_RADIUS_KM * np.arccos(np.clip(xyz @ xyz.T, -1.0, 1.0))
         expected = (5000.0 * np.exp(-dist / SCORE_SCALE_KM)) @ probs[top]
         best = top[int(np.argmax(expected))]
-        return float(self.centroids[best, 0]), float(self.centroids[best, 1]), float(expected.max())
+        lat, lon = float(self.centroids[best, 0]), float(self.centroids[best, 1])
+        return lat, lon, self.expected_points(probs, best)
+
+    def expected_points(self, probs: np.ndarray, cell: int) -> float:
+        """The OpenGuessr points a guess at ``cell``'s centre should score, over every cell the
+        answer may be in, by the model's probabilities sharpened (:data:`ESTIMATE_SHARPNESS`)."""
+        sharp = np.asarray(probs, dtype=np.float64) ** ESTIMATE_SHARPNESS
+        xyz = self.unit_vectors
+        dist = EARTH_RADIUS_KM * np.arccos(np.clip(xyz @ xyz[cell], -1.0, 1.0))
+        return float(openguessr_score(dist) @ sharp / sharp.sum())

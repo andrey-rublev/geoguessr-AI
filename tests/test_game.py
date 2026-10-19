@@ -422,7 +422,8 @@ def test_signs_become_clues_for_the_model(tmp_path):
 def test_unreadable_answer_is_saved_as_missing(tmp_path, monkeypatch):
     class BlindReader(FakeReader):
         def read(self, lat, lon):
-            return Reading(None, "couldn't see the flag on the result map")
+            shot = Image.new("RGB", (40, 20))
+            return Reading(None, "couldn't see the flag on the result map", shot, [shot] * 2)
 
     monkeypatch.setattr(game_module, "ResultReader", BlindReader)
     controls = FakeControls()
@@ -430,8 +431,11 @@ def test_unreadable_answer_is_saved_as_missing(tmp_path, monkeypatch):
 
     OpenGuessrBot(LAYOUT, FakePredictor(), settings, FakeScreen(), controls).play()
 
-    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    folder = next(tmp_path.glob("*/round_01"))
+    saved = json.loads((folder / "round.json").read_text(encoding="utf-8"))
     assert saved["answer"] is None and "flag" in saved["answer_problem"]
+    shots = sorted(path.name for path in folder.glob("result*.png"))
+    assert shots == ["result.png", "result_out_1.png", "result_out_2.png"]  # to see why
     assert controls.clicks[-1] == LAYOUT.continue_button
 
 

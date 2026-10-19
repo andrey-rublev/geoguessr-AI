@@ -170,6 +170,8 @@ class Reading:
     """Why there is no answer, when there isn't one."""
     screenshot: Image.Image | None = None
     """The result screen as it first appeared."""
+    zoomed_out: list[Image.Image] = field(default_factory=list)
+    """When there is no answer, the result screen after each notch it was zoomed out, to see why."""
 
 
 def result_region(layout: Layout) -> Region:
@@ -351,6 +353,8 @@ class ResultReader:
                     levels, projection, placed_lat, placed_lon
                 )
                 break
+        if reading.answer is None:
+            reading.zoomed_out = [Image.fromarray(level.rgb) for level in levels[1:]]
         return reading
 
     def _settled_grab(self) -> np.ndarray:

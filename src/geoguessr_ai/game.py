@@ -928,9 +928,12 @@ class OpenGuessrBot:
 
     @staticmethod
     def _save_reading(folder: Path, reading: Reading) -> None:
-        """Add the real location (or why it couldn't be read) to the saved round."""
+        """Add the real location (or why it couldn't be read) to the saved round, and when it
+        couldn't be, the result screen after each notch it was zoomed out, to see why."""
         if reading.screenshot is not None:
             reading.screenshot.save(folder / "result.png")
+        for notch, screenshot in enumerate(reading.zoomed_out, start=1):
+            screenshot.save(folder / f"result_out_{notch}.png")
         path = folder / "round.json"
         info = json.loads(path.read_text(encoding="utf-8"))
         info["answer"] = None if reading.answer is None else asdict(reading.answer)

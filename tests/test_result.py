@@ -117,6 +117,7 @@ def test_reads_the_answer_after_zooming_out():
     assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
     assert controls.notches >= 2 and reading.answer.zoom_outs == 0
     assert reading.screenshot.size == (REGION.width, REGION.height)
+    assert reading.zoomed_out == []  # kept only to see why an answer couldn't be read
 
 
 def reader_recognising_only_the_widest_view():
@@ -237,6 +238,7 @@ def test_no_answer_when_the_map_disagrees_with_our_pin():
     paris = (48.86, 2.35)  # we think we clicked here, but the pin is in Madrid
     reading = ResultReader(screen, FakeControls(screen), REGION, max_zoom_outs=2).read(*paris)
     assert reading.answer is None and "lined up" in reading.problem
+    assert [shot.size for shot in reading.zoomed_out] == [(REGION.width, REGION.height)] * 2
 
 
 def test_result_region_covers_the_view_and_the_expanded_map():

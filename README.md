@@ -22,7 +22,7 @@ The last line builds the first model: it downloads about 5.4 GB of street photos
 | `geoguessr-ai play` | Plays a Singleplayer game on its own (5 rounds, or `--rounds 10`) |
 | `geoguessr-ai friends` | Plays in a multiplayer room until you stop it |
 | `geoguessr-ai train` | Learns from the rounds it played, and keeps the new model only if it scores better |
-| `geoguessr-ai train-details` | Learns the small things players use (bollards, poles, road lines, kerbs) from close-ups of its rounds, kept only if they add points |
+| `geoguessr-ai train-details` | Tries to learn the small things players use (bollards, poles, road lines, kerbs) from close-ups of its rounds, kept only if they add points. On 1,800 rounds they didn't yet |
 
 1. Open the game in your browser: a Singleplayer game for `play`, a multiplayer room for `friends`.
 2. Run the command and let go of the mouse. Press **F8** to stop.

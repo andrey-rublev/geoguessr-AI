@@ -4,6 +4,11 @@ Close-ups of every round's views are embedded (once: they're kept with the round
 a classifier learns from the training rounds which countries they belong to, and how much its
 say should count is tuned on the held-out rounds, against the model's own guesses there. It is
 only kept if it scores surely more points there than the model does on its own.
+
+On 1,800 rounds (1,200 to learn from, 600 held out) it didn't: at its best it scored 9 points a
+round fewer than the model alone (give or take 14), at every weight and regularisation tried.
+CLIP's features of a close-up seem to say little the model hasn't seen in the whole view; it may
+take more rounds, or an encoder trained on close-ups.
 """
 
 from __future__ import annotations

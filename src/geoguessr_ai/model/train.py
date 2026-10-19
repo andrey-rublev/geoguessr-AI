@@ -205,20 +205,28 @@ def train(
     """Train and save the best checkpoint (by validation mean score). Returns its metrics.
 
     ``rounds_path`` is an embedded rounds file (see :mod:`.rounds`). Its training rounds are
-    mixed into every batch; its test rounds are never used. ``rest`` pauses that many times as
-    long as each stretch of work took (see :class:`Pacer`): slower, but cooler. ``max_temp``
-    waits whenever the CPU gets that hot.
+    mixed into every batch; its test rounds are never used. With no ``embedding_files``, the
+    training rounds are all there is to learn from. ``rest`` pauses that many times as long as
+    each stretch of work took (see :class:`Pacer`): slower, but cooler. ``max_temp`` waits
+    whenever the CPU gets that hot.
     """
     cfg = cfg or TrainConfig()
     pace = Pacer(rest, max_temp)
-    x, lat, lon, backbone = load_embeddings(embedding_files)
+    rounds_only = not embedding_files
+    if rounds_only:
+        if rounds_path is None:
+            raise ValueError("Nothing to learn from: no photos and no rounds")
+        alone, _ = RoundEmbeddings.load(rounds_path).split(cfg.rounds_test_fraction)
+        x, lat, lon, backbone = alone.embeddings, alone.lat, alone.lon, alone.backbone
+    else:
+        x, lat, lon, backbone = load_embeddings(embedding_files)
     if len(x) < 50:
         raise ValueError(f"Need at least 50 embedded images to train, got {len(x)}")
 
     tr, val = spatial_split(lat, lon, cfg.val_fraction, cfg.val_block_deg, cfg.seed)
 
     real, n_real = None, 0
-    if rounds_path is not None and cfg.real_fraction > 0:
+    if rounds_path is not None and cfg.real_fraction > 0 and not rounds_only:
         real, _ = RoundEmbeddings.load(rounds_path).split(cfg.rounds_test_fraction)
         if real.backbone != backbone:
             raise ValueError(
@@ -242,7 +250,7 @@ def train(
         "config": asdict(cfg),
         "photos": sorted(str(Path(f).resolve()) for f in embedding_files),
         "train": len(tr),
-        "rounds": [] if real is None else real.round_ids,
+        "rounds": alone.round_ids if rounds_only else [] if real is None else real.round_ids,
     }
     state = _load_resume(resume_path, fingerprint, log)
 

@@ -258,3 +258,22 @@ def test_rounds_file_is_not_plain_training_data(tmp_path):
     assert resolve_embedding_files([tmp_path]) == [tmp_path / "photos.npz"]
     with pytest.raises(ValueError, match="--rounds"):
         load_embeddings([tmp_path / ROUNDS_FILE])
+
+
+def test_train_learns_from_the_rounds_alone_when_there_are_no_photos(tmp_path):
+    rounds = tmp_path / ROUNDS_FILE
+    prototype, data = write_synthetic_rounds(rounds, NAIROBI, n_rounds=30)
+    cfg = TrainConfig(n_cells=4, hidden=32, epochs=2, batch_size=32, rounds_test_fraction=0.0)
+    logs = []
+
+    train([], tmp_path / "m.pt", cfg, rounds_path=rounds, device="cpu", log=logs.append)
+
+    assert not any("Mixing in" in line for line in logs)  # they are what it learns from
+    ckpt = Checkpoint.load(tmp_path / "m.pt")
+    assert ckpt.backbone == data.backbone
+    assert max(haversine_km(lat, lon, *NAIROBI) for lat, lon in ckpt.cells.centroids) < 300
+
+
+def test_train_needs_photos_or_rounds(tmp_path):
+    with pytest.raises(ValueError, match="no photos and no rounds"):
+        train([], tmp_path / "m.pt", TrainConfig(), device="cpu", log=lambda _: None)

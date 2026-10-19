@@ -6,8 +6,10 @@ from PIL import Image
 from geoguessr_ai.knowledge.countries import country_codes
 from geoguessr_ai.knowledge.evidence import Evidence
 from geoguessr_ai.model import predictor as predictor_module
+from geoguessr_ai.model.detail import COLS, ROWS, fit
 from geoguessr_ai.model.geocells import GeoCells
 from geoguessr_ai.model.head import Checkpoint, Ensemble, GeoHead
+from geoguessr_ai.model.predictor import detail_path
 
 CENTROIDS = np.array([(48.86, 2.35), (35.68, 139.69), (-33.87, 151.21)])
 
@@ -141,3 +143,32 @@ def test_an_ensemble_averages_its_members_on_the_newest_ones_cells(tmp_path, mon
     single = tmp_path / "single.pt"
     paris.save(single)
     assert len(Ensemble.load(single).members) == 1  # a checkpoint on its own is an ensemble too
+
+
+def test_close_ups_of_the_views_reweigh_places_once_a_detail_expert_is_learned(
+    tmp_path, monkeypatch
+):
+    head = GeoHead(embed_dim=8, n_cells=3, hidden=4)
+    with torch.no_grad():
+        for p in head.parameters():
+            p.zero_()
+        head.net[-1].bias.copy_(torch.tensor([1.0, 1.5, 0.0]))  # leans Tokyo
+    path = tmp_path / "model.pt"
+    Checkpoint(head, GeoCells(CENTROIDS), "fake/backbone").save(path)
+    monkeypatch.setattr(predictor_module, "ImageEncoder", FakeEncoder)
+    view = [Image.new("RGB", (800, 400))]
+    before = predictor_module.GeoPredictor(path).predict(view)
+
+    # Close-ups like the fake encoder's every tile were French in training: a French bollard.
+    rng = np.random.default_rng(0)
+    seen = rng.normal(size=(200, 8)) * 0.3
+    country = np.where(np.arange(200) % 2 == 0, "FR", "JP")
+    seen[country == "FR"] += 1 / np.sqrt(8)
+    codes = [country_codes().index(c) for c in country]
+    fit(seen, codes, "fake/backbone").save(detail_path(path))
+    model = predictor_module.GeoPredictor(path)
+    after = model.predict(view)
+
+    assert (before.lat, before.lon) == pytest.approx(tuple(CENTROIDS[1]))
+    assert (after.lat, after.lon) == pytest.approx(tuple(CENTROIDS[0]))
+    assert model.encoder.seen == 3 + ROWS * COLS  # the model's crops, then the close-ups

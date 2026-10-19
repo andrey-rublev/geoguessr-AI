@@ -15,6 +15,7 @@ from ..knowledge.countries import country_codes
 from ..knowledge.evidence import DEFAULT_COVERAGE_STRENGTH, Evidence, cell_countries, cell_weights
 from ..knowledge.facts import per_country
 from .backbone import ImageEncoder, square_crops
+from .detail import LOOKS, DetailExpert, tiles
 from .geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
 from .head import Checkpoint, Ensemble
 
@@ -85,12 +86,21 @@ class GeoPredictor:
         self.model = Ensemble.load(checkpoint_path)
         self.encoder = ImageEncoder(self.model.backbone, device)
         self.model.to(self.encoder.device)
+        self.detail: DetailExpert | None = None
+        """What close-ups of the views say, once ``train-details`` has learned it."""
+        detail = detail_path(Path(checkpoint_path))
+        if detail.exists():
+            self.detail = DetailExpert.load(detail)
+            if self.detail.backbone != self.model.backbone:
+                self.detail = None  # learned from another encoder's embeddings
 
     def predict(self, images: Sequence[Image.Image], evidence: Evidence | None = None) -> Guess:
         """Guess one location from several views of the same place."""
         if not images:
             raise ValueError("predict() needs at least one image")
         crops = [crop for image in images for crop in square_crops(image)]
+        if self.detail is not None:
+            evidence = self._with_details(images[:LOOKS], evidence)
         return guess_from_embeddings(
             self.model,
             self.encoder.encode(crops),
@@ -99,3 +109,20 @@ class GeoPredictor:
             evidence,
             self.coverage_strength,
         )
+
+    def _with_details(self, views: Sequence[Image.Image], evidence: Evidence | None) -> Evidence:
+        """``evidence``, and what close-ups of ``views`` say of each country."""
+        detail = self.detail
+        close = [tile for view in views for tile in tiles(view, detail.rows, detail.cols)]
+        likelihood = detail.likelihood(self.encoder.encode(close).numpy())
+        evidence = evidence or Evidence()
+        countries = likelihood if evidence.countries is None else evidence.countries * likelihood
+        codes = country_codes()
+        favoured = ", ".join(codes[i] for i in np.argsort(-likelihood)[:3])
+        notes = [*evidence.notes, f"close-ups favour {favoured}"]
+        return Evidence(countries, evidence.latitude, notes)
+
+
+def detail_path(checkpoint: Path) -> Path:
+    """Where a model's detail expert is kept: beside it."""
+    return checkpoint.with_name(f"{checkpoint.stem}-detail.npz")

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
@@ -132,12 +132,22 @@ def _crops(rounds: list[Round]) -> Iterator[tuple[Round, Image.Image]]:
 
 
 def embed_rounds(
-    encoder: ImageEncoder, root: Path, out_path: Path, *, batch_size: int = 64
+    encoder: ImageEncoder,
+    root: Path,
+    out_path: Path,
+    *,
+    batch_size: int = 64,
+    crops: Callable[[list[Round]], Iterator[tuple[Round, Image.Image]]] = _crops,
+    pace: Callable[[], None] | None = None,
+    save_every: int = 0,
 ) -> RoundEmbeddings:
     """Bring ``out_path`` in line with the rounds under ``root``.
 
     Only rounds not embedded yet go through the encoder. Rounds deleted from ``root`` are
-    dropped, and labels are re-read, so fixing a round's ``round.json`` takes effect.
+    dropped, and labels are re-read, so fixing a round's ``round.json`` takes effect. ``crops``
+    cuts each round's views up (by default as the model is shown them), ``pace`` is called
+    after each batch, to keep the CPU cool, and with ``save_every`` the file is saved after that
+    many new rounds, so a long job stopped halfway keeps what it did.
     """
     rounds = {rnd.id: rnd for rnd in find_rounds(root)}
     if not rounds:
@@ -158,33 +168,47 @@ def embed_rounds(
     done = set() if kept is None else set(kept.groups.tolist())
     new = [rnd for round_id, rnd in rounds.items() if round_id not in done]
     parts = [] if kept is None else [kept]
-    if new:
-        chunks, groups, lats, lons = [], [], [], []
-        crops = _crops(new)
-        with tqdm(total=len(new), unit="round", desc="rounds") as bar:
-            while batch := list(islice(crops, batch_size)):
-                chunks.append(encoder.encode([crop for _, crop in batch]).numpy())
-                for rnd, _ in batch:
-                    groups.append(rnd.id)
-                    lats.append(rnd.lat)
-                    lons.append(rnd.lon)
-                bar.n = len(set(groups))
-                bar.refresh()
-        parts.append(
-            RoundEmbeddings(
-                np.concatenate(chunks).astype(np.float32),
-                np.array(groups),
-                np.array(lats),
-                np.array(lons),
-                encoder.name,
-            )
-        )
-    merged = RoundEmbeddings(
+    step = save_every or len(new) or 1
+    with tqdm(total=len(new), unit="round", desc="rounds") as bar:
+        for start in range(0, len(new), step):
+            parts.append(_embed(encoder, new[start : start + step], crops, batch_size, pace, bar))
+            if start + step < len(new):
+                _merge(parts, encoder.name).save(out_path)
+    merged = _merge(parts, encoder.name)
+    merged.save(out_path)
+    return merged
+
+
+def _embed(encoder, rounds, crops, batch_size, pace, bar) -> RoundEmbeddings:
+    chunks, groups, lats, lons = [], [], [], []
+    done = bar.n
+    pieces = crops(rounds)
+    while batch := list(islice(pieces, batch_size)):
+        chunks.append(encoder.encode([crop for _, crop in batch]).numpy())
+        for rnd, _ in batch:
+            groups.append(rnd.id)
+            lats.append(rnd.lat)
+            lons.append(rnd.lon)
+        bar.n = done + len(set(groups))
+        bar.refresh()
+        if pace is not None:
+            pace()
+    dim = chunks[0].shape[1] if chunks else 0
+    return RoundEmbeddings(
+        np.concatenate(chunks).astype(np.float32) if chunks else np.zeros((0, dim), np.float32),
+        np.array(groups, dtype=str),
+        np.array(lats, dtype=np.float64),
+        np.array(lons, dtype=np.float64),
+        encoder.name,
+    )
+
+
+def _merge(parts: list[RoundEmbeddings], backbone: str) -> RoundEmbeddings:
+    parts = [p for p in parts if len(p)]
+    return RoundEmbeddings(
         np.concatenate([p.embeddings for p in parts]),
         np.concatenate([p.groups for p in parts]),
         np.concatenate([p.lat for p in parts]),
         np.concatenate([p.lon for p in parts]),
-        encoder.name,
+        backbone,
     )
-    merged.save(out_path)
-    return merged

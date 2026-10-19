@@ -114,3 +114,41 @@ def test_split_keeps_rounds_whole():
 
     assert len(train) + len(test) == 120 and len(test) % 4 == 0
     assert not set(train.groups) & set(test.groups)
+
+
+def test_long_embedding_jobs_cut_views_their_own_way_pace_and_save_as_they_go(tmp_path):
+    for number in range(1, 6):
+        save_round(tmp_path / "runs", "s1", number)
+    out, saves, paced = tmp_path / "tiles.npz", [], []
+
+    def halves(rounds):  # each view cut in two, as close-ups would be
+        for rnd in rounds:
+            for view in rnd.views:
+                with Image.open(view) as image:
+                    w, h = image.size
+                    for left in (0, w // 2):
+                        yield rnd, image.crop((left, 0, left + w // 2, h))
+
+    real_save = RoundEmbeddings.save
+
+    def save(self, path):
+        saves.append(len(set(self.groups.tolist())))
+        real_save(self, path)
+
+    RoundEmbeddings.save = save
+    try:
+        tiles = embed_rounds(
+            FakeEncoder(),
+            tmp_path / "runs",
+            out,
+            batch_size=4,
+            crops=halves,
+            pace=lambda: paced.append(1),
+            save_every=2,
+        )
+    finally:
+        RoundEmbeddings.save = real_save
+
+    assert len(tiles) == 5 * 2 * 2  # five rounds of two views in two halves
+    assert saves == [2, 4, 5] and paced  # saved as it went, and rested between batches
+    assert len(RoundEmbeddings.load(out)) == 20

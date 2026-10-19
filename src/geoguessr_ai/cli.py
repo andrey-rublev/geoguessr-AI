@@ -176,7 +176,9 @@ def cmd_train_details(args: argparse.Namespace) -> None:
 
 def cmd_train(args: argparse.Namespace) -> None:
     """Train on the photos and on every round saved with its answer: a first model, or a new
-    one that replaces the current one only if it scores better on held-out rounds."""
+    one that replaces the current one only if it scores better on held-out rounds. With
+    ``--backbone``, the new model sees through another image model, learning from the rounds
+    alone until photos are embedded with it too."""
     from .model.backbone import LazyEncoder
     from .model.head import Ensemble
     from .model.rounds import ROUNDS_FILE, embed_rounds
@@ -185,7 +187,8 @@ def cmd_train(args: argparse.Namespace) -> None:
     _limit_threads(args.threads)
     first = not args.model.exists()
     current = None if first else Ensemble.load(args.model)
-    backbone = DEFAULT_BACKBONE if current is None else current.backbone
+    backbone = args.backbone or (DEFAULT_BACKBONE if current is None else current.backbone)
+    switching = current is not None and backbone != current.backbone
     folder = _embedding_dir(args.embeddings, backbone)
     encoder = LazyEncoder(backbone, args.device)  # loads only if there's something new
     if args.shards:
@@ -193,10 +196,7 @@ def cmd_train(args: argparse.Namespace) -> None:
     try:
         photos = resolve_embedding_files(args.photos or [folder])
     except FileNotFoundError:
-        raise SystemExit(
-            f"No photos to learn from in {folder}. `geoguessr-ai train --shards 0` downloads a\n"
-            "shard of OpenStreetView-5M (~2.5 GB) and embeds it first, which takes a while."
-        ) from None
+        photos = []
 
     rounds_path: Path | None = folder / ROUNDS_FILE
     held_out = 0
@@ -205,11 +205,18 @@ def cmd_train(args: argparse.Namespace) -> None:
         held_out = len(test.round_ids)
         print(f"{len(learn.round_ids):,} of your rounds to learn from, {held_out:,} held out")
     except FileNotFoundError:
+        if not photos:
+            raise SystemExit(
+                f"No photos to learn from in {folder}. `geoguessr-ai train --shards 0` downloads"
+                " a\nshard of OpenStreetView-5M (~2.5 GB) and embeds it first, which takes a while."
+            ) from None
         print(
             f"No rounds saved with their answers in {args.runs} yet, so only the photos to learn"
             " from:\n`play --learn` and `friends` save them."
         )
         rounds_path = None
+    if not photos:
+        print(f"No photos embedded with {backbone} in {folder}: learning from your rounds alone")
 
     config = TrainConfig(
         n_cells=args.cells,
@@ -220,7 +227,9 @@ def cmd_train(args: argparse.Namespace) -> None:
         real_fraction=args.real_fraction,
         # A new seed each time, so that the new model makes different mistakes from the last
         # even with no new rounds to learn from, and the two guess better together.
-        seed=0 if current is None else int(current.members[0].metrics.get("seed", 0)) + 1,
+        seed=0
+        if current is None or switching
+        else int(current.members[0].metrics.get("seed", 0)) + 1,
     )
     out = args.model if first else args.model.with_name(f"{args.model.stem}-retrained.pt")
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -235,8 +244,13 @@ def cmd_train(args: argparse.Namespace) -> None:
     )
     if first:
         print(f"Saved {args.model}. Now play with `geoguessr-ai play`.")
-    else:
-        _keep_the_better(args, out, rounds_path if held_out else None)
+        return
+    current_rounds = None
+    if switching and held_out:
+        # The same rounds held out, as the current model's image model sees them.
+        current_rounds = _embedding_dir(args.embeddings, current.backbone) / ROUNDS_FILE
+        embed_rounds(LazyEncoder(current.backbone, args.device), args.runs, current_rounds)
+    _keep_the_better(args, out, rounds_path if held_out else None, current_rounds)
 
 
 def _embed_photos(args: argparse.Namespace, encoder, folder: Path) -> None:
@@ -253,17 +267,25 @@ def _embed_photos(args: argparse.Namespace, encoder, folder: Path) -> None:
         )
 
 
-def _keep_the_better(args: argparse.Namespace, retrained: Path, test_rounds: Path | None) -> None:
+def _keep_the_better(
+    args: argparse.Namespace,
+    retrained: Path,
+    test_rounds: Path | None,
+    current_rounds: Path | None = None,
+) -> None:
     """Pair the retrained model with the newest of the current one's, since models trained
     apart make different mistakes, and switch to the pair unless it scores worse on the
-    held-out rounds in ``test_rounds``."""
+    held-out rounds in ``test_rounds``. A model that sees through another image model can't be
+    paired: it stands alone, against the current model on ``current_rounds``, the same rounds
+    as its own image model sees them."""
     import shutil
 
     from .model.evaluate import evaluate_rounds
     from .model.head import Checkpoint, Ensemble
 
-    newest = Ensemble.load(args.model).members[0]
-    Ensemble([Checkpoint.load(retrained), newest]).save(retrained)
+    current = Ensemble.load(args.model)
+    if Checkpoint.load(retrained).backbone == current.backbone:
+        Ensemble([Checkpoint.load(retrained), current.members[0]]).save(retrained)
     if test_rounds is not None:
         options = {
             "device": args.device,
@@ -271,7 +293,8 @@ def _keep_the_better(args: argparse.Namespace, retrained: Path, test_rounds: Pat
             "game_prior_strength": args.game_prior_strength,
             "coverage_strength": args.coverage_strength,
         }
-        before = evaluate_rounds(args.model, test_rounds, **options)[0]["mean_score"]
+        before_on = current_rounds or test_rounds
+        before = evaluate_rounds(args.model, before_on, **options)[0]["mean_score"]
         after = evaluate_rounds(retrained, test_rounds, **options)[0]["mean_score"]
         print(f"Mean score on held-out rounds: {before:,.0f} before retraining, {after:,.0f} after")
         if after < before:
@@ -656,6 +679,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="embedded photo files, folders or globs to learn from (default: every train shard)",
     )
     p.add_argument("--data", type=Path, default=DEFAULT_DATA, help="where shards are downloaded")
+    p.add_argument(
+        "--backbone",
+        help="the image model to see through, e.g. geolocal/StreetCLIP (default: the current "
+        "model's); a model that sees through another replaces it only if it scores better",
+    )
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--cells", type=int, help="number of geocells (default: auto)")
     p.add_argument("--batch-size", type=int, default=1024)

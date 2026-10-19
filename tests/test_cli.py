@@ -211,24 +211,26 @@ def place_photos(folder, count=300, dim=8, seed=0):
     )
 
 
-def save_rounds(runs, folder, dim=8):
-    """Rounds saved with their answers, already embedded, some of them held out."""
+def save_rounds(runs, folder, dim=8, backbone_name=cli.DEFAULT_BACKBONE, crops=1):
+    """Rounds saved with their answers, already embedded (``crops`` a round), some of them
+    held out."""
     ids = [f"20261007-120000/round_{i:02d}" for i in range(1, 31)]
     assert 3 <= sum(map(is_test_round, ids)) <= 27
     rng = np.random.default_rng(1)
-    for round_id in ids:
+    lat = 48.5 + np.arange(len(ids)) % 5  # a few places, so some can be held out to validate
+    for round_id, at in zip(ids, lat, strict=True):
         saved = runs / round_id
-        saved.mkdir(parents=True)
+        saved.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (16, 9)).save(saved / "view_0.jpg")
-        answer = {"lat": 48.5, "lon": 2.5}
+        answer = {"lat": float(at), "lon": 2.5}
         (saved / "round.json").write_text(json.dumps({"answer": answer}), encoding="utf-8")
-    x = rng.normal(0, 1, (len(ids), dim)) + 2.0
+    x = rng.normal(0, 1, (len(ids) * crops, dim)) + 2.0
     RoundEmbeddings(
         (x / np.linalg.norm(x, axis=1, keepdims=True)).astype(np.float32),
-        np.array(ids),
-        np.full(len(ids), 48.5),
-        np.full(len(ids), 2.5),
-        cli.DEFAULT_BACKBONE,
+        np.repeat(ids, crops),
+        np.repeat(lat, crops),
+        np.full(len(ids) * crops, 2.5),
+        backbone_name,
     ).save(folder / ROUNDS_FILE)
 
 
@@ -268,6 +270,34 @@ def test_train_builds_a_first_model_then_learns_from_saved_rounds(
     else:
         assert len(Ensemble.load(model).members) == 1
         assert len(Ensemble.load(tmp_path / "m-retrained.pt").members) == 2
+
+
+def test_train_switches_image_model_only_for_a_better_score(tmp_path, monkeypatch, threads, capsys):
+    def no_clip(*args, **kwargs):
+        raise AssertionError("everything was embedded already: CLIP needn't load")
+
+    monkeypatch.setattr(backbone, "ImageEncoder", no_clip)
+    embeddings, runs, model = tmp_path / "embeddings", tmp_path / "runs", tmp_path / "m.pt"
+    folder = embeddings / cli.DEFAULT_BACKBONE.replace("/", "__")
+    options = ["--model", str(model), "--embeddings", str(embeddings), "--runs", str(runs)]
+    options += ["--epochs", "2", "--cells", "6", "--batch-size", "32", "--rest", "0"]
+    options += ["--threads", "1", "--device", "cpu"]
+    place_photos(folder)
+    save_rounds(runs, folder)
+    main(["train", *options])
+    capsys.readouterr()
+    # The same rounds, as another image model sees them, and no photos embedded with it.
+    save_rounds(runs, embeddings / "other__backbone", 12, "other/backbone", crops=3)
+
+    main(["train", "--backbone", "other/backbone", *options])
+
+    out = capsys.readouterr().out
+    assert "learning from your rounds alone" in out and "Mean score on held-out rounds" in out
+    switched = "Now using the retrained model" in out
+    new = Ensemble.load(model if switched else tmp_path / "m-retrained.pt")
+    assert new.backbone == "other/backbone" and len(new.members) == 1  # never paired across
+    kept = Ensemble.load(tmp_path / "m-previous.pt" if switched else model)
+    assert kept.backbone == cli.DEFAULT_BACKBONE
 
 
 def test_train_downloads_and_embeds_only_shards_not_embedded_yet(tmp_path, monkeypatch, threads):

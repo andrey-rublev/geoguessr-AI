@@ -53,6 +53,7 @@ def played(root: Path, multiplayer: set[str], since: str) -> list[dict]:
                 "mode": MODES[party],
                 "model": info.get("model") or "not saved (rounds before 18 October 2026)",
                 "points": None if km is None else geoguessr_score(km),
+                "unreadable": "answer" in info and not answer,  # recording, but couldn't read it
                 "expected": info["guess"]["expected_score"],
                 "views": len(info["headings"]),
                 "read": bool(info.get("text")),
@@ -83,8 +84,8 @@ def as_played(rounds: list[dict]) -> None:
     for model, some in by_model.items():
         print(f"\nAs played, by {model}")
         print(
-            f"  {'':13}{'rounds':>7}{'answered':>9}{'points':>16}{'expected':>9}{'views':>6}"
-            f"{'read':>6}{'walked':>7}{'short of time':>14}{'others first':>13}"
+            f"  {'':13}{'rounds':>7}{'answered':>9}{'unreadable':>11}{'points':>16}{'expected':>9}"
+            f"{'views':>6}{'read':>6}{'walked':>7}{'short of time':>14}{'others first':>13}"
         )
         scored = {}
         for mode in MODES:
@@ -94,12 +95,18 @@ def as_played(rounds: list[dict]) -> None:
             points = [r["points"] for r in group if r["points"] is not None]
             scored[mode] = points
             shown = "-" if not points else "{:,.0f} ± {:,.0f}".format(*mean_error(points))
+            unreadable = sum(r["unreadable"] for r in group)
             expected = statistics.mean(r["expected"] for r in group)
             views = statistics.mean(r["views"] for r in group)
             print(
-                f"  {mode:13}{len(group):7}{len(points):9}{shown:>16}{expected:9,.0f}{views:6.1f}"
-                f"{share(group, 'read'):>6}{share(group, 'walked'):>7}"
+                f"  {mode:13}{len(group):7}{len(points):9}{unreadable:11}{shown:>16}"
+                f"{expected:9,.0f}{views:6.1f}{share(group, 'read'):>6}{share(group, 'walked'):>7}"
                 f"{share(group, 'short'):>14}{share(group, 'others'):>13}"
+            )
+        if any(r["unreadable"] for r in some):
+            print(
+                "  (unreadable: answers the bot couldn't read off the result screen, so those "
+                "rounds have no points; see answer_problem in their round.json)"
             )
         if all(len(scored.get(mode, ())) > 1 for mode in MODES):
             gap(*(scored[mode] for mode in MODES))

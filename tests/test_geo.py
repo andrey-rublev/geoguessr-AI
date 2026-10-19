@@ -7,6 +7,7 @@ from geoguessr_ai.geo import (
     haversine_km,
     inverse_mercator,
     mercator_xy,
+    openguessr_score,
     to_unit_vectors,
 )
 
@@ -41,3 +42,11 @@ def test_mercator_known_points_and_roundtrip():
 def test_geoguessr_score():
     assert geoguessr_score(0.0) == pytest.approx(5000.0)
     assert geoguessr_score(1492.7) == pytest.approx(5000.0 / np.e)
+
+
+def test_openguessr_score_is_5000_times_0999_to_the_km():
+    assert openguessr_score(0.0) == pytest.approx(5000.0)
+    assert openguessr_score(500.0) == pytest.approx(5000.0 * 0.999**500)  # 3,032
+    assert openguessr_score(np.array([10.0, 1000.0])) == pytest.approx(
+        5000.0 * 0.999 ** np.array([10, 1000])
+    )

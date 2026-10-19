@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 EARTH_RADIUS_KM = 6371.0088
@@ -10,6 +12,9 @@ MAX_MERCATOR_LAT = 85.05112878
 # GeoGuessr-style scoring: 5000 points at 0 km, decaying exponentially with distance.
 MAX_SCORE = 5000.0
 SCORE_SCALE_KM = 1492.7
+# OpenGuessr's own scoring on a world-sized map, from its page script: 5000 * 0.999^km, which
+# falls off faster: a guess 500 km off earns 3,032 there rather than GeoGuessr's 3,577.
+OPENGUESSR_SCALE_KM = -1.0 / math.log(0.999)
 
 
 def _scalar_or_array(value: np.ndarray) -> float | np.ndarray:
@@ -66,4 +71,12 @@ def geoguessr_score(distance_km) -> float | np.ndarray:
     """Points a guess this far from the answer would earn (0-5000)."""
     return _scalar_or_array(
         MAX_SCORE * np.exp(-np.asarray(distance_km, dtype=np.float64) / SCORE_SCALE_KM)
+    )
+
+
+def openguessr_score(distance_km) -> float | np.ndarray:
+    """Points OpenGuessr gives a guess this far from the answer on a world map (0-5000), before
+    its streak and supporter bonuses."""
+    return _scalar_or_array(
+        MAX_SCORE * np.exp(-np.asarray(distance_km, dtype=np.float64) / OPENGUESSR_SCALE_KM)
     )

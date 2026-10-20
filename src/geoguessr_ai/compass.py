@@ -17,6 +17,10 @@ from .config import Layout, Point, Region
 
 NEEDLE_TO_RADIUS = 1.75
 """The disc's radius, measured in lengths of the needle's red half."""
+NEEDLE_THINNESS = 2.0
+"""How much longer than wide the needle's red half must be (as a ratio of variances). Drawn
+small, as in a 1600 by 900 window, a slanted needle came out at 2.45, so 2.5 lost the compass
+mid-round and a multiplayer round was given up for over with the pin already placed."""
 CLOCKWISE_OFFSET = 0.74
 """How far right of the centre the clockwise arrow sits, as a fraction of the radius."""
 
@@ -78,7 +82,7 @@ def _read_needle(points: np.ndarray, px: np.ndarray) -> tuple[float, float, floa
     """Treat a red blob as the needle's north half: a thin triangle from the centre to the tip."""
     mean = points.mean(axis=0)
     spread, axes = np.linalg.eigh(np.cov((points - mean).T))
-    if spread[1] < 2.5 * max(spread[0], 1e-9):
+    if spread[1] < NEEDLE_THINNESS * max(spread[0], 1e-9):
         return None  # not long and thin
     axis = axes[:, 1]
     along = (points - mean) @ axis

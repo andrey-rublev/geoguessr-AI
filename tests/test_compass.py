@@ -12,7 +12,7 @@ BACKGROUND = (86, 110, 64)
 CENTER = (90, 55)
 
 
-def draw_compass(heading, radius=34, size=(160, 120)):
+def draw_compass(heading, radius=34, size=(160, 120), width=0.27):
     """Google's compass: a dark disc, a grey hub, two turn arrows, and a needle red to the north."""
     w, h = size
     img = np.full((h, w, 3), BACKGROUND, np.uint8)
@@ -26,7 +26,7 @@ def draw_compass(heading, radius=34, size=(160, 120)):
     tip = np.array([math.sin(t), -math.cos(t)])
     side = np.array([-tip[1], tip[0]])
     length = radius / NEEDLE_TO_RADIUS
-    corners = [c + side * length * 0.27, c - side * length * 0.27]
+    corners = [c + side * length * width, c - side * length * width]
     north = np.round([c + tip * length, *corners]).astype(np.int32)
     south = np.round([c - tip * length, *corners]).astype(np.int32)
     cv2.fillPoly(img, [north], (211, 40, 45), cv2.LINE_AA)
@@ -43,6 +43,15 @@ def test_reads_the_heading_off_the_needle(heading, radius):
     x, y, r, h = found
     assert math.dist((x, y), CENTER) < 3 and abs(r - radius) < 0.25 * radius
     assert abs((h - heading + 180) % 360 - 180) < 6
+
+
+@pytest.mark.parametrize("heading", [0, 135])
+def test_reads_a_small_needle_drawn_stubby(heading):
+    # In a 1600 by 900 window the disc is about 21 pixels across and blurred: a slanted needle
+    # came out barely two and a half times as long as wide.
+    found = find_compass(draw_compass(heading, radius=21, width=0.33))
+
+    assert found is not None and abs((found[3] - heading + 180) % 360 - 180) < 8
 
 
 def test_ignores_red_things_that_are_not_a_compass():

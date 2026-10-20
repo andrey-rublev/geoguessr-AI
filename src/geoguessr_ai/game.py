@@ -419,8 +419,11 @@ class OpenGuessrBot:
 
     def _round_on(self) -> bool:
         """Whether a multiplayer round is on: Street View's compass shows only then, not on the
-        result, loading or standings screens."""
-        return self.compass.read() is not None
+        result, loading or standings screens. In a round's last 10 s the game tints the screen
+        red, which hides the compass from the bot, but the timer still shows the time left."""
+        if self.compass.read() is not None:
+            return True
+        return self.clock is not None and self.clock.shows()
 
     def _wait_for(self, condition: Callable[[], bool], message: str = "") -> None:
         """Wait until ``condition()`` holds twice running, since screens flicker as they change,

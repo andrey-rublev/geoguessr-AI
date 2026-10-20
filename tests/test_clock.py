@@ -59,6 +59,16 @@ def test_a_timer_it_cant_read_forgets_nothing():
     assert not RoundClock(timer, None, None, lambda: 0.0).readable
 
 
+def test_says_whether_the_timer_shows_without_opening_anything_or_remembering():
+    timer = Timer(left=42)
+    clock = clock_on(timer)
+
+    assert not clock.shows() and timer.opened == 0  # the map is shut, so no time shows
+    timer.open = True
+    assert clock.shows() and clock.left() == math.inf  # a look, not a reading
+    assert not RoundClock(timer, None, None, lambda: 0.0).shows()
+
+
 def test_watches_for_other_players_guesses_in_the_background_during_rounds():
     from contextlib import contextmanager
 

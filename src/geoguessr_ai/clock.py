@@ -105,6 +105,13 @@ class RoundClock:
         """Whether there is a timer to read, and a way to read it."""
         return self.region is not None and self.read_text is not None
 
+    def shows(self) -> bool:
+        """Whether the timer shows a time, as it does all through a round: a quick look, which
+        opens nothing to see it and remembers nothing."""
+        if self.region is None or self.read_text is None:
+            return False
+        return parse_timer(self.read_text(self.screen.grab(self.region))) is not None
+
     def read(self) -> float | None:
         """Seconds left, read as the timer shows or, failing that, with it opened to show, and
         remembered as when the round ends. None if it can't be read, which forgets nothing."""

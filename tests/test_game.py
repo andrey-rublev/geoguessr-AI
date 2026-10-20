@@ -556,7 +556,8 @@ class MultiplayerRoom(TurningStreetView):
         self.phase, self.phase_ends = "lobby", 2.0
         self.locked = []  # seconds into each round we locked in, or None
         self.idle_clicks = []  # clicks while no round was on
-        self.compass_hides_after_pin, self.pinned = False, False
+        self.hides_after_pin, self.pinned = False, False  # the compass and the timer
+        self.red_for = 0.0  # the round's last seconds, when the game tints the screen red
 
     def now(self):
         return self.t
@@ -598,7 +599,7 @@ class MultiplayerRoom(TurningStreetView):
         return ""
 
     def timer_text(self):
-        if self.phase != "round":
+        if self.phase != "round" or (self.hides_after_pin and self.pinned):
             return ""
         left = max(int(self.deadline - self.t), 0)
         return f"{left // 60:02d}:{left % 60:02d}"
@@ -633,7 +634,8 @@ class MultiplayerRoom(TurningStreetView):
             return Image.new("RGB", (region.width, region.height), (50, 52, 60))
         if region == notice_region(PARTY):  # and in notice_text
             return Image.new("RGB", (region.width, region.height), (120, 140, 160))
-        hidden = self.phase != "round" or (self.compass_hides_after_pin and self.pinned)
+        tinted = self.phase == "round" and self.deadline - self.t < self.red_for
+        hidden = self.phase != "round" or tinted or (self.hides_after_pin and self.pinned)
         if region.left != PARTY.view.left and hidden:  # no compass
             return Image.new("RGB", (region.width, region.height), (90, 110, 70))
         return super().grab(region)
@@ -764,12 +766,28 @@ def test_gives_up_a_round_whose_time_runs_out_and_plays_the_next(party, capsys):
 
 def test_guesses_when_the_compass_hides_but_the_clock_leaves_time(party, capsys):
     room = MultiplayerRoom(rounds=1, length=60.0, others_guess=90.0)
-    room.compass_hides_after_pin = True  # as it once did, with the pin placed in a live room
+    room.hides_after_pin = True  # neither the compass nor the timer can be seen
 
     party(room).play()
 
     assert room.locked_at is not None  # locked in, not given up
     assert "can't see the compass, but the clock leaves" in capsys.readouterr().out
+
+
+def test_waits_out_a_rounds_red_last_seconds_before_reading_the_answer(party):
+    room = MultiplayerRoom(rounds=1, length=60.0, others_guess=90.0)
+    room.red_for = 10.0  # the compass can't be seen then, but the timer still counts down
+    bot = party(room, record_answers=True)
+    phases, read = [], bot.reader.read
+
+    def reading(*args, **kwargs):
+        phases.append(room.phase)
+        return read(*args, **kwargs)
+
+    bot.reader.read = reading
+    bot.play()
+
+    assert room.locked[0] is not None and phases == ["results"]
 
 
 def test_the_chat_box_is_blanked_out_of_what_the_bot_sees():

@@ -49,6 +49,7 @@ def _predictor(args: argparse.Namespace):
         args.prior_strength,
         args.game_prior_strength,
         args.coverage_strength,
+        DEFAULT_EMBEDDINGS,
     )
 
 

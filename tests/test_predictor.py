@@ -177,3 +177,33 @@ def test_close_ups_of_the_views_reweigh_places_once_a_detail_expert_is_learned(
     seen = model.encoder.seen
     model.predict([*looked, *(Image.new("RGB", (800, 400)) for _ in range(4))])  # walked on
     assert model.encoder.seen == seen + 8 * 3  # the first look's close-ups weren't read again
+
+
+def test_places_the_guess_by_the_photos_that_look_most_alike(tmp_path, monkeypatch):
+    head = GeoHead(embed_dim=8, n_cells=3, hidden=4)
+    with torch.no_grad():
+        for p in head.parameters():
+            p.zero_()
+        head.net[-1].bias.copy_(torch.tensor([0.0, 6.0, 0.0]))  # always Tokyo's cell
+    path = tmp_path / "model.pt"
+    Checkpoint(head, GeoCells(CENTROIDS), "fake/backbone").save(path)
+    monkeypatch.setattr(predictor_module, "ImageEncoder", FakeEncoder)
+    folder = tmp_path / "embeddings" / "fake__backbone"
+    folder.mkdir(parents=True)
+    alike, unlike = np.ones(8) / np.sqrt(8), np.eye(8)[0]  # FakeEncoder sees every view as alike
+    yokohama, saitama = (35.44, 139.64), (35.86, 139.65)
+    np.savez(
+        folder / "osv5m-train-00.npz",
+        ids=np.array(["a", "b"]),
+        lat=np.array([yokohama[0], saitama[0]], np.float32),
+        lon=np.array([yokohama[1], saitama[1]], np.float32),
+        embeddings=np.stack([alike, unlike]).astype(np.float16),
+        backbone=np.array("fake/backbone"),
+    )
+
+    model = predictor_module.GeoPredictor(path, embeddings=tmp_path / "embeddings")
+    guess = model.predict([Image.new("RGB", (400, 400))])
+
+    assert len(model.neighbours) == 2
+    assert (guess.lat, guess.lon) == pytest.approx(yokohama, abs=0.01)
+    assert guess.top_cells[0][:2] == pytest.approx(tuple(CENTROIDS[1]))  # the cell, as chosen

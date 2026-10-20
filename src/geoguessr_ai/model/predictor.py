@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -18,6 +18,7 @@ from .backbone import ImageEncoder, square_crops
 from .detail import LOOKS, DetailExpert, tiles
 from .geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
 from .head import Checkpoint, Ensemble
+from .neighbours import Neighbours, load_neighbours
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,10 @@ class GeoPredictor:
         prior_strength: float = DEFAULT_PRIOR_STRENGTH,
         game_prior_strength: float = DEFAULT_GAME_PRIOR_STRENGTH,
         coverage_strength: float = DEFAULT_COVERAGE_STRENGTH,
+        embeddings: Path | None = None,
     ) -> None:
+        """``embeddings``: the folder of embedded photos and rounds (one subfolder per image
+        model), to place each guess within its cell by the ones that look most alike."""
         self.prior_strength = prior_strength
         self.game_prior_strength = game_prior_strength
         self.coverage_strength = coverage_strength
@@ -95,6 +99,11 @@ class GeoPredictor:
                 self.detail = None  # learned from another encoder's embeddings
         self._details: tuple[tuple[int, ...], np.ndarray] | None = None
         """The last views' close-ups' say, kept: walking on, the same first views come again."""
+        self.neighbours: Neighbours | None = None
+        """Photos and rounds to place the guess within its cell by (see :mod:`.neighbours`)."""
+        if embeddings is not None:
+            folder = Path(embeddings) / self.model.backbone.replace("/", "__")
+            self.neighbours = load_neighbours(folder, self.model.backbone, self.model.cells)
 
     def predict(self, images: Sequence[Image.Image], evidence: Evidence | None = None) -> Guess:
         """Guess one location from several views of the same place."""
@@ -103,14 +112,20 @@ class GeoPredictor:
         crops = [crop for image in images for crop in square_crops(image)]
         if self.detail is not None:
             evidence = self._with_details(images[:LOOKS], evidence)
-        return guess_from_embeddings(
+        embedded = self.encoder.encode(crops)
+        guess = guess_from_embeddings(
             self.model,
-            self.encoder.encode(crops),
+            embedded,
             self.prior_strength,
             self.game_prior_strength,
             evidence,
             self.coverage_strength,
         )
+        if self.neighbours is None:
+            return guess
+        cell = int(self.model.cells.assign(guess.lat, guess.lon))
+        place = self.neighbours.near(embedded.numpy().mean(axis=0), cell)
+        return guess if place is None else replace(guess, lat=place[0], lon=place[1])
 
     def _with_details(self, views: Sequence[Image.Image], evidence: Evidence | None) -> Evidence:
         """``evidence``, and what close-ups of ``views`` say of each country."""

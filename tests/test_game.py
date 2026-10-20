@@ -795,3 +795,16 @@ def test_the_model_sees_down_to_the_bottom_of_the_map_with_the_map_blurred():
     assert view.shape[:2] == (833, 1845)  # beside the map and down to its bottom, past 800
     assert view[600:, 1610:].std() < 3 and view[720:, :1500].std() > 50  # a smudge, not noise
     assert look.scenes[0].size == (1600, 860)  # what's read: as before
+
+
+def test_uses_a_sign_reader_loaded_before_the_round(monkeypatch):
+    def slow_to_load(*args, **kwargs):
+        raise AssertionError("loaded again, in the round's time")
+
+    monkeypatch.setattr(game_module, "SignReader", slow_to_load)
+    street_view, signs = TurningStreetView(), FakeSignReader()
+    settings = BotSettings(rounds=1, views=1, record_answers=False, debug_dir=None)
+
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view, signs=signs)
+
+    assert bot.signs is signs

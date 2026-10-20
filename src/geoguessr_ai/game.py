@@ -206,6 +206,16 @@ def scene_region(layout: Layout) -> Region:
     return Region(view.left, view.top, view.width, max(bottom - view.top, view.height))
 
 
+def load_sign_reader() -> SignReader | None:
+    """The sign reader, or None, saying why, without RapidOCR. It takes about 9 s to load: in a
+    multiplayer room, load it before the round starts, or that comes out of the round."""
+    try:
+        return SignReader()
+    except ImportError:
+        print("Not reading signs: install RapidOCR with `pip install rapidocr onnxruntime`")
+        return None
+
+
 class OpenGuessrBot:
     def __init__(
         self,
@@ -216,11 +226,12 @@ class OpenGuessrBot:
         controls,
         continue_image: Image.Image | None = None,
         save_layout: Callable[[Layout, Image.Image], None] | None = None,
+        signs: SignReader | None = None,
     ):
         """``continue_image`` is a snapshot of the Continue button. With it, the bot won't click
         Continue while something else covers the button. A layout found by itself has neither
         until the first result screen, where the bot finds them and hands them to
-        ``save_layout``."""
+        ``save_layout``. ``signs``: a sign reader loaded already (see :func:`load_sign_reader`)."""
         self.layout = layout
         self.continue_image = continue_image
         self.save_layout = save_layout
@@ -247,10 +258,7 @@ class OpenGuessrBot:
         )
         self.signs = None
         if settings.read_text:
-            try:
-                self.signs = SignReader()
-            except ImportError:
-                print("Not reading signs: install RapidOCR with `pip install rapidocr onnxruntime`")
+            self.signs = load_sign_reader() if signs is None else signs
         self.reader = None
         if settings.record_answers:
             self.reader = ResultReader(screen, controls, result_region(layout))

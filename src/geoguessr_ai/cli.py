@@ -386,7 +386,7 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
     from PIL import Image
 
     from .buttons import button_image_path
-    from .game import OpenGuessrBot
+    from .game import OpenGuessrBot, load_sign_reader
 
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Build a model with `geoguessr-ai train` first.")
@@ -394,6 +394,7 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
         args.layout = _browser_layout(args.default_layout, args.browser)
     predictor = _predictor(args)
     read_words = _read_words()
+    signs = load_sign_reader() if settings.read_text else None  # now, not in the first round
     button = button_image_path(args.layout)
 
     def save_layout(layout, continue_image) -> None:
@@ -421,7 +422,7 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
         if layout.continue_button is not None and button.exists():
             continue_image = Image.open(button).convert("RGB")
         bot = OpenGuessrBot(
-            layout, predictor, settings, screen, controls, continue_image, save_layout
+            layout, predictor, settings, screen, controls, continue_image, save_layout, signs
         )
         bot.play()
     if settings.record_answers and settings.debug_dir is not None and not settings.dry_run:

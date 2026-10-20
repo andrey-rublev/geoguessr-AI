@@ -97,6 +97,15 @@ def test_clicks_again_when_the_first_click_is_lost():
     assert placement.confirmed and haversine_km(*fake.pin, *MADRID) < 40
 
 
+def test_opens_the_map_again_when_both_clicks_are_lost():
+    fake = FakeMinimap(ATLANTIC, lost_clicks=3)
+
+    placement = GuessMap(fake, fake, REGION, HOVER).place(*MADRID)
+
+    assert placement.confirmed and haversine_km(*fake.pin, *MADRID) < 40
+    assert fake.projection.world_px == ATLANTIC.world_px  # zoomed back out both times
+
+
 def test_reports_a_pin_that_never_appears():
     fake = FakeMinimap(ATLANTIC, lost_clicks=5)
     assert GuessMap(fake, fake, REGION, HOVER).place(*MADRID).confirmed is False

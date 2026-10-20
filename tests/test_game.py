@@ -556,6 +556,7 @@ class MultiplayerRoom(TurningStreetView):
         self.phase, self.phase_ends = "lobby", 2.0
         self.locked = []  # seconds into each round we locked in, or None
         self.idle_clicks = []  # clicks while no round was on
+        self.compass_hides_after_pin, self.pinned = False, False
 
     def now(self):
         return self.t
@@ -573,7 +574,7 @@ class MultiplayerRoom(TurningStreetView):
                 self.phase = "standings"
                 return False
             self.rounds_left -= 1
-            self.phase, self.start = "round", self.phase_ends
+            self.phase, self.start, self.pinned = "round", self.phase_ends, False
             self.deadline, self.locked_at, self.others_in = self.start + self.length, None, False
             return True
         if self.phase != "round":
@@ -622,6 +623,8 @@ class MultiplayerRoom(TurningStreetView):
         super().click(p)
         if self.phase == "round" and p == PARTY.guess_button and self.locked_at is None:
             self.locked_at = self.t - self.start
+        if self.phase == "round" and PARTY.map_region.contains(p):
+            self.pinned = True
         self._pass(0.2)
 
     def grab(self, region):
@@ -630,7 +633,8 @@ class MultiplayerRoom(TurningStreetView):
             return Image.new("RGB", (region.width, region.height), (50, 52, 60))
         if region == notice_region(PARTY):  # and in notice_text
             return Image.new("RGB", (region.width, region.height), (120, 140, 160))
-        if region.left != PARTY.view.left and self.phase != "round":  # no compass
+        hidden = self.phase != "round" or (self.compass_hides_after_pin and self.pinned)
+        if region.left != PARTY.view.left and hidden:  # no compass
             return Image.new("RGB", (region.width, region.height), (90, 110, 70))
         return super().grab(region)
 
@@ -756,6 +760,16 @@ def test_gives_up_a_round_whose_time_runs_out_and_plays_the_next(party, capsys):
     assert room.locked[0] is None and "ended before the bot could guess" in capsys.readouterr().out
     assert PARTY.guess_button not in room.idle_clicks
     assert len(room.locked) == 2
+
+
+def test_guesses_when_the_compass_hides_but_the_clock_leaves_time(party, capsys):
+    room = MultiplayerRoom(rounds=1, length=60.0, others_guess=90.0)
+    room.compass_hides_after_pin = True  # as it once did, with the pin placed in a live room
+
+    party(room).play()
+
+    assert room.locked_at is not None  # locked in, not given up
+    assert "can't see the compass, but the clock leaves" in capsys.readouterr().out
 
 
 def test_the_chat_box_is_blanked_out_of_what_the_bot_sees():

@@ -79,6 +79,9 @@ GUESS_SECONDS = 9.0
 SPARE_SECONDS = 4.0
 """Time kept in hand beyond the steps planned: the timer is read in whole seconds, and may be
 cut short between readings."""
+CLOCK_TRUSTED_ABOVE = 2.0
+"""Seconds the round's clock must leave for the round to count as on though the compass
+can't be seen: the timer is read in whole seconds."""
 TIMER_DROP = 3.0
 """Seconds the timer must have lost beyond the time gone by to say it was cut short."""
 LOOKING = {"view", "walk", "look_up", "camera"}
@@ -428,13 +431,19 @@ class OpenGuessrBot:
 
     def _check_round(self) -> None:
         """In a multiplayer room, give up on the round if it has ended, as when its time ran
-        out, rather than click on whatever the result screen shows there."""
+        out, rather than click on whatever the result screen shows there. The compass shows
+        while a round is on, but not always: in a live room it went unseen with the pin placed
+        and 8 s on the clock, and the round was given up. So the clock has its say too."""
         if not self.settings.party or self.settings.dry_run:
             return
         for _ in range(3):
             if self._round_on():
                 return
             self.controls.sleep(0.3)
+        left = math.inf if self.clock is None else self.clock.left()
+        if math.isfinite(left) and left > CLOCK_TRUSTED_ABOVE:
+            print(f"  can't see the compass, but the clock leaves {left:.0f} s: carrying on")
+            return
         raise RoundOver
 
     def _round_clock(self) -> RoundClock:

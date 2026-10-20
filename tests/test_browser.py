@@ -11,10 +11,12 @@ class FakePage:
     """Records what the bot's browser was asked to do, and shows a page with a red left half."""
 
     def __init__(self, size):
-        self.size, self.done = size, []
+        self.size, self.done, self.busy = size, [], False
         self.mouse, self.keyboard = self, self
 
-    def screenshot(self, clip, animations):
+    def screenshot(self, clip, animations, timeout):
+        if self.busy:
+            raise TimeoutError(f"Page.screenshot: Timeout {timeout}ms exceeded.")
         page = Image.new("RGB", self.size, (0, 0, 255))
         page.paste((255, 0, 0), (0, 0, self.size[0] // 2, self.size[1]))
         box = (clip["x"], clip["y"], clip["x"] + clip["width"], clip["y"] + clip["height"])
@@ -69,6 +71,12 @@ def test_screenshots_are_of_the_page_and_black_beyond_it(session):
     assert shot.getpixel((100, 10)) == (0, 0, 255)  # right half
     assert shot.getpixel((280, 10)) == (0, 0, 0)  # off the page's right edge
     assert BrowserScreen(session).virtual_desktop() == Region(0, 0, 400, 300)
+
+
+def test_a_screenshot_that_takes_too_long_comes_back_blank(session):
+    session.page.busy = True
+    shot = BrowserScreen(session).grab(Region(0, 0, 100, 50))
+    assert shot.size == (100, 50) and shot.getbbox() is None  # all black: look again
 
 
 def test_wheel_zooms_maps_in_and_out_a_notch_at_a_time(session, controls):

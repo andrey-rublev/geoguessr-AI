@@ -30,6 +30,9 @@ GAME_URL = "https://openguessr.com/"
 PROFILE_DIR = Path(".browser-profile")
 """Where the bot's browser keeps its cookies and settings, so choices made in it (like a
 consent banner's) and a sign-in, if you sign in there, last from one run to the next."""
+SHOT_TIMEOUT_MS = 10_000
+"""How long a screenshot may take before the frame counts as blank: in a live multiplayer
+room, one took over 30 s as a round began, and the bot stopped on it."""
 WHEEL_DELTA = 100
 """Pixels a wheel notch scrolls in Chrome, which Leaflet's maps take for one zoom level."""
 KEYS = {
@@ -125,7 +128,17 @@ class BrowserScreen:
         shot = Image.new("RGB", (region.width, region.height))
         if right > left and bottom > top:
             clip = {"x": left, "y": top, "width": right - left, "height": bottom - top}
-            png = self.session.call(lambda page: page.screenshot(clip=clip, animations="allow"))
+            try:
+                png = self.session.call(
+                    lambda page: page.screenshot(
+                        clip=clip, animations="allow", timeout=SHOT_TIMEOUT_MS
+                    )
+                )
+            except Exception as error:
+                if type(error).__name__ != "TimeoutError":  # Playwright's, raised on its thread
+                    raise
+                print("  the bot's browser was too busy to take a screenshot; trying again")
+                return shot  # blank: whatever waits for the game looks again
             shot.paste(
                 Image.open(io.BytesIO(png)).convert("RGB"), (left - region.left, top - region.top)
             )

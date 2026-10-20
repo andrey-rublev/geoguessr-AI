@@ -42,7 +42,7 @@ The bot finds the game by itself, on any screen, and switches to its tab if anot
 
 ## How it works
 
-It looks around, reads signs and checks the sun. StreetCLIP, an image model trained to geolocate street photos, and a classifier trained on its own rounds rank regions of the world, and the clues reweigh them. On 1,052 held-out rounds it averages about 3,550 of OpenGuessr's 5,000 points a round, before the game's streak bonus; with plain CLIP it was 3,100.
+It looks around, reads signs and checks the sun. StreetCLIP, an image model trained to geolocate street photos, and a classifier trained on its own rounds rank regions of the world, and the clues reweigh them. On 1,052 held-out rounds it averages about 3,700 of OpenGuessr's 5,000 points a round, before the game's streak bonus; with plain CLIP it was 3,100.
 
 Data: OpenStreetView-5M (CC-BY-SA 4.0), GeoNames (CC BY 4.0), Natural Earth, `global-land-mask`. Models: StreetCLIP (CC BY-NC 4.0, non-commercial use only), OpenAI CLIP, RapidOCR with PaddleOCR (Apache 2.0), run with OpenVINO (Apache 2.0).
 

@@ -23,9 +23,11 @@ class Desk:
     ``"window"`` nothing of it, until its window is brought forward. Its map opens while the
     mouse is over the collapsed one, or the opened one."""
 
-    def __init__(self, showing="game", party=False, hidden_looks=0, narrow_looks=0):
+    def __init__(
+        self, showing="game", party=False, hidden_looks=0, narrow_looks=0, restless_opens=0
+    ):
         self.showing, self.party, self.hidden_looks = showing, party, hidden_looks
-        self.narrow_looks = narrow_looks
+        self.narrow_looks, self.restless_opens = narrow_looks, restless_opens
         self.mouse, self.clicks, self.grabbed, self.raised = Point(0, 0), [], None, 0
         self.collapsed, self.words = draw_game(party=party)
         self.opened, _ = draw_game(party=party, opened=True)
@@ -48,6 +50,12 @@ class Desk:
             local = Point(self.mouse.x - DOCKED.left, self.mouse.y - DOCKED.top)
             over = OPENED.contains(local) or Region(1160, 577, 306, 155).contains(local)
             game = self.opened if over else self.collapsed
+            if over and self.restless_opens:  # Street View redrawn beside the map meanwhile
+                self.restless_opens -= 1
+                game = game.copy()
+                game[OPENED.top : OPENED.bottom, 300 : OPENED.left] = (
+                    255 - game[OPENED.top : OPENED.bottom, 300 : OPENED.left]
+                )
             desktop[DOCKED.top : DOCKED.bottom, DOCKED.left :] = game
         crop = desktop[region.top : region.bottom, region.left : region.right]
         return Image.fromarray(crop)
@@ -107,6 +115,14 @@ def test_finds_the_game_on_whichever_screen_shows_it_and_how_far_its_map_opens()
     assert layout.page == docked(0, 0, 1536, 864)
     assert layout.continue_button is None and not layout.party  # Continue is found later
     assert desk.clicks == [] and desk.raised == 0
+
+
+def test_watches_the_map_open_again_when_street_view_changed_beside_it():
+    desk = Desk(restless_opens=1)
+
+    layout = find_layout(desk, desk, False, desk.read_words, desk.bring_forward)
+
+    assert layout.map_region == docked(OPENED.left, OPENED.top, OPENED.width, OPENED.height)
 
 
 def test_finds_a_multiplayer_rooms_timer_and_chat_box():

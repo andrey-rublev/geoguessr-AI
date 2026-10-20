@@ -169,30 +169,51 @@ def _look(screen, read_words: ReadWords) -> tuple[list[Sighting], list[Point], b
     return sightings, tabs, narrow
 
 
+MAP_LOOKS = 3
+"""How many times at most to watch the map open, for two looks that agree."""
+
+
 def _open_map(screen, controls, sighting: Sighting, expand_wait: float) -> Region:
-    """Hover over the map and see how far it opens. If that can't be told, take it to open to
-    twice its size, which it opens to at least: that much of it is enough to place a pin."""
+    """Hover over the map and see how far it opens, from what changes on screen as it does.
+    Anything else that changes meanwhile can only make that look bigger: in a live multiplayer
+    room, a chat message and Street View still drawing took it 340 pixels too far left, onto
+    Street View, where the map's own check still saw a world. So it is watched until two looks
+    agree, or else the smallest is kept. If it can't be told at all, take it to open to twice
+    its size, which it opens to at least: that much of it is enough to place a pin."""
     page, panel = sighting.page, sighting.panel
     area = Region(page.left, page.top, panel.right - page.left, sighting.bar_top - page.top)
-    controls.move(sighting.view.center)
-    controls.sleep(expand_wait)
-    collapsed = np.asarray(screen.grab(area).convert("RGB"))
-    controls.move(sighting.map_hover)
-    controls.move(sighting.map_hover.offset(-panel.width / 4, 0))  # stay over it, so it stays
-    controls.sleep(expand_wait)
-    opened = np.asarray(screen.grab(area).convert("RGB"))
-    controls.leave(sighting.view.center)
-    found = measure_map(collapsed, opened, area, sighting)
-    if found is None or found.width <= panel.width or found.height <= panel.height:
+    seen: list[tuple[Region, np.ndarray]] = []
+    for _ in range(MAP_LOOKS):
+        controls.move(sighting.view.center)
+        controls.sleep(expand_wait)
+        collapsed = np.asarray(screen.grab(area).convert("RGB"))
+        controls.move(sighting.map_hover)
+        controls.move(sighting.map_hover.offset(-panel.width / 4, 0))  # stay over it, so it stays
+        controls.sleep(expand_wait)
+        opened = np.asarray(screen.grab(area).convert("RGB"))
+        controls.leave(sighting.view.center)
+        found = measure_map(collapsed, opened, area, sighting)
+        if found is None or found.width <= panel.width or found.height <= panel.height:
+            continue
+        if any(_agree(found, before) for before, _ in seen):
+            seen = [(found, opened)]
+            break
+        seen.append((found, opened))
+    if not seen:
         print("  couldn't see how far the map opens; if guesses go astray, find the game again")
         width, height = 2 * panel.width, 2 * panel.height
         return Region(panel.right - width, sighting.bar_top - height, width, height)
+    found, opened = min(seen, key=lambda look: look[0].width * look[0].height)
     top, left = found.top - area.top, found.left - area.left
     try:
         locate_world(np.ascontiguousarray(opened[top:, left:][: found.height, : found.width]))
     except MapNotFound as exc:
         print(f"  the opened map doesn't look like the world ({exc}); check {PREVIEW_PATH}")
     return found
+
+
+def _agree(a: Region, b: Region, slack: int = 4) -> bool:
+    return abs(a.left - b.left) <= slack and abs(a.top - b.top) <= slack
 
 
 def _record(controls: Controls, step: str, prompt: str) -> Point:

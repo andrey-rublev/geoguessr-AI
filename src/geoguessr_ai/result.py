@@ -348,6 +348,7 @@ class ResultReader:
                     projection = None
             if projection and crowded:
                 levels[-1].pin = self._our_pin(projection, levels[-1], placed_lat, placed_lon)
+                self._trace_back(levels, projection.to_pixel(placed_lat, placed_lon, rgb.shape[1]))
             if projection and self._shows_our_pin(projection, levels[-1], placed_lat, placed_lon):
                 reading.answer, reading.problem = self._answer(
                     levels, projection, placed_lat, placed_lon
@@ -429,10 +430,21 @@ class ResultReader:
         self, projection: MapProjection, level: _Level, lat: float, lon: float
     ) -> bool:
         """Whether the recognised map puts our pin where it really is."""
+        flag = level.flag
+        beside = flag and [
+            pin
+            for pin in level.pins
+            if math.dist((pin.x, pin.y), (flag.x, flag.y)) < APART * self.scale
+        ]
         if level.pin:
             target, slack = level.pin, 0.0
-        elif level.flag:  # after a close guess the flag is drawn over the pin
-            target, slack = level.flag, APART * self.scale
+        elif beside:  # a pin by the flag, among other players': judged as ours is, by itself
+            target, slack = (
+                min(beside, key=lambda pin: math.dist((pin.x, pin.y), (flag.x, flag.y))),
+                0.0,
+            )
+        elif flag:  # after a close guess the flag is drawn over the pin
+            target, slack = flag, APART * self.scale
         else:
             return False
         off = self._off(projection, target, lat, lon, level.rgb.shape[1])
@@ -447,6 +459,26 @@ class ResultReader:
         offs = [(self._off(projection, pin, lat, lon, width), pin) for pin in level.pins]
         near = [(off, pin) for off, pin in offs if off <= reach]
         return min(near, key=lambda found: found[0])[1] if near else None
+
+    def _trace_back(self, levels: list[_Level], placed: tuple[float, float]) -> None:
+        """Find our pin on the levels before the last, from where the last puts it: our pin
+        there if it shows, or else ``placed``, where the recognised map puts where we clicked,
+        as when the flag is drawn over it after a close guess. Each notch out drew the map in
+        towards the middle, where the wheel turned, so on each level before, our pin was as
+        many times further out: the pin nearest there is ours. Zoomed in, those levels can
+        tell the flag from our pin, which the recognised map can't after a close guess."""
+        last = levels[-1]
+        h, w = last.rgb.shape[:2]
+        cx, cy = w / 2, h / 2
+        px, py = (last.pin.x, last.pin.y) if last.pin else placed
+        for level in levels[:-1]:
+            if level.pin is not None or not level.pins:
+                continue
+            grow = 2.0 ** (last.halvings - level.halvings)
+            x, y = cx + (px - cx) * grow, cy + (py - cy) * grow
+            near = min(level.pins, key=lambda pin: math.dist((pin.x, pin.y), (x, y)))
+            if math.dist((near.x, near.y), (x, y)) <= (4 + APART) * self.scale * grow:
+                level.pin = near
 
     @staticmethod
     def _off(

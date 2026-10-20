@@ -250,3 +250,16 @@ def test_result_region_covers_the_view_and_the_expanded_map():
         continue_button=Point(987, 1141),
     )
     assert result_region(layout) == Region(14, 262, 1793, 710)
+
+
+def test_close_guess_among_other_players_pins_is_measured_zoomed_in():
+    # Which pin is ours only the recognised world can say, by when the flag hides under it.
+    near, paris = (40.52, -3.52), (48.86, 2.35)
+    screen = FakeResultScreen(fitted(786_432, MADRID, near), pin=near, flag=MADRID, others=(paris,))
+    reader = ResultReader(screen, FakeControls(screen), REGION)
+    reader.scale = 1.5  # as the guess map measured it
+
+    reading = reader.read(*near, crowded=True)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *MADRID) < 3

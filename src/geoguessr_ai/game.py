@@ -302,7 +302,6 @@ class OpenGuessrBot:
             print(f"Stopped: {blocked}")
 
     def play_round(self, number: int, run_dir: Path | None = None) -> Placement:
-        s = self.settings
         print(f"\nRound {number}")
         self.others_guessed, self.short_of_time = False, []
         if self.watch is not None:

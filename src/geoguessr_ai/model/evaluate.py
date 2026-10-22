@@ -83,11 +83,17 @@ def evaluate_rounds(
     rounds_path: Path,
     device: str = "auto",
     prior_strength: float = DEFAULT_PRIOR_STRENGTH,
-    game_prior_strength: float = DEFAULT_GAME_PRIOR_STRENGTH,
+    game_prior_strength: float | None = None,
     test_fraction: float = DEFAULT_TEST_FRACTION,
-    coverage_strength: float = DEFAULT_COVERAGE_STRENGTH,
+    coverage_strength: float | None = None,
 ) -> tuple[dict[str, float], list[dict]]:
-    """Score a model on your held-out OpenGuessr rounds, views combined as in the game."""
+    """Score a model on your held-out OpenGuessr rounds, views combined as in the game, by the
+    model alone: no clues, nor look-alike photos, so the strengths left out are as tuned
+    without them."""
+    if game_prior_strength is None:
+        game_prior_strength = DEFAULT_GAME_PRIOR_STRENGTH
+    if coverage_strength is None:
+        coverage_strength = DEFAULT_COVERAGE_STRENGTH
     model = Ensemble.load(checkpoint_path)
     _, test = RoundEmbeddings.load(rounds_path).split(test_fraction)
     if test.backbone != model.backbone:

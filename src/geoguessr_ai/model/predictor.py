@@ -18,7 +18,12 @@ from .backbone import ImageEncoder, square_crops
 from .detail import LOOKS, DetailExpert, tiles
 from .geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
 from .head import Checkpoint, Ensemble
-from .neighbours import Neighbours, load_neighbours
+from .neighbours import (
+    VOTED_COVERAGE_STRENGTH,
+    VOTED_GAME_PRIOR_STRENGTH,
+    Neighbours,
+    load_neighbours,
+)
 
 
 @dataclass(frozen=True)
@@ -80,15 +85,15 @@ class GeoPredictor:
         checkpoint_path: Path,
         device: str = "auto",
         prior_strength: float = DEFAULT_PRIOR_STRENGTH,
-        game_prior_strength: float = DEFAULT_GAME_PRIOR_STRENGTH,
-        coverage_strength: float = DEFAULT_COVERAGE_STRENGTH,
+        game_prior_strength: float | None = None,
+        coverage_strength: float | None = None,
         embeddings: Path | None = None,
     ) -> None:
         """``embeddings``: the folder of embedded photos and rounds (one subfolder per image
-        model), to place each guess within its cell by the ones that look most alike."""
+        model), whose look-alikes vote for the cell and place each guess within it. Left out,
+        ``game_prior_strength`` and ``coverage_strength`` are as tuned with them, or without
+        (see :data:`.neighbours.VOTED_GAME_PRIOR_STRENGTH`)."""
         self.prior_strength = prior_strength
-        self.game_prior_strength = game_prior_strength
-        self.coverage_strength = coverage_strength
         saved = datetime.fromtimestamp(Path(checkpoint_path).stat().st_mtime)
         self.source = f"{Path(checkpoint_path).name}, saved {saved:%Y-%m-%d %H:%M}"
         """Which model this is, to tell rounds played by different models apart."""
@@ -110,6 +115,15 @@ class GeoPredictor:
         if embeddings is not None:
             folder = Path(embeddings) / self.model.backbone.replace("/", "__")
             self.neighbours = load_neighbours(folder, self.model.backbone, self.model.cells)
+        voted = self.neighbours is not None
+        if game_prior_strength is None:
+            game_prior_strength = (
+                VOTED_GAME_PRIOR_STRENGTH if voted else DEFAULT_GAME_PRIOR_STRENGTH
+            )
+        if coverage_strength is None:
+            coverage_strength = VOTED_COVERAGE_STRENGTH if voted else DEFAULT_COVERAGE_STRENGTH
+        self.game_prior_strength = game_prior_strength
+        self.coverage_strength = coverage_strength
 
     def predict(self, images: Sequence[Image.Image], evidence: Evidence | None = None) -> Guess:
         """Guess one location from several views of the same place."""

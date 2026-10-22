@@ -27,11 +27,9 @@ from geoguessr_ai.buttons import HALF_HEIGHT, HALF_WIDTH
 from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
 from geoguessr_ai.clock import NOTICE_WIDTH
 from geoguessr_ai.config import Layout, Point, Region
-from geoguessr_ai.knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
 from geoguessr_ai.mapcal import MapProjection
 from geoguessr_ai.model import backbone, evaluate, predictor, rounds, train
 from geoguessr_ai.model.geocells import (
-    DEFAULT_GAME_PRIOR_STRENGTH,
     DEFAULT_PRIOR_STRENGTH,
     GeoCells,
 )
@@ -76,11 +74,9 @@ def test_every_command_parses(argv):
 def test_model_commands_take_prior_strengths(command):
     parser = build_parser()
     defaults = parser.parse_args(command)
-    assert (defaults.prior_strength, defaults.game_prior_strength) == (
-        DEFAULT_PRIOR_STRENGTH,
-        DEFAULT_GAME_PRIOR_STRENGTH,
-    )
-    assert defaults.coverage_strength == DEFAULT_COVERAGE_STRENGTH
+    assert defaults.prior_strength == DEFAULT_PRIOR_STRENGTH
+    # Left out, as tuned for guessing with the look-alike photos or without (by the predictor).
+    assert defaults.game_prior_strength is None and defaults.coverage_strength is None
     changed = parser.parse_args(
         [*command, "--prior-strength", "0", "--game-prior-strength", "0.5"]
         + ["--coverage-strength", "0"]

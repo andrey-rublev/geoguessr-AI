@@ -34,6 +34,11 @@ VOTE_TEMPERATURE = 0.05
 VOTE_FLOOR = 0.01
 """What a cell with no say in the vote keeps of it, so a vote never rules a cell out."""
 VOTE_STRENGTH = 0.5
+VOTED_GAME_PRIOR_STRENGTH = VOTED_COVERAGE_STRENGTH = 0.0
+"""With the vote, where the game sends players and where Street View is are counted already: its
+references hold every round played, and every photo is a street-level one. With both priors left
+out, the same held-out rounds scored about 16 points a round more (give or take 7), on each half
+of them, with the signs read as without."""
 
 
 @dataclass

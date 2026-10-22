@@ -565,14 +565,14 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument(
             "--game-prior-strength",
             type=float,
-            default=DEFAULT_GAME_PRIOR_STRENGTH,
-            help="how much to favour places your training rounds came from (0 = off)",
+            help="how much to favour places your training rounds came from (0 = off; default "
+            f"{DEFAULT_GAME_PRIOR_STRENGTH:g}, or 0 where look-alike photos vote)",
         )
         p.add_argument(
             "--coverage-strength",
             type=float,
-            default=DEFAULT_COVERAGE_STRENGTH,
-            help="how much to avoid countries with little or no Street View (0 = off)",
+            help="how much to avoid countries with little or no Street View (0 = off; default "
+            f"{DEFAULT_COVERAGE_STRENGTH:g}, or 0 where look-alike photos vote)",
         )
 
     def add_game_options(p: argparse.ArgumentParser, layout: Path, rounds: int) -> None:

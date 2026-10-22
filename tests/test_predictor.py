@@ -4,10 +4,10 @@ import torch
 from PIL import Image
 
 from geoguessr_ai.knowledge.countries import country_codes
-from geoguessr_ai.knowledge.evidence import Evidence
+from geoguessr_ai.knowledge.evidence import DEFAULT_COVERAGE_STRENGTH, Evidence
 from geoguessr_ai.model import predictor as predictor_module
 from geoguessr_ai.model.detail import COLS, ROWS, fit
-from geoguessr_ai.model.geocells import GeoCells
+from geoguessr_ai.model.geocells import DEFAULT_GAME_PRIOR_STRENGTH, GeoCells
 from geoguessr_ai.model.head import Checkpoint, Ensemble, GeoHead
 from geoguessr_ai.model.predictor import detail_path
 
@@ -238,3 +238,33 @@ def test_photos_that_look_alike_vote_for_their_cell(tmp_path, monkeypatch):
     assert (alone.lat, alone.lon) == pytest.approx(tuple(CENTROIDS[1]))
     assert (voted.lat, voted.lon) == pytest.approx(versailles, abs=0.01)
     assert voted.countries[0][0] == "FR"
+
+
+def test_where_look_alike_photos_vote_the_game_prior_and_coverage_are_left_to_them(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "model.pt"
+    Checkpoint(GeoHead(8, 3, hidden=4), GeoCells(CENTROIDS), "fake/backbone").save(path)
+    monkeypatch.setattr(predictor_module, "ImageEncoder", FakeEncoder)
+    folder = tmp_path / "embeddings" / "fake__backbone"
+    folder.mkdir(parents=True)
+    np.savez(
+        folder / "osv5m-train-00.npz",
+        ids=np.array(["a"]),
+        lat=np.array([35.44], np.float32),
+        lon=np.array([139.64], np.float32),
+        embeddings=np.ones((1, 8), np.float16),
+        backbone=np.array("fake/backbone"),
+    )
+    photos = tmp_path / "embeddings"
+
+    voted = predictor_module.GeoPredictor(path, embeddings=photos)
+    asked = predictor_module.GeoPredictor(
+        path, game_prior_strength=0.5, coverage_strength=0.3, embeddings=photos
+    )
+    alone = predictor_module.GeoPredictor(path)
+
+    assert (voted.game_prior_strength, voted.coverage_strength) == (0.0, 0.0)
+    assert (asked.game_prior_strength, asked.coverage_strength) == (0.5, 0.3)
+    assert alone.game_prior_strength == DEFAULT_GAME_PRIOR_STRENGTH
+    assert alone.coverage_strength == DEFAULT_COVERAGE_STRENGTH

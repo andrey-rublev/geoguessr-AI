@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import traceback
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields, replace
@@ -87,6 +88,9 @@ TIMER_DROP = 3.0
 """Seconds the timer must have lost beyond the time gone by to say it was cut short."""
 LOOKING = {"view", "walk", "look_up", "camera"}
 """Steps that only look for more to go on, which stop once another player has guessed."""
+FAILED_ROUNDS = 3
+"""In a multiplayer room, rounds in a row that may go wrong with an error before the bot stops
+on it: one is passed over, as the next round may go better."""
 
 
 class ContinueBlocked(Exception):
@@ -407,15 +411,25 @@ class OpenGuessrBot:
         print("Multiplayer: playing each round the host starts. It never presses Continue.")
         if self.watch is not None and hasattr(self.screen, "open_another"):
             self.watch.watch(self.screen.open_another)
-        played = 0
+        played, failed = 0, 0
         try:
             while not s.rounds or played < s.rounds:
                 self._wait_for(self._round_on, "\nWaiting for the host to start a round...")
                 played += 1
                 try:
                     self.play_round(played, run_dir)
+                    failed = 0
                 except RoundOver as over:
                     print(f"  {str(over) or 'the round ended before the bot could guess'}")
+                    self._wait_for(lambda: not self._round_on())
+                except (StopRequested, self.controls.failsafe):
+                    raise
+                except Exception:  # one round going wrong is no reason to leave the room
+                    failed += 1
+                    if failed >= FAILED_ROUNDS:
+                        raise
+                    traceback.print_exc()
+                    print("  something went wrong this round (above); waiting for the next")
                     self._wait_for(lambda: not self._round_on())
                 if s.dry_run:
                     break

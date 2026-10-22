@@ -784,6 +784,40 @@ def test_skips_a_round_whose_map_cant_be_read_and_plays_the_next(party, capsys):
     assert "no guess this round: Couldn't read the map" in capsys.readouterr().out
 
 
+class FailingPredictor(FakePredictor):
+    """Fails in the rounds ``failing`` (counting from 1), as a bug might."""
+
+    def __init__(self, failing):
+        super().__init__()
+        self.failing, self.rounds = failing, 0
+
+    def predict(self, images, evidence=None):
+        if len(images) == 4:  # a new round's first look
+            self.rounds += 1
+        if self.rounds in self.failing:
+            raise RuntimeError("something unforeseen")
+        return super().predict(images, evidence)
+
+
+def test_a_round_that_goes_wrong_is_passed_over_for_the_next(party, capsys):
+    room = MultiplayerRoom(rounds=2, length=60.0, others_guess=90.0)
+
+    party(room, FailingPredictor(failing={1})).play()
+
+    assert room.locked[0] is None and room.locked[1] is not None
+    out = capsys.readouterr()
+    assert "went wrong this round" in out.out and "something unforeseen" in out.err
+
+
+def test_stops_on_an_error_that_comes_round_after_round(party):
+    room = MultiplayerRoom(rounds=5, length=60.0, others_guess=90.0)
+
+    with pytest.raises(RuntimeError, match="unforeseen"):
+        party(room, FailingPredictor(failing=set(range(1, 6)))).play()
+
+    assert len(room.locked) == 2  # the third round's error stopped it
+
+
 def test_guesses_when_the_compass_hides_but_the_clock_leaves_time(party, capsys):
     room = MultiplayerRoom(rounds=1, length=60.0, others_guess=90.0)
     room.hides_after_pin = True  # neither the compass nor the timer can be seen

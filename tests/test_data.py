@@ -69,3 +69,43 @@ def test_embedding_rests_after_each_batch_to_keep_a_laptop_cool(tmp_path, monkey
 
     assert embed_items(Encoder(), items, tmp_path / "x.npz", batch_size=2, rest=1.0) == 5
     assert len(slept) == 3  # after each batch of two, as long as it took
+
+
+def test_embedding_carries_on_where_a_stopped_run_left_off(tmp_path):
+    import numpy as np
+    import torch
+
+    from geoguessr_ai.model.embed import embed_items, progress_path
+    from geoguessr_ai.model.train import resolve_embedding_files
+
+    class Encoder:
+        name = "fake"
+
+        def __init__(self, fail_after=None):
+            self.seen, self.fail_after = 0, fail_after
+
+        def encode(self, images):
+            if self.fail_after is not None and self.seen >= self.fail_after:
+                raise KeyboardInterrupt  # stopped, or the laptop went down
+            self.seen += len(images)
+            return torch.ones(len(images), 4)
+
+    jpeg = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(jpeg, "JPEG")
+    items = [(f"photo{i}", jpeg.getvalue(), float(i), 2.0) for i in range(7)]
+    out = tmp_path / "osv5m-train-05.npz"
+
+    with pytest.raises(KeyboardInterrupt):
+        embed_items(Encoder(fail_after=4), items, out, batch_size=2, save_every=4)
+    assert progress_path(out).exists() and not out.exists()
+    with pytest.raises(FileNotFoundError):
+        resolve_embedding_files([tmp_path])  # the first part isn't taken for the shard
+
+    again = Encoder()
+    assert embed_items(again, items, out, batch_size=2, save_every=4) == 7
+    assert again.seen == 3  # only what wasn't saved before
+    with np.load(out) as saved:
+        assert saved["ids"].tolist() == [f"photo{i}" for i in range(7)]
+        assert saved["lat"].tolist() == list(range(7))
+        assert saved["embeddings"].shape == (7, 4)
+    assert not progress_path(out).exists()

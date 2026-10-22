@@ -26,6 +26,15 @@ from .train import Pacer
 
 # (image_id, JPEG bytes or file path, lat, lon)
 Item = tuple[str, "bytes | Path", float, float]
+SAVE_EVERY = 5_000
+"""Images embedded between saves of the work so far: a shard takes hours, and a laptop that
+went down halfway through one would otherwise start it again from nothing."""
+
+
+def progress_path(out_path: Path) -> Path:
+    """Where what has been embedded for ``out_path`` is kept until it's all done. Not an
+    ``.npz``, so that training never takes a shard's first part for the whole of it."""
+    return Path(out_path).with_name(f"{Path(out_path).stem}.progress")
 
 
 def _decode(source: bytes | Path) -> Image.Image | None:
@@ -46,23 +55,35 @@ def embed_items(
     workers: int = 4,
     rest: float = 0.0,
     max_temp: float | None = None,
+    save_every: int = SAVE_EVERY,
 ) -> int:
     """Embed ``items`` and save ``ids``, ``lat``, ``lon``, ``embeddings``, ``backbone`` to npz.
     ``rest`` pauses that many times as long as each stretch of work took, and ``max_temp``
     waits whenever the CPU gets that hot, as training does (see :class:`.train.Pacer`): a
-    shard takes hours, which a laptop can't take flat out."""
+    shard takes hours, which a laptop can't take flat out. Every ``save_every`` images, the
+    work so far is saved (see :func:`progress_path`), and a run stopped halfway carries on
+    from there."""
     pace = Pacer(rest, max_temp)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    progress = progress_path(out_path)
     ids: list[str] = []
     lats: list[float] = []
     lons: list[float] = []
     chunks: list[np.ndarray] = []
-    iterator: Iterator[Item] = iter(items)
+    if progress.exists():
+        with np.load(progress) as saved:
+            if str(saved["backbone"]) == encoder.name:
+                ids, chunks = saved["ids"].tolist(), [saved["embeddings"]]
+                lats, lons = saved["lat"].tolist(), saved["lon"].tolist()
+                print(f"Carrying on from the {len(ids):,} images embedded before")
+    done = set(ids)
+    iterator: Iterator[Item] = (item for item in items if item[0] not in done)
+    unsaved = 0
 
     with (
         ThreadPoolExecutor(workers) as pool,
-        tqdm(total=total, unit="img", desc=out_path.stem) as bar,
+        tqdm(total=total, initial=len(done), unit="img", desc=out_path.stem) as bar,
     ):
         while batch := list(islice(iterator, batch_size)):
             images = list(pool.map(_decode, [source for _, source, _, _ in batch]))
@@ -74,23 +95,33 @@ def embed_items(
                     lats.append(lat)
                     lons.append(lon)
             bar.update(len(batch))
+            unsaved += len(kept)
+            if save_every and unsaved >= save_every:
+                chunks = [np.concatenate(chunks)]
+                _save(progress, ids, lats, lons, chunks, encoder.name)
+                unsaved = 0
             pace()
 
     if not ids:
         raise RuntimeError(f"No images could be embedded for {out_path}")
     # Only a finished file counts, so interrupted runs resume cleanly.
+    _save(out_path, ids, lats, lons, chunks, encoder.name)
+    progress.unlink(missing_ok=True)
+    return len(ids)
+
+
+def _save(path: Path, ids, lats, lons, chunks, backbone: str) -> None:
     write_safely(
-        out_path,
+        path,
         lambda file: np.savez(
             file,
             ids=np.array(ids),
             lat=np.array(lats, dtype=np.float32),
             lon=np.array(lons, dtype=np.float32),
             embeddings=np.concatenate(chunks),
-            backbone=np.array(encoder.name),
+            backbone=np.array(backbone),
         ),
     )
-    return len(ids)
 
 
 def osv5m_embedding_path(out_dir: Path, split: str, shard: int) -> Path:

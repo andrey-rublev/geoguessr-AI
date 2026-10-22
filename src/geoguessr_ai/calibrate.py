@@ -71,7 +71,9 @@ def ensure_layout(
             return layout
         else:
             print("The game isn't where it was last time: looking for it.")
-    kind = "join a multiplayer room" if party else "start a Singleplayer game"
+    kind = "start a Singleplayer game"
+    if party:
+        kind = "join a multiplayer room, and its host starts one"
     said = None
     while True:
         try:

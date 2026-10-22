@@ -528,6 +528,20 @@ def test_dry_run_plays_one_round_without_continuing():
     assert LAYOUT.continue_button not in controls.clicks
 
 
+def test_says_why_it_stopped_when_the_map_cant_be_read(capsys):
+    controls = FakeControls()
+    bot = OpenGuessrBot(LAYOUT, FakePredictor(), BotSettings(rounds=2), FakeScreen(), controls)
+
+    def unreadable(lat, lon):
+        raise MapNotFound("Couldn't read the map: no coastline found")
+
+    bot.guess_map.place = unreadable
+    bot.play()
+
+    assert "Stopped: Couldn't read the map" in capsys.readouterr().out
+    assert LAYOUT.guess_button not in controls.clicks
+
+
 PARTY = Layout(
     view=LAYOUT.view,
     map_hover=LAYOUT.map_hover,

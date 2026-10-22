@@ -304,7 +304,7 @@ class OpenGuessrBot:
             print("Stopped by user.")
         except self.controls.failsafe:
             print("Stopped: the mouse hit a screen corner.")
-        except ContinueBlocked as blocked:
+        except (ContinueBlocked, MapNotFound) as blocked:  # a room plays on past a lost map
             print(f"Stopped: {blocked}")
 
     def play_round(self, number: int, run_dir: Path | None = None) -> Placement:

@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import torch
 from PIL import Image
+from test_buttons import draw_button
 from test_game import (
     LAYOUT,
     PARTY,
@@ -18,7 +19,6 @@ from test_game import (
     PartyReader,
     TurningStreetView,
 )
-from test_buttons import draw_button
 from test_mapcal import render_map
 
 from geoguessr_ai import calibrate, cli, controls, screen, windows

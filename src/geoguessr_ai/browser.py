@@ -12,6 +12,7 @@ the browser, and every call is handed to it.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import queue
 import threading
@@ -24,7 +25,7 @@ from typing import Any
 from PIL import Image
 
 from .config import Point, Region
-from .controls import Controls
+from .controls import Controls, StopRequested
 
 GAME_URL = "https://openguessr.com/"
 PROFILE_DIR = Path(".browser-profile")
@@ -100,14 +101,22 @@ class BrowserSession:
                 done.set_result(work(page))
             except Exception as error:  # noqa: BLE001 - raised again in the calling thread
                 done.set_exception(error)
-        context.close()
+        with contextlib.suppress(Exception):  # closed already, if its window was
+            context.close()
         playwright.stop()
 
     def call(self, work: Callable[[Any], Any]) -> Any:
-        """Run ``work(page)`` on the browser's thread and return what it returns."""
+        """Run ``work(page)`` on the browser's thread and return what it returns. Once its
+        window has been closed, raises :class:`.controls.StopRequested`: closing it stops the
+        bot, as the stop key does."""
         done: Future = Future()
         self._work.put((work, done))
-        return done.result()
+        try:
+            return done.result()
+        except Exception as error:
+            if type(error).__name__ == "TargetClosedError":  # Playwright's, raised on its thread
+                raise StopRequested("the bot's browser was closed") from None
+            raise
 
     def close(self) -> None:
         self._work.put(None)

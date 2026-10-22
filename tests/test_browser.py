@@ -1,10 +1,13 @@
 import io
+import queue
+import threading
 
 import pytest
 from PIL import Image
 
-from geoguessr_ai.browser import WHEEL_DELTA, BrowserControls, BrowserScreen
+from geoguessr_ai.browser import WHEEL_DELTA, BrowserControls, BrowserScreen, BrowserSession
 from geoguessr_ai.config import Point, Region
+from geoguessr_ai.controls import StopRequested
 
 
 class FakePage:
@@ -108,3 +111,32 @@ def test_dry_run_clicks_and_presses_nothing(session):
     finally:
         controls.close()
     assert [d[0] for d in session.page.done] == ["move"]
+
+
+def test_closing_the_bots_browser_stops_the_bot():
+    class TargetClosedError(Exception):
+        """What Playwright raises once its window has been closed."""
+
+    session = BrowserSession.__new__(BrowserSession)  # no real browser: its thread's part below
+    session._work = queue.Queue()
+
+    def browser_thread():
+        _, done = session._work.get()
+        done.set_exception(TargetClosedError("Target page, context or browser has been closed"))
+
+    threading.Thread(target=browser_thread, daemon=True).start()
+    with pytest.raises(StopRequested, match="browser was closed"):
+        session.call(lambda page: page.screenshot())
+
+
+def test_other_browser_errors_still_show():
+    session = BrowserSession.__new__(BrowserSession)
+    session._work = queue.Queue()
+
+    def browser_thread():
+        _, done = session._work.get()
+        done.set_exception(ValueError("something else went wrong"))
+
+    threading.Thread(target=browser_thread, daemon=True).start()
+    with pytest.raises(ValueError):
+        session.call(lambda page: page.screenshot())

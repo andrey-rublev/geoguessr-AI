@@ -19,7 +19,7 @@ The last line builds the first model: it downloads about 5.4 GB of street photos
 
 | Command | What it does |
 | --- | --- |
-| `geoguessr-ai play` | Plays a Singleplayer game on its own (5 rounds, or `--rounds 10`) |
+| `geoguessr-ai play` | Plays a Singleplayer game on its own (5 rounds, or `--rounds 10`), saying how far off each guess was |
 | `geoguessr-ai friends` | Plays in a multiplayer room until you stop it |
 | `geoguessr-ai train` | Learns from the rounds it played, and keeps the new model only if it scores better |
 | `geoguessr-ai train-details` | Tries to learn the small things players use (bollards, poles, road lines, kerbs) from close-ups of its rounds, kept only if they add points. On 1,800 rounds they didn't yet |
@@ -33,7 +33,9 @@ The bot finds the game by itself, on any screen, and switches to its tab if anot
 
 **With friends:** the bot needs a browser of its own. A friend hosts the room on their own device, and `friends --join EW2-78U` (with the room's code) opens the bot's browser and joins it. Or run `friends --browser` and join it there yourself. The bot plays each round the host starts, keeps to the timer, and waits for the host to press Continue.
 
-**Training:** `friends` and `play --learn` save each round's answer to `runs/`, and `train` learns from them. Once you have a few thousand rounds, `train --backbone geolocal/StreetCLIP` switches to StreetCLIP, a sharper image model, if it scores better. It needs a GPU to be quick: on an Intel one it runs through OpenVINO.
+After each round the bot reads the answer and says how far off it was and whether it got the country right. When it stops, it gives the average distance and how often the country was right. `--no-answers` skips this, which is quicker.
+
+**Training:** `play` and `friends` save each round's answer to `runs/`, and `train` learns from them. Once you have a few thousand rounds, `train --backbone geolocal/StreetCLIP` switches to StreetCLIP, a sharper image model, if it scores better. It needs a GPU to be quick: on an Intel one it runs through OpenVINO.
 
 **Tips:**
 - `--dry-run` checks that the bot can see the game, without clicking.

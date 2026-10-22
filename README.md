@@ -31,7 +31,7 @@ Add `--browser` to play in a Chrome window of the bot's own instead, so your mou
 
 The bot finds the game by itself, on any screen, and switches to its tab if another tab is showing. When the game has moved, for example after you dock your laptop, it finds it again. To check what it found, open `calibration_preview.png`.
 
-**With friends:** the bot needs a browser of its own: `friends --browser` opens one. A friend hosts the room on their own device, and you join it in the bot's browser. The bot plays each round the host starts, keeps to the timer, and waits for the host to press Continue.
+**With friends:** the bot needs a browser of its own. A friend hosts the room on their own device, and `friends --join EW2-78U` (with the room's code) opens the bot's browser and joins it. Or run `friends --browser` and join it there yourself. The bot plays each round the host starts, keeps to the timer, and waits for the host to press Continue.
 
 **Training:** `friends` and `play --learn` save each round's answer to `runs/`, and `train` learns from them. Once you have a few thousand rounds, `train --backbone geolocal/StreetCLIP` switches to StreetCLIP, a sharper image model, if it scores better. It needs a GPU to be quick: on an Intel one it runs through OpenVINO.
 

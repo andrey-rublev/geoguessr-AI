@@ -210,6 +210,17 @@ def test_reads_the_answer_among_other_players_pins():
     assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 20
 
 
+def test_among_other_players_waits_for_a_pin_to_show_before_telling_ours():
+    tokyo = (35.68, 139.69)  # our pin off the map at first: no marker to measure their size by
+    screen = FakeResultScreen(fitted(3_072), pin=tokyo)
+    reader = ResultReader(screen, FakeControls(screen), REGION, max_zoom_outs=2)
+
+    reading = reader.read(*tokyo, crowded=True)  # zoomed out, Tokyo comes into view
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 50
+
+
 def test_stops_reading_once_the_result_map_goes():
     screen = FakeResultScreen(fitted(24_576))
     controls = FakeControls(screen)

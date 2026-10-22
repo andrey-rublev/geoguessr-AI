@@ -346,7 +346,7 @@ class ResultReader:
             if projection and len(levels) == 1 and self.scale:
                 if abs(_zoom_off(projection.world_px, self.scale)) > WHOLE_ZOOM_SLACK:
                     projection = None
-            if projection and crowded:
+            if projection and crowded and self.scale:  # no pin seen yet, none to tell ours by
                 levels[-1].pin = self._our_pin(projection, levels[-1], placed_lat, placed_lon)
                 self._trace_back(levels, projection.to_pixel(placed_lat, placed_lon, rgb.shape[1]))
             if projection and self._shows_our_pin(projection, levels[-1], placed_lat, placed_lon):

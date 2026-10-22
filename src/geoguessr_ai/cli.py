@@ -503,7 +503,9 @@ def _bot_settings(args: argparse.Namespace, **settings):
 def cmd_play(args: argparse.Namespace) -> None:
     if args.learn and args.no_save:
         raise SystemExit("--learn saves every round to learn from: leave out --no-save")
-    _run_bot(args, _bot_settings(args, record_answers=args.learn))
+    if args.learn and args.no_answers:
+        raise SystemExit("--learn reads every round's answer: leave out --no-answers")
+    _run_bot(args, _bot_settings(args, record_answers=not args.no_answers))
 
 
 def cmd_friends(args: argparse.Namespace) -> None:
@@ -639,6 +641,12 @@ def build_parser() -> argparse.ArgumentParser:
             help=f"where each round is saved (default {DEFAULT_RUNS})",
         )
         p.add_argument("--no-save", "--no-debug", action="store_true", help="don't save rounds")
+        p.add_argument(
+            "--no-answers",
+            action="store_true",
+            help="don't read the answer after each round (faster, but no distances, nor rounds "
+            "to learn from)",
+        )
         p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
         p.add_argument(
             "--layout",
@@ -657,13 +665,9 @@ def build_parser() -> argparse.ArgumentParser:
         "play",
         cmd_play,
         "Play OpenGuessr on your own.",
-        "With --learn it reads every round's answer and saves it, for train.",
+        "It reads every round's answer, says how far off each guess was, and saves it for train.",
     )
-    p.add_argument(
-        "--learn",
-        action="store_true",
-        help="read every round's answer and save it, so `train` can learn from it (slower)",
-    )
+    p.add_argument("--learn", action="store_true", help=argparse.SUPPRESS)  # it always does now
     add_game_options(p, DEFAULT_LAYOUT_PATH, rounds=5)
 
     p = add(
@@ -681,7 +685,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="seconds a round lasts, assumed if its timer can't be read (default: no limit)",
     )
-    p.add_argument("--no-answers", action="store_true", help="don't read the result screens")
     p.add_argument(
         "--join",
         metavar="CODE",

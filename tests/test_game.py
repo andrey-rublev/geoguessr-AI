@@ -230,6 +230,25 @@ def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monke
     assert Image.open(folder / "view_0.jpg").size == (1600, 700)
 
 
+def test_says_how_far_off_each_guess_was_and_how_they_went_all_told(monkeypatch, capsys):
+    answers = iter([(6.52, 3.38), (6.37, 2.39)])  # Lagos, then Cotonou, across the border
+
+    class Reader(FakeReader):
+        def read(self, lat, lon):
+            return Reading(Answer(*next(answers), zoom_outs=0))
+
+    monkeypatch.setattr(game_module, "ResultReader", Reader)
+    settings = BotSettings(rounds=2, debug_dir=None)
+
+    OpenGuessrBot(LAYOUT, FakePredictor(), settings, FakeScreen(), FakeControls()).play()
+
+    out = capsys.readouterr().out
+    assert "in NG: our pin was 7 km away, the right country" in out
+    assert "in BJ: our pin was 111 km away, guessed NG" in out
+    assert "2 rounds with the answer read: on average 59 km off" in out
+    assert "the right country in 50% (1 of 2)" in out
+
+
 def test_turns_north_east_south_and_west_with_the_compass():
     street_view = TurningStreetView()
     settings = BotSettings(rounds=1, views=4, record_answers=False, debug_dir=None)

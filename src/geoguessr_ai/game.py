@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import statistics
 import traceback
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -28,6 +29,7 @@ from .config import Layout, Point, Region
 from .controls import StopRequested
 from .files import write_safely
 from .geo import haversine_km
+from .knowledge.countries import country_at
 from .knowledge.evidence import Evidence
 from .knowledge.sun import clear_sky, find_sun, latitude_likelihood
 from .knowledge.text import TextLine, text_clues
@@ -280,6 +282,9 @@ class OpenGuessrBot:
         """In a multiplayer room, the time this round had when the bot began looking."""
         self.took = dict(STEP_SECONDS, guess=GUESS_SECONDS)
         """How long each step of a multiplayer round has taken, lately."""
+        self.results: list[tuple[float, bool]] = []
+        """For each round whose answer was read: how far off the guess was, in km, and whether
+        it was in the right country."""
         if settings.party:
             self.clock = self._round_clock()
             self.watch = self._guess_watch()
@@ -306,6 +311,8 @@ class OpenGuessrBot:
             print("Stopped: the mouse hit a screen corner.")
         except (ContinueBlocked, MapNotFound) as blocked:  # a room plays on past a lost map
             print(f"Stopped: {blocked}")
+        finally:
+            self._sum_up()
 
     def play_round(self, number: int, run_dir: Path | None = None) -> Placement:
         print(f"\nRound {number}")
@@ -917,14 +924,33 @@ class OpenGuessrBot:
             self.controls.sleep(0.5)
             waited += 0.5
 
-    @staticmethod
-    def _report(reading: Reading, placed: tuple[float, float]) -> None:
+    def _report(self, reading: Reading, placed: tuple[float, float]) -> None:
+        """Say how far off the guess was, and whether in the right country, and keep it."""
         if reading.answer is None:
             print(f"  couldn't read the answer: {reading.problem}")
             return
         answer = reading.answer
         km = haversine_km(*placed, answer.lat, answer.lon)
-        print(f"  answer {answer.lat:.3f}, {answer.lon:.3f}: our pin was {km:,.0f} km away")
+        guessed, really = country_at(*placed), country_at(answer.lat, answer.lon)
+        self.results.append((km, guessed == really))
+        country = "the right country" if guessed == really else f"guessed {guessed}"
+        print(
+            f"  answer {answer.lat:.3f}, {answer.lon:.3f} in {really}: our pin was {km:,.0f} km "
+            f"away, {country}"
+        )
+
+    def _sum_up(self) -> None:
+        """How the rounds whose answers were read went, all told: said when the bot stops."""
+        if not self.results:
+            return
+        km = [distance for distance, _ in self.results]
+        right = sum(right for _, right in self.results)
+        rounds = len(self.results)
+        print(
+            f"\n{rounds} round{'s' * (rounds != 1)} with the answer read: on average "
+            f"{statistics.mean(km):,.0f} km off (half within {statistics.median(km):,.0f} km), "
+            f"the right country in {right / rounds:.0%} ({right} of {rounds})"
+        )
 
     @staticmethod
     def _save_round(

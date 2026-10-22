@@ -381,7 +381,7 @@ def desk(tmp_path, monkeypatch):
     return play
 
 
-def test_play_plays_solo_games_and_saves_no_answers(desk, tmp_path):
+def test_play_reads_every_answer_and_says_how_it_went(desk, tmp_path, capsys):
     layout = tmp_path / "layout.json"
     LAYOUT.save(layout)
     street_view = TurningStreetView()
@@ -391,7 +391,23 @@ def test_play_plays_solo_games_and_saves_no_answers(desk, tmp_path):
     assert desk.predictor.view_counts == [4, 4]
     assert street_view.clicks.count(LAYOUT.continue_button) == 2
     saved = [json.loads(p.read_text()) for p in tmp_path.glob("runs/*/round_*/round.json")]
+    assert [round_info["answer"]["lat"] for round_info in saved] == [6.52, 6.52]
+    out = capsys.readouterr().out
+    assert "km away" in out and "2 rounds with the answer read" in out
+
+
+def test_play_with_no_answers_reads_and_saves_none(desk, tmp_path, capsys):
+    layout = tmp_path / "layout.json"
+    LAYOUT.save(layout)
+    argv = ["play", "--rounds", "2", "--layout", str(layout), "--no-look-up", "--no-answers"]
+
+    desk(argv, TurningStreetView())
+
+    saved = [json.loads(p.read_text()) for p in tmp_path.glob("runs/*/round_*/round.json")]
     assert len(saved) == 2 and all("answer" not in round_info for round_info in saved)
+    assert "with the answer read" not in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="--no-answers"):
+        desk(["play", "--learn", "--no-answers", "--layout", str(layout)], TurningStreetView())
 
 
 def test_play_learn_saves_every_answer_for_train(desk, tmp_path, capsys):

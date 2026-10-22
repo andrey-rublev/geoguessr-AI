@@ -156,7 +156,11 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
         "sokak,sokağı,caddesi,cadde,mahallesi,bulvarı,yolu,çıkış,yasak,eczane,satılık,kiralık",
     ),
     "sv": ("Swedish", "å", "gatan,vägen,gata,väg,torget,gränd,allé,utfart,förbjudet,apotek,säljes"),
-    "no": ("Norwegian", "åæø", "gata,veien,vegen,plass,torget,allé,utkjørsel,forbudt,apotek,selges"),
+    "no": (
+        "Norwegian",
+        "åæø",
+        "gata,veien,vegen,plass,torget,allé,utkjørsel,forbudt,apotek,selges",
+    ),
     "da": ("Danish", "åæø", "gade,vej,allé,plads,stræde,udkørsel,forbudt,apotek,sælges"),
     "fi": ("Finnish", "", "katu,kuja,polku,tori,liittymä,kielletty,apteekki,myydään"),
     "et": ("Estonian", "õ", "tänav,maantee,puiestee,väljak,väljasõit,keelatud,apteek,müüa"),

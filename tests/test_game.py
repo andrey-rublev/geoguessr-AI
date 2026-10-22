@@ -660,7 +660,9 @@ def party(monkeypatch):
         monkeypatch.setattr(game_module, "ResultReader", PartyReader)
         rounds = room.rounds_left  # all the host will start
         settings = {"party": True, "rounds": rounds, "look_up": False, "debug_dir": None} | settings
-        return OpenGuessrBot(PARTY, predictor or FakePredictor(), BotSettings(**settings), room, room)
+        return OpenGuessrBot(
+            PARTY, predictor or FakePredictor(), BotSettings(**settings), room, room
+        )
 
     return bot_in
 

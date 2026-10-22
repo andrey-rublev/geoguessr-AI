@@ -31,6 +31,7 @@ from .knowledge.evidence import Evidence
 from .knowledge.sun import clear_sky, find_sun, latitude_likelihood
 from .knowledge.text import TextLine, text_clues
 from .locate import find_continue
+from .mapcal import MapNotFound
 from .minimap import GuessMap, Placement
 from .model.predictor import Guess
 from .ocr import SignReader
@@ -93,7 +94,8 @@ class ContinueBlocked(Exception):
 
 
 class RoundOver(Exception):
-    """A multiplayer round ended before the bot guessed: its time ran out."""
+    """A multiplayer round ended before the bot guessed, as when its time ran out, or it can't
+    be guessed in, as when the map can't be read: the bot waits for the next."""
 
 
 class Predictor(Protocol):
@@ -356,7 +358,12 @@ class OpenGuessrBot:
 
         self._check_round()
         with self._timing("guess"):
-            placement = self.guess_map.place(guess.lat, guess.lon)
+            try:
+                placement = self.guess_map.place(guess.lat, guess.lon)
+            except MapNotFound as lost:  # in a room, the next round may go better
+                if not s.party:
+                    raise
+                raise RoundOver(f"no guess this round: {lost}") from lost
             if placement.confirmed is False:
                 print("  couldn't see the pin where it was clicked; guessing anyway")
             placed = (placement.lat, placement.lon)
@@ -407,8 +414,8 @@ class OpenGuessrBot:
                 played += 1
                 try:
                     self.play_round(played, run_dir)
-                except RoundOver:
-                    print("  the round ended before the bot could guess")
+                except RoundOver as over:
+                    print(f"  {str(over) or 'the round ended before the bot could guess'}")
                     self._wait_for(lambda: not self._round_on())
                 if s.dry_run:
                     break

@@ -16,7 +16,7 @@ from geoguessr_ai.clock import NOTICE_WIDTH, notice_region, timer_region
 from geoguessr_ai.config import Layout, Point, Region
 from geoguessr_ai.game import BotSettings, OpenGuessrBot
 from geoguessr_ai.knowledge.text import TextLine
-from geoguessr_ai.mapcal import MapProjection
+from geoguessr_ai.mapcal import MapNotFound, MapProjection
 from geoguessr_ai.minimap import Placement
 from geoguessr_ai.model.predictor import Guess
 from geoguessr_ai.ocr import Word
@@ -764,6 +764,24 @@ def test_gives_up_a_round_whose_time_runs_out_and_plays_the_next(party, capsys):
     assert room.locked[0] is None and "ended before the bot could guess" in capsys.readouterr().out
     assert PARTY.guess_button not in room.idle_clicks
     assert len(room.locked) == 2
+
+
+def test_skips_a_round_whose_map_cant_be_read_and_plays_the_next(party, capsys):
+    room = MultiplayerRoom(rounds=2, length=60.0, others_guess=90.0)
+    bot = party(room)
+    place, tries = bot.guess_map.place, []
+
+    def unreadable_at_first(lat, lon):
+        tries.append((lat, lon))
+        if len(tries) == 1:  # something covered the map
+            raise MapNotFound("Couldn't read the map: match score 0.31 is too low")
+        return place(lat, lon)
+
+    bot.guess_map.place = unreadable_at_first
+    bot.play()
+
+    assert room.locked[0] is None and room.locked[1] is not None  # played on
+    assert "no guess this round: Couldn't read the map" in capsys.readouterr().out
 
 
 def test_guesses_when_the_compass_hides_but_the_clock_leaves_time(party, capsys):

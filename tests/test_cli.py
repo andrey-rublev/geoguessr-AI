@@ -21,7 +21,7 @@ from test_game import (
 )
 from test_mapcal import render_map
 
-from geoguessr_ai import calibrate, cli, controls, screen, windows
+from geoguessr_ai import calibrate, cli, controls, join, screen, windows
 from geoguessr_ai import game as game_module
 from geoguessr_ai.buttons import HALF_HEIGHT, HALF_WIDTH
 from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
@@ -111,6 +111,32 @@ def test_can_play_in_a_browser_of_its_own_with_a_layout_of_its_own():
     assert parser.parse_args(["calibrate", "--browser"]).window == (1600, 900)
     assert cli._browser_layout(Path("layout-party.json"), True).name == "layout-party-browser.json"
     assert cli._browser_layout(Path("layout.json"), False).name == "layout.json"
+
+
+def test_friends_joins_a_room_by_its_code_in_a_browser_of_its_own(monkeypatch):
+    ran = []
+    monkeypatch.setattr(cli, "_run_bot", lambda args, settings: ran.append(args))
+
+    main(["friends", "--join", "ew2-78u"])
+
+    assert ran[0].join == "EW278U" and ran[0].browser
+    with pytest.raises(SystemExit, match="like EW2-78U"):
+        main(["friends", "--join", "EW2-78"])
+
+
+def test_finding_the_game_joins_the_room_first(monkeypatch, capsys):
+    done = []
+    monkeypatch.setattr(join, "join_room", lambda *args: done.append(("join", args[-1])) or False)
+    monkeypatch.setattr(calibrate, "ensure_layout", lambda *a, **k: done.append(("find",)) or PARTY)
+
+    class Waiting:
+        def sleep(self, seconds):
+            pass
+
+    found = cli._find_game(None, Waiting(), Path("x.json"), True, False, None, 0.0, True, "EW278U")
+
+    assert found == PARTY and done == [("join", "EW278U"), ("find",)]
+    assert "Join room EW278U yourself" in capsys.readouterr().out  # as it couldn't
 
 
 def test_friends_plays_until_stopped_in_its_own_layout():

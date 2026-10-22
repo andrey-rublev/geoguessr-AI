@@ -61,17 +61,29 @@ def _read_words():
 
 
 def _find_game(
-    screen, controls, path: Path, party: bool, again: bool, read_words, delay: float, own=False
+    screen,
+    controls,
+    path: Path,
+    party: bool,
+    again: bool,
+    read_words,
+    delay: float,
+    own=False,
+    join: str | None = None,
 ):
     """After ``delay`` seconds, the game's layout: as saved at ``path`` if the game still shows
     there, else found on screen and saved. None if the bot was stopped meanwhile. ``own``: in a
-    browser of the bot's own, which has no window to bring forward."""
+    browser of the bot's own, which has no window to bring forward. ``join``: the code of a room
+    to join first, from OpenGuessr's multiplayer page."""
     from .calibrate import WrongGame, ensure_layout
     from .controls import StopRequested
+    from .join import join_room
     from .windows import bring_forward
 
     try:
         controls.sleep(delay)
+        if join and not join_room(screen, controls, read_words, join):
+            print(f"Join room {join} yourself, in the bot's browser.")
         return ensure_layout(
             screen,
             controls,
@@ -415,6 +427,7 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
             read_words,
             0.0 if args.browser else args.start_delay,
             args.browser,
+            getattr(args, "join", None),
         )
         if layout is None:
             return
@@ -442,13 +455,18 @@ def _devices(args: argparse.Namespace, dry_run: bool = False):
         with Screen() as screen, Controls(dry_run=dry_run, stop_key=args.stop_key) as controls:
             yield screen, controls
         return
-    from .browser import BrowserControls, BrowserScreen, BrowserSession
+    from .browser import GAME_URL, BrowserControls, BrowserScreen, BrowserSession
+    from .join import ROOMS_URL
 
-    session = BrowserSession(size=args.window)
-    print(
-        "Opened a browser of the bot's own. In it, start a Singleplayer game, or join the room; "
-        "the bot finds the game and plays, leaving your mouse and screen free."
-    )
+    if join := getattr(args, "join", None):
+        session = BrowserSession(url=ROOMS_URL, size=args.window)
+        print(f"Opened a browser of the bot's own, to join room {join} in it.")
+    else:
+        session = BrowserSession(url=GAME_URL, size=args.window)
+        print(
+            "Opened a browser of the bot's own. In it, start a Singleplayer game, or join the "
+            "room; the bot finds the game and plays, leaving your mouse and screen free."
+        )
     try:
         with BrowserControls(session, dry_run=dry_run, stop_key=args.stop_key) as controls:
             yield BrowserScreen(session), controls
@@ -489,6 +507,14 @@ def cmd_play(args: argparse.Namespace) -> None:
 
 
 def cmd_friends(args: argparse.Namespace) -> None:
+    if args.join:
+        from .join import room_code
+
+        try:
+            args.join = room_code(args.join)
+        except ValueError as wrong:
+            raise SystemExit(str(wrong)) from None
+        args.browser = True  # it joins in a browser of its own
     settings = _bot_settings(
         args,
         party=True,
@@ -656,6 +682,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds a round lasts, assumed if its timer can't be read (default: no limit)",
     )
     p.add_argument("--no-answers", action="store_true", help="don't read the result screens")
+    p.add_argument(
+        "--join",
+        metavar="CODE",
+        help="join the room with this code by itself, in a browser of its own (as --browser)",
+    )
 
     p = add(
         "train",

@@ -1,8 +1,14 @@
 import numpy as np
+import pytest
 
 from geoguessr_ai.geo import haversine_km
 from geoguessr_ai.model.geocells import GeoCells
-from geoguessr_ai.model.neighbours import Neighbours, load_neighbours
+from geoguessr_ai.model.neighbours import (
+    VOTE_FLOOR,
+    VOTE_STRENGTH,
+    Neighbours,
+    load_neighbours,
+)
 from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings
 
 PARIS, TOKYO = (48.86, 2.35), (35.68, 139.69)
@@ -72,3 +78,19 @@ def test_loads_nothing_seen_through_another_image_model(tmp_path):
 def test_says_nothing_for_a_cell_beyond_the_references():
     refs = Neighbours.build(LOOKS[:1], [NANTES[0]], [NANTES[1]], CELLS)
     assert refs.near(LOOKS[0], cell=5) is None
+
+
+def test_the_references_most_alike_vote_for_their_cells():
+    refs = Neighbours.build(LOOKS[:2], [NANTES[0], TOKYO[0]], [NANTES[1], TOKYO[1]], CELLS)
+
+    votes = refs.vote(LOOKS[1], n_cells=3)  # looks like Tokyo; a third cell has no references
+
+    assert votes[1] > 9 * votes[0]
+    assert votes[2] == pytest.approx(VOTE_FLOOR**VOTE_STRENGTH)  # nothing ruled out
+
+
+def test_votes_from_16_bit_references():
+    refs = Neighbours.build(
+        LOOKS[:2].astype(np.float16), [NANTES[0], TOKYO[0]], [NANTES[1], TOKYO[1]], CELLS
+    )
+    assert np.argmax(refs.vote(LOOKS[0], n_cells=2)) == 0

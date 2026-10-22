@@ -207,3 +207,34 @@ def test_places_the_guess_by_the_photos_that_look_most_alike(tmp_path, monkeypat
     assert len(model.neighbours) == 2
     assert (guess.lat, guess.lon) == pytest.approx(yokohama, abs=0.01)
     assert guess.top_cells[0][:2] == pytest.approx(tuple(CENTROIDS[1]))  # the cell, as chosen
+
+
+def test_photos_that_look_alike_vote_for_their_cell(tmp_path, monkeypatch):
+    head = GeoHead(embed_dim=8, n_cells=3, hidden=4)
+    with torch.no_grad():
+        for p in head.parameters():
+            p.zero_()
+        head.net[-1].bias.copy_(torch.tensor([1.0, 1.2, 0.0]))  # a slight lean to Tokyo
+    path = tmp_path / "model.pt"
+    Checkpoint(head, GeoCells(CENTROIDS), "fake/backbone").save(path)
+    monkeypatch.setattr(predictor_module, "ImageEncoder", FakeEncoder)
+    folder = tmp_path / "embeddings" / "fake__backbone"
+    folder.mkdir(parents=True)
+    alike, unlike = np.ones(8) / np.sqrt(8), np.eye(8)[0]  # FakeEncoder sees every view as alike
+    versailles, yokohama = (48.80, 2.13), (35.44, 139.64)
+    np.savez(
+        folder / "osv5m-train-00.npz",
+        ids=np.array(["a", "b"]),
+        lat=np.array([versailles[0], yokohama[0]], np.float32),
+        lon=np.array([versailles[1], yokohama[1]], np.float32),
+        embeddings=np.stack([alike, unlike]).astype(np.float16),
+        backbone=np.array("fake/backbone"),
+    )
+    view = [Image.new("RGB", (400, 400))]
+
+    alone = predictor_module.GeoPredictor(path).predict(view)
+    voted = predictor_module.GeoPredictor(path, embeddings=tmp_path / "embeddings").predict(view)
+
+    assert (alone.lat, alone.lon) == pytest.approx(tuple(CENTROIDS[1]))
+    assert (voted.lat, voted.lon) == pytest.approx(versailles, abs=0.01)
+    assert voted.countries[0][0] == "FR"

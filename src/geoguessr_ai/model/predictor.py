@@ -44,17 +44,22 @@ def guess_from_embeddings(
     game_prior_strength: float = DEFAULT_GAME_PRIOR_STRENGTH,
     evidence: Evidence | None = None,
     coverage_strength: float = DEFAULT_COVERAGE_STRENGTH,
+    votes: np.ndarray | None = None,
 ) -> Guess:
     """Guess one location from the embeddings of every crop of every view of a place.
 
     ``evidence`` (clues like the writing on signs) and Street View coverage, at
-    ``coverage_strength`` (0 = ignore it), reweigh the model's geocells before choosing.
+    ``coverage_strength`` (0 = ignore it), reweigh the model's geocells before choosing, and so
+    do ``votes``, a weight for each cell from the look-alike photos (see
+    :meth:`.Neighbours.vote`).
     """
     if isinstance(model, Checkpoint):
         model = Ensemble([model])
     probs = model.belief(model.log_probs(embeddings), prior_strength, game_prior_strength)
     cells = model.cells
     probs = probs * cell_weights(cells.centroids, evidence, coverage_strength)
+    if votes is not None:
+        probs = probs * votes
     probs /= probs.sum()
 
     lat, lon, expected = cells.best_guess(probs)
@@ -100,7 +105,8 @@ class GeoPredictor:
         self._details: tuple[tuple[int, ...], np.ndarray] | None = None
         """The last views' close-ups' say, kept: walking on, the same first views come again."""
         self.neighbours: Neighbours | None = None
-        """Photos and rounds to place the guess within its cell by (see :mod:`.neighbours`)."""
+        """Photos and rounds to choose the cell by, and the guess within it (see
+        :mod:`.neighbours`)."""
         if embeddings is not None:
             folder = Path(embeddings) / self.model.backbone.replace("/", "__")
             self.neighbours = load_neighbours(folder, self.model.backbone, self.model.cells)
@@ -113,6 +119,10 @@ class GeoPredictor:
         if self.detail is not None:
             evidence = self._with_details(images[:LOOKS], evidence)
         embedded = self.encoder.encode(crops)
+        alike = embedded.numpy().mean(axis=0)
+        votes = None
+        if self.neighbours is not None:
+            votes = self.neighbours.vote(alike, len(self.model.cells))
         guess = guess_from_embeddings(
             self.model,
             embedded,
@@ -120,11 +130,12 @@ class GeoPredictor:
             self.game_prior_strength,
             evidence,
             self.coverage_strength,
+            votes,
         )
         if self.neighbours is None:
             return guess
         cell = int(self.model.cells.assign(guess.lat, guess.lon))
-        place = self.neighbours.near(embedded.numpy().mean(axis=0), cell)
+        place = self.neighbours.near(alike, cell)
         return guess if place is None else replace(guess, lat=place[0], lon=place[1])
 
     def _with_details(self, views: Sequence[Image.Image], evidence: Evidence | None) -> Evidence:

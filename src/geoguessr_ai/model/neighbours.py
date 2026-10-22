@@ -7,6 +7,12 @@ cell that look most like them vote for where in it the answer is, the closer the
 (a softmax over their similarity at :data:`TEMPERATURE`). On 1,052 held-out rounds, with
 StreetCLIP and 250,000 photos, that added about 6 OpenGuessr points a round (give or take 2),
 on both halves of them; with plain CLIP it had added nothing.
+
+They help choose the cell too: the :data:`VOTERS` references that look most like the views, from
+anywhere, vote for the cells they lie in, and each cell's probability is weighed by its share of
+the vote (see :meth:`Neighbours.vote`). On the same rounds that added about 14 points a round
+more: settings chosen on half of them scored that on the other half, over 2,000 such splits, and
+lost points in 11% of them. Every setting tried added 10 to 12 on average.
 """
 
 from __future__ import annotations
@@ -15,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from ..geo import from_unit_vectors, to_unit_vectors
 from .geocells import GeoCells
@@ -22,6 +29,11 @@ from .rounds import ROUNDS_FILE, RoundEmbeddings
 
 NEIGHBOURS = 25
 TEMPERATURE = 0.02
+VOTERS = 200
+VOTE_TEMPERATURE = 0.05
+VOTE_FLOOR = 0.01
+"""What a cell with no say in the vote keeps of it, so a vote never rules a cell out."""
+VOTE_STRENGTH = 0.5
 
 
 @dataclass
@@ -51,6 +63,18 @@ class Neighbours:
             for i in range(0, len(lat), 20_000)
         ]
         return cls(np.asarray(embeddings), lat, lon, np.concatenate(found))
+
+    def vote(self, query: np.ndarray, n_cells: int) -> np.ndarray:
+        """A weight for each of ``n_cells`` cells: the share of the :data:`VOTERS` references most
+        like ``query`` (an embedding) that lie in it, the closer the look the more, plus
+        :data:`VOTE_FLOOR`, to the power :data:`VOTE_STRENGTH`."""
+        query = np.asarray(query, np.float32) / np.linalg.norm(query)
+        embeddings = torch.from_numpy(self.embeddings)
+        sim = (embeddings @ torch.from_numpy(query).to(embeddings.dtype)).float().numpy()
+        take = np.argpartition(-sim, min(VOTERS, len(sim)) - 1)[:VOTERS]
+        weight = np.exp((sim[take] - sim[take].max()) / VOTE_TEMPERATURE)
+        share = np.bincount(self.cell[take], weights=weight, minlength=n_cells)[:n_cells]
+        return (share / share.sum() + VOTE_FLOOR) ** VOTE_STRENGTH
 
     def near(self, query: np.ndarray, cell: int) -> tuple[float, float] | None:
         """Where in ``cell`` the references most like ``query`` (an embedding) were taken; None

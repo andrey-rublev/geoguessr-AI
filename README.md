@@ -17,30 +17,39 @@ The last line builds the first model: it downloads about 5.4 GB of street photos
 
 ## Use
 
-| Command | What it does |
-| --- | --- |
-| `geoguessr-ai play` | Plays a Singleplayer game on its own (5 rounds, or `--rounds 10`), saying how far off each guess was |
-| `geoguessr-ai friends` | Plays in a multiplayer room until you stop it |
-| `geoguessr-ai train` | Learns from the rounds it played, and keeps the new model only if it scores better |
-| `geoguessr-ai train-details` | Tries to learn the small things players use (bollards, poles, road lines, kerbs) from close-ups of its rounds, kept only if they add points. On 1,800 rounds they didn't yet |
-
 1. Open the game in your browser: a Singleplayer game for `play`, a multiplayer room for `friends`.
 2. Run the command and let go of the mouse. Press **F8** to stop.
 
-Add `--browser` to play in a Chrome window of the bot's own instead, so your mouse and screen stay free (`pip install playwright` first). Start the game in that window.
+The bot finds the game by itself, on any screen, and switches to its tab if another tab is showing. When the game has moved, for example after you dock your laptop, it finds it again. To check what it found, open `calibration_preview.png` (`calibration_preview_party.png` for a room).
 
-The bot finds the game by itself, on any screen, and switches to its tab if another tab is showing. When the game has moved, for example after you dock your laptop, it finds it again. To check what it found, open `calibration_preview.png`.
+### Commands
 
-**With friends:** the bot needs a browser of its own. A friend hosts the room on their own device, and `friends --join EW2-78U` (with the room's code) opens the bot's browser and joins it. Or run `friends --browser` and join it there yourself. The bot plays each round the host starts, keeps to the timer, and waits for the host to press Continue.
+**`geoguessr-ai play`** plays a Singleplayer game on its own: 5 rounds, or `--rounds 10`. After each round it reads the answer and says how far off its pin was and whether it got the country right, like `our pin was 111 km away, guessed NG`. When it stops, it gives the average distance and how often the country was right. Each round is saved to `runs/` with its answer, for `train`.
 
-After each round the bot reads the answer and says how far off it was and whether it got the country right. When it stops, it gives the average distance and how often the country was right. `--no-answers` skips this, which is quicker.
+**`geoguessr-ai friends`** plays in a multiplayer room until you stop it. It plays each round the host starts, keeps to the round's timer, and waits for the host to press Continue. It needs a browser of its own, with a friend hosting the room on their device: `friends --join EW2-78U` opens one and joins the room with that code, or `friends --browser` opens one for you to join in yourself. Its rounds are saved like `play`'s.
 
-**Training:** `play` and `friends` save each round's answer to `runs/`, and `train` learns from them. Once you have a few thousand rounds, `train --backbone geolocal/StreetCLIP` switches to StreetCLIP, a sharper image model, if it scores better. It needs a GPU to be quick: on an Intel one it runs through OpenVINO.
+**`geoguessr-ai train`** learns from the street photos and the rounds in `runs/`. It builds a new model and keeps it only if it scores better than the current one on rounds held out from training, so training never makes it worse. `--shards 1 2` first downloads and adds more photos, about 2.5 GB a shard. Once you have a few thousand rounds, `--backbone geolocal/StreetCLIP` tries StreetCLIP, a sharper image model; it needs a GPU to be quick, and on an Intel one it runs through OpenVINO.
 
-**Tips:**
-- `--dry-run` checks that the bot can see the game, without clicking.
-- If it can't find the game, `geoguessr-ai calibrate --manual` lets you show it each part yourself.
-- Add `--help` to any command to see its options.
+**`geoguessr-ai train-details`** tries to learn the small things players use (bollards, poles, road lines, kerbs) from close-ups of its rounds, kept only if they add points. On 1,800 rounds they didn't yet. The first run takes a while, since it looks at every round's close-ups.
+
+**`geoguessr-ai calibrate`** finds the game on screen and saves where it is. `play` and `friends` do this by themselves, so you need it only if they can't find the game: `calibrate --manual` lets you show it each part yourself by hovering over it.
+
+**`geoguessr-ai evaluate --rounds`** scores the model on the held-out rounds, and **`geoguessr-ai predict photo.jpg`** guesses where photos were taken.
+
+Training runs cool, since running flat out has crashed a laptop: on a quarter of the CPU's threads, resting as long as it works, and pausing above 85 °C. `--threads`, `--rest` and `--max-temp` change that.
+
+### Options for `play` and `friends`
+
+| Option | What it does |
+| --- | --- |
+| `--browser` | Plays in a Chrome window of the bot's own, so your mouse and screen stay free (`pip install playwright` first). Start the game in that window |
+| `--rounds N` | How many rounds to play (`friends` plays as many as the host starts) |
+| `--dry-run` | Plays one round without clicking, to check the bot can see the game |
+| `--no-answers` | Doesn't read the answer after each round: quicker, but no distances and nothing for `train` |
+| `--no-save` | Saves nothing to `runs/` |
+| `--no-text`, `--no-walk`, `--no-look-up` | Quicker but less accurate: don't read signs, don't walk on to look again when unsure, don't look up at the sun |
+
+Add `--help` to any command to see all its options.
 
 ## How it works
 

@@ -7,7 +7,8 @@
 #
 #   wsl -d Ubuntu -e bash scripts/wsl_screen.sh friends --join EW2-78U
 #
-# Setup (once): see "Play it on the same laptop" in the README.
+# which `geoguessr-ai friends --join EW2-78U --hidden` runs from Windows. Set up once with
+# scripts/wsl_setup.sh.
 set -u
 
 SCREEN=:99
@@ -28,7 +29,8 @@ trap stop EXIT
 trap 'exit 130' INT TERM
 
 if [ ! -x "$VENV/bin/geoguessr-ai" ]; then
-    echo "No geoguessr-ai in $VENV: set it up first (README, \"Play it on the same laptop\")."
+    echo "No geoguessr-ai in $VENV: set it up first, with"
+    echo "  wsl -d Ubuntu -e bash scripts/wsl_setup.sh"
     exit 1
 fi
 

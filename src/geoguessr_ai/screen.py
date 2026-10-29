@@ -36,6 +36,20 @@ class Screen:
         self._sct = mss.MSS()
 
     def grab(self, region: Region) -> Image.Image:
+        """What ``region`` of the screen shows, black where it runs off the desktop: Windows
+        gives black there, but X11 (as on WSL's screen of the bot's own) refuses the grab."""
+        desk = self.virtual_desktop()
+        left, top = max(region.left, desk.left), max(region.top, desk.top)
+        right, bottom = min(region.right, desk.right), min(region.bottom, desk.bottom)
+        if (left, top, right, bottom) == (region.left, region.top, region.right, region.bottom):
+            return self._grab(region)
+        canvas = Image.new("RGB", (region.width, region.height))
+        if left < right and top < bottom:
+            shown = self._grab(Region(left, top, right - left, bottom - top))
+            canvas.paste(shown, (left - region.left, top - region.top))
+        return canvas
+
+    def _grab(self, region: Region) -> Image.Image:
         shot = self._sct.grab(
             {"left": region.left, "top": region.top, "width": region.width, "height": region.height}
         )

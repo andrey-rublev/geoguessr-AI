@@ -26,7 +26,7 @@ The bot finds the game by itself, on any screen, and switches to its tab if anot
 
 **`geoguessr-ai play`** plays a Singleplayer game on its own: 5 rounds, or `--rounds 10`. After each round it reads the answer and says how far off its pin was and whether it got the country right, like `our pin was 111 km away, guessed NG`. When it stops, it gives the average distance and how often the country was right. Each round is saved to `runs/` with its answer, for `train`.
 
-**`geoguessr-ai friends`** plays in a multiplayer room until you stop it. It plays each round the host starts, keeps to the round's timer, and waits for the host to press Continue. It needs a browser of its own, with a friend hosting the room on their device: `friends --join EW2-78U` opens one and joins the room with that code, or `friends --browser` opens one for you to join in yourself. `--hidden` keeps that browser off screen. OpenGuessr's bot check may stop the bot's own browser, though; if it does, use a screen of its own (below). Its rounds are saved like `play`'s.
+**`geoguessr-ai friends`** plays in a multiplayer room until you stop it. It plays each round the host starts, keeps to the round's timer, and waits for the host to press Continue. It needs a browser of its own, with a friend hosting the room on their device: `friends --join EW2-78U` opens one and joins the room with that code, or `friends --browser` opens one for you to join in yourself. OpenGuessr's bot check may stop the bot's own browser, though; if it does, use `--hidden` (below). Its rounds are saved like `play`'s.
 
 **`geoguessr-ai train`** learns from the street photos and the rounds in `runs/`. It builds a new model and keeps it only if it scores better than the current one on rounds held out from training, so training never makes it worse. `--shards 1 2` first downloads and adds more photos, about 2.5 GB a shard. Once you have a few thousand rounds, `--backbone geolocal/StreetCLIP` tries StreetCLIP, a sharper image model; it needs a GPU to be quick, and on an Intel one it runs through OpenVINO.
 
@@ -43,6 +43,7 @@ Training runs cool, since running flat out has crashed a laptop: on a quarter of
 | Option | What it does |
 | --- | --- |
 | `--browser` | Plays in a Chrome window of the bot's own, so your mouse and screen stay free (`pip install playwright` first). Start the game in that window |
+| `--hidden` | Plays on a screen of its own in WSL, so you can use the laptop meanwhile (see below) |
 | `--rounds N` | How many rounds to play (`friends` plays as many as the host starts) |
 | `--dry-run` | Plays one round without clicking, to check the bot can see the game |
 | `--no-answers` | Doesn't read the answer after each round: quicker, but no distances and nothing for `train` |
@@ -62,7 +63,7 @@ wsl -d Ubuntu -e bash scripts/wsl_setup.sh
 Then host a room in your own browser and run, with its code:
 
 ```powershell
-wsl -d Ubuntu -e bash scripts/wsl_screen.sh friends --join EW2-78U
+geoguessr-ai friends --join EW2-78U --hidden
 ```
 
 The bot joins the room on its own screen and plays each round you start. To watch it, or to do something there yourself, such as passing a check or starting a Singleplayer game for `play`, open `http://localhost:6080/vnc.html?autoconnect=1&resize=scale`. Ctrl+C stops it. With an Intel GPU, the image model runs on it from WSL too.

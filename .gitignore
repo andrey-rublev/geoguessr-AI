@@ -18,3 +18,7 @@ layout-party.json
 layout-browser.json
 layout-party-browser.json
 .browser-profile/
+layout-wsl.json
+layout-party-wsl.json
+layout*-continue.png
+calibration_preview*.png

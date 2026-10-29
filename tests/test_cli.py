@@ -124,15 +124,28 @@ def test_friends_joins_a_room_by_its_code_in_a_browser_of_its_own(monkeypatch):
         main(["friends", "--join", "EW2-78"])
 
 
-def test_friends_can_join_off_screen_but_only_by_a_code(monkeypatch):
+def test_hidden_plays_on_a_screen_of_its_own_in_wsl(monkeypatch):
     ran = []
-    monkeypatch.setattr(cli, "_run_bot", lambda args, settings: ran.append(args))
+
+    class Bot:
+        def __init__(self, command):
+            ran.append(command)
+
+        def wait(self):
+            return 130  # stopped with Ctrl+C
+
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli.subprocess, "Popen", Bot)
+    monkeypatch.setattr(cli, "_run_bot", lambda *a: pytest.fail("played here, not in WSL"))
 
     main(["friends", "--join", "EW2-78U", "--hidden"])
 
-    assert ran[0].hidden and ran[0].browser
-    with pytest.raises(SystemExit, match="--hidden needs --join"):
-        main(["friends", "--hidden"])
+    assert ran == [
+        ["wsl", "-d", "Ubuntu", "--cd", str(cli.REPO), "-e", "bash", "scripts/wsl_screen.sh"]
+        + ["friends", "--join", "EW2-78U"]
+    ]
+    with pytest.raises(SystemExit, match="leave out --browser"):
+        main(["play", "--hidden", "--browser"])
 
 
 def test_on_a_screen_of_its_own_it_joins_there_not_in_a_browser(monkeypatch):

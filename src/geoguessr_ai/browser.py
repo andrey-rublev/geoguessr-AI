@@ -29,8 +29,6 @@ from .controls import Controls, StopRequested
 
 GAME_URL = "https://openguessr.com/"
 PROFILE_DIR = Path(".browser-profile")
-OFF_SCREEN = -20_000
-"""Where a hidden window goes, left of any screen. It draws there all the same."""
 """Where the bot's browser keeps its cookies and settings, so choices made in it (like a
 consent banner's) and a sign-in, if you sign in there, last from one run to the next."""
 SHOT_TIMEOUT_MS = 10_000
@@ -61,19 +59,16 @@ class BrowserSession:
         profile: Path = PROFILE_DIR,
         channel: str | None = "chrome",
         headless: bool = False,
-        hidden: bool = False,
     ) -> None:
-        """``hidden``: open the window off every screen, out of your way. Not headless, which
-        OpenGuessr's bot check stops at "Verify you are human"."""
         self.size = size
         self._work: queue.Queue[tuple[Callable[[Any], Any], Future] | None] = queue.Queue()
         started: Future = Future()
-        args = (url, size, profile, channel, headless, hidden, started)
+        args = (url, size, profile, channel, headless, started)
         self._thread = threading.Thread(target=self._run, args=args, daemon=True)
         self._thread.start()
         started.result()  # raises here if the browser couldn't start
 
-    def _run(self, url, size, profile, channel, headless, hidden, started: Future) -> None:
+    def _run(self, url, size, profile, channel, headless, started: Future) -> None:
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
@@ -91,7 +86,6 @@ class BrowserSession:
                 args=[
                     "--disable-backgrounding-occluded-windows",
                     "--disable-renderer-backgrounding",
-                    *([f"--window-position={OFF_SCREEN},0"] if hidden else []),
                 ],
             )
             page = context.pages[0] if context.pages else context.new_page()

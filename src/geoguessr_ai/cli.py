@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -28,6 +30,9 @@ DEFAULT_REST = 1.0
 # Even so, it went down again embedding beside other work, which alone kept it at 80 to 90 C:
 # long jobs wait whenever the CPU reaches this, until it has cooled a few degrees.
 DEFAULT_MAX_TEMP = 85.0
+REPO = Path(__file__).resolve().parents[2]
+WSL_DISTRO = "Ubuntu"
+"""Where --hidden plays: WSL's Ubuntu, set up with scripts/wsl_setup.sh."""
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
@@ -73,8 +78,8 @@ def _find_game(
 ):
     """After ``delay`` seconds, the game's layout: as saved at ``path`` if the game still shows
     there, else found on screen and saved. None if the bot was stopped meanwhile. ``own``: in a
-    browser, or on a screen, of the bot's own, with no window of yours to bring it forward from. ``join``: the code of a room
-    to join first, from OpenGuessr's multiplayer page."""
+    browser, or on a screen, of the bot's own, with no window of yours to bring it forward
+    from. ``join``: the code of a room to join first, from OpenGuessr's multiplayer page."""
     from .calibrate import WrongGame, ensure_layout
     from .controls import StopRequested
     from .join import join_room
@@ -460,10 +465,8 @@ def _devices(args: argparse.Namespace, dry_run: bool = False):
     from .join import ROOMS_URL
 
     if join := getattr(args, "join", None):
-        hidden = getattr(args, "hidden", False)
-        session = BrowserSession(url=ROOMS_URL, size=args.window, hidden=hidden)
-        where = " off screen, out of your way" if hidden else ""
-        print(f"Opened a browser of the bot's own{where}, to join room {join} in it.")
+        session = BrowserSession(url=ROOMS_URL, size=args.window)
+        print(f"Opened a browser of the bot's own, to join room {join} in it.")
     else:
         session = BrowserSession(url=GAME_URL, size=args.window)
         print(
@@ -520,8 +523,6 @@ def cmd_friends(args: argparse.Namespace) -> None:
         except ValueError as wrong:
             raise SystemExit(str(wrong)) from None
         args.browser = not args.own_screen  # it joins in a browser of its own, else there
-    elif args.hidden:
-        raise SystemExit("--hidden needs --join CODE: nobody could join a room off screen")
     settings = _bot_settings(
         args,
         party=True,
@@ -661,6 +662,12 @@ def build_parser() -> argparse.ArgumentParser:
         )
         p.set_defaults(default_layout=layout)
         p.add_argument(
+            "--hidden",
+            action="store_true",
+            help=f"play on a screen of its own in WSL's {WSL_DISTRO}, leaving this computer's "
+            "screen and mouse free (set up once with scripts/wsl_setup.sh)",
+        )
+        p.add_argument(
             "--own-screen",
             action="store_true",
             help="the screen it plays on is its own, like scripts/wsl_screen.sh's: it starts at "
@@ -701,11 +708,6 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="CODE",
         help="join the room with this code by itself, in a browser of its own (as --browser), "
         "or with --own-screen on that screen",
-    )
-    p.add_argument(
-        "--hidden",
-        action="store_true",
-        help="with --join, keep the bot's browser off screen, so you can play it on this computer",
     )
 
     p = add(
@@ -846,8 +848,35 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _play_hidden(argv: list[str], args: argparse.Namespace) -> None:
+    """Run this play or friends command, ``argv`` less --hidden, on a screen of the bot's own in
+    WSL (scripts/wsl_screen.sh), so this computer's screen and mouse stay yours."""
+    if sys.platform != "win32":
+        raise SystemExit("--hidden is for Windows: here, run scripts/wsl_screen.sh")
+    if args.browser:
+        raise SystemExit("--hidden plays on a screen of its own: leave out --browser")
+    print(f"Playing on a screen of the bot's own, in WSL's {WSL_DISTRO}.", flush=True)
+    command = ["wsl", "-d", WSL_DISTRO, "--cd", str(REPO), "-e", "bash", "scripts/wsl_screen.sh"]
+    try:
+        bot = subprocess.Popen([*command, *argv])
+    except FileNotFoundError:
+        raise SystemExit(
+            '--hidden needs WSL: see the README, "Play it on the same laptop"'
+        ) from None
+    try:
+        code = bot.wait()
+    except KeyboardInterrupt:  # Ctrl+C reaches the bot in WSL too, and stops it there
+        code = bot.wait()
+    if code not in (0, 130):  # 130: stopped by Ctrl+C
+        raise SystemExit(code)
+
+
 def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else list(argv)
     args = build_parser().parse_args(argv)
+    if getattr(args, "hidden", False):
+        _play_hidden([arg for arg in argv if arg != "--hidden"], args)
+        return
     args.func(args)
 
 

@@ -135,6 +135,16 @@ def test_friends_can_join_off_screen_but_only_by_a_code(monkeypatch):
         main(["friends", "--hidden"])
 
 
+def test_on_a_screen_of_its_own_it_joins_there_not_in_a_browser(monkeypatch):
+    ran = []
+    monkeypatch.setattr(cli, "_run_bot", lambda args, settings: ran.append(args))
+
+    main(["friends", "--join", "EW2-78U", "--own-screen"])
+
+    assert ran[0].join == "EW278U" and not ran[0].browser
+    assert build_parser().parse_args(["play", "--own-screen"]).own_screen
+
+
 def test_finding_the_game_joins_the_room_first(monkeypatch, capsys):
     done = []
     monkeypatch.setattr(join, "join_room", lambda *args: done.append(("join", args[-1])) or False)

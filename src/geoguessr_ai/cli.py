@@ -73,7 +73,7 @@ def _find_game(
 ):
     """After ``delay`` seconds, the game's layout: as saved at ``path`` if the game still shows
     there, else found on screen and saved. None if the bot was stopped meanwhile. ``own``: in a
-    browser of the bot's own, which has no window to bring forward. ``join``: the code of a room
+    browser, or on a screen, of the bot's own, with no window of yours to bring it forward from. ``join``: the code of a room
     to join first, from OpenGuessr's multiplayer page."""
     from .calibrate import WrongGame, ensure_layout
     from .controls import StopRequested
@@ -413,8 +413,9 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
         layout.save(args.layout)
         continue_image.save(button)
 
+    own = args.browser or args.own_screen  # no mouse of yours to let go of
     with _devices(args, settings.dry_run) as (screen, controls):
-        if not args.browser:
+        if not own:
             print(
                 f"Starting in {args.start_delay:g}s: let go of the mouse. The bot finds the game."
             )
@@ -425,8 +426,8 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
             settings.party,
             args.calibrate,
             read_words,
-            0.0 if args.browser else args.start_delay,
-            args.browser,
+            0.0 if own else args.start_delay,
+            own,
             getattr(args, "join", None),
         )
         if layout is None:
@@ -518,7 +519,7 @@ def cmd_friends(args: argparse.Namespace) -> None:
             args.join = room_code(args.join)
         except ValueError as wrong:
             raise SystemExit(str(wrong)) from None
-        args.browser = True  # it joins in a browser of its own
+        args.browser = not args.own_screen  # it joins in a browser of its own, else there
     elif args.hidden:
         raise SystemExit("--hidden needs --join CODE: nobody could join a room off screen")
     settings = _bot_settings(
@@ -659,6 +660,12 @@ def build_parser() -> argparse.ArgumentParser:
             f"{_browser_layout(layout, True)})",
         )
         p.set_defaults(default_layout=layout)
+        p.add_argument(
+            "--own-screen",
+            action="store_true",
+            help="the screen it plays on is its own, like scripts/wsl_screen.sh's: it starts at "
+            "once, with no mouse of yours to let go of",
+        )
         p.add_argument("--start-delay", type=float, default=5.0)
         p.add_argument("--stop-key", default="f8")
         add_browser(p)
@@ -692,7 +699,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--join",
         metavar="CODE",
-        help="join the room with this code by itself, in a browser of its own (as --browser)",
+        help="join the room with this code by itself, in a browser of its own (as --browser), "
+        "or with --own-screen on that screen",
     )
     p.add_argument(
         "--hidden",

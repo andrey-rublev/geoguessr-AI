@@ -26,7 +26,7 @@ The bot finds the game by itself, on any screen, and switches to its tab if anot
 
 **`geoguessr-ai play`** plays a Singleplayer game on its own: 5 rounds, or `--rounds 10`. After each round it reads the answer and says how far off its pin was and whether it got the country right, like `our pin was 111 km away, guessed NG`. When it stops, it gives the average distance and how often the country was right. Each round is saved to `runs/` with its answer, for `train`.
 
-**`geoguessr-ai friends`** plays in a multiplayer room until you stop it. It plays each round the host starts, keeps to the round's timer, and waits for the host to press Continue. It needs a browser of its own, with a friend hosting the room on their device: `friends --join EW2-78U` opens one and joins the room with that code, or `friends --browser` opens one for you to join in yourself. To play the bot on the same laptop, host a room in your own browser and run `friends --join CODE --hidden`: the bot's window stays off screen, and your mouse stays yours. Its rounds are saved like `play`'s.
+**`geoguessr-ai friends`** plays in a multiplayer room until you stop it. It plays each round the host starts, keeps to the round's timer, and waits for the host to press Continue. It needs a browser of its own, with a friend hosting the room on their device: `friends --join EW2-78U` opens one and joins the room with that code, or `friends --browser` opens one for you to join in yourself. `--hidden` keeps that browser off screen. OpenGuessr's bot check may stop the bot's own browser, though; if it does, use a screen of its own (below). Its rounds are saved like `play`'s.
 
 **`geoguessr-ai train`** learns from the street photos and the rounds in `runs/`. It builds a new model and keeps it only if it scores better than the current one on rounds held out from training, so training never makes it worse. `--shards 1 2` first downloads and adds more photos, about 2.5 GB a shard. Once you have a few thousand rounds, `--backbone geolocal/StreetCLIP` tries StreetCLIP, a sharper image model; it needs a GPU to be quick, and on an Intel one it runs through OpenVINO.
 
@@ -50,6 +50,22 @@ Training runs cool, since running flat out has crashed a laptop: on a quarter of
 | `--no-text`, `--no-walk`, `--no-look-up` | Quicker but less accurate: don't read signs, don't walk on to look again when unsure, don't look up at the sun |
 
 Add `--help` to any command to see all its options.
+
+### Play it on the same laptop
+
+To play against the bot while you use the laptop, give it a screen and mouse of its own: a virtual screen with a normal Chrome, in WSL's Ubuntu. Set it up once (about 1.5 GB; it asks for your Ubuntu password):
+
+```powershell
+wsl -d Ubuntu -e bash scripts/wsl_setup.sh
+```
+
+Then host a room in your own browser and run, with its code:
+
+```powershell
+wsl -d Ubuntu -e bash scripts/wsl_screen.sh friends --join EW2-78U
+```
+
+The bot joins the room on its own screen and plays each round you start. To watch it, or to do something there yourself, such as passing a check or starting a Singleplayer game for `play`, open `http://localhost:6080/vnc.html?autoconnect=1&resize=scale`. Ctrl+C stops it. With an Intel GPU, the image model runs on it from WSL too.
 
 ## How it works
 

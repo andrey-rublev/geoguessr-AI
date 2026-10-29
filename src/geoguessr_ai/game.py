@@ -386,7 +386,7 @@ class OpenGuessrBot:
                 )
 
             self.controls.sleep(0.4)
-            self._check_round()  # Guess sits near Continue, which a finished round shows
+            self._check_round(pinned=True)  # Guess sits near Continue, which a result shows
             self.controls.click(self.layout.guess_button)
         if self.watch is not None:
             self.watch.end_round()  # nothing to hurry for now
@@ -467,18 +467,26 @@ class OpenGuessrBot:
             if running < 2:
                 self.controls.sleep(self.settings.party_wait)
 
-    def _check_round(self) -> None:
+    def _check_round(self, pinned: bool = False) -> None:
         """In a multiplayer room, give up on the round if it has ended, as when its time ran
         out, rather than click on whatever the result screen shows there. The compass shows
         while a round is on, but not always: in a live room it went unseen with the pin placed
-        and 8 s on the clock, and the round was given up. So the clock has its say too."""
+        and 8 s on the clock, and the round was given up. So the clock has its say too: once
+        ``pinned``, as last read, since then the timer can hide as well; before, as read
+        afresh, since the round may have been cut short and ended while the bot was busy, as
+        when another player guessed while it read signs."""
         if not self.settings.party or self.settings.dry_run:
             return
         for _ in range(3):
             if self._round_on():
                 return
             self.controls.sleep(0.3)
-        left = math.inf if self.clock is None else self.clock.left()
+        if self.clock is None:
+            raise RoundOver
+        left = self.clock.left()
+        if not pinned and self.clock.readable:
+            fresh = self._read_clock()
+            left = 0.0 if fresh is None else fresh  # no time showing: no round on
         if math.isfinite(left) and left > CLOCK_TRUSTED_ABOVE:
             print(f"  can't see the compass, but the clock leaves {left:.0f} s: carrying on")
             return
@@ -564,16 +572,31 @@ class OpenGuessrBot:
             print(f"  {left:.0f} s on the clock")
         self.seconds_at_start = left
 
-    def _read_clock(self) -> float | None:
+    def _read_clock(self, opening: bool = True) -> float | None:
         """Read the multiplayer round's timer, saying if it was cut short since the last time,
-        as when another player guesses in a duel."""
+        as when another player guesses in a duel. Without ``opening``, only if it shows."""
         if self.clock is None or not self.clock.readable:
             return None
         expected = self.clock.left()
-        left = self.clock.read()
+        left = self.clock.read(opening)
         if left is not None and math.isfinite(expected) and left < expected - TIMER_DROP:
             print(f"  the timer was cut to {left:.0f} s")
         return left
+
+    def _cut_short(self) -> bool:
+        """Whether the round has been cut short since the clock was last read, as when another
+        player guesses, or has even ended: by the game's notice, or a quick look at the timer,
+        which opens nothing. The notice shows for about two seconds, and was missed while signs
+        were read."""
+        if self.clock is None or self.settings.dry_run:
+            return False
+        if self._notice_others():
+            return True
+        expected = self.clock.left()
+        left = self._read_clock(opening=False)
+        if left is None:  # no time showing: is the round still on?
+            return not self._round_on()
+        return math.isfinite(expected) and left < expected - TIMER_DROP
 
     def _time_for(self, *steps: str) -> bool:
         """Whether a multiplayer round's timer leaves time for these steps and then to guess.
@@ -771,12 +794,19 @@ class OpenGuessrBot:
         """Read the signs every way, and the road's name from above, and look for the sun:
         clues the model can't see. Without ``read``, only look for the sun, which is quick.
         ``known`` lines were read before, in the scenes up to ``start``, which aren't read again:
-        so when walking on leaves no time to read, the signs read before still count."""
+        so when walking on leaves no time to read, the signs read before still count. In a
+        room, it reads one picture at a time, and stops once the round is cut short."""
         lines = list(known)
         if self.signs is not None and read:
             scenes = look.scenes[start:]
-            lines += self.signs.read(scenes)
-            lines += self.signs.read(self._ground_views(scenes), min_box_score=GROUND_BOX_SCORE)
+            grounds = self._ground_views(scenes)
+            pictures = [(scene, {}) for scene in scenes]
+            pictures += [(ground, {"min_box_score": GROUND_BOX_SCORE}) for ground in grounds]
+            for picture, options in pictures:
+                if self._cut_short():
+                    self._short_of_time("read", "the round was cut short: no more reading")
+                    break
+                lines += self.signs.read([picture], **options)
         clues = text_clues(lines)
         evidence = Evidence(countries=clues.likelihood, notes=clues.notes)
         level = [

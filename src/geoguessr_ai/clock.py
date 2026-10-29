@@ -112,13 +112,14 @@ class RoundClock:
             return False
         return parse_timer(self.read_text(self.screen.grab(self.region))) is not None
 
-    def read(self) -> float | None:
-        """Seconds left, read as the timer shows or, failing that, with it opened to show, and
-        remembered as when the round ends. None if it can't be read, which forgets nothing."""
+    def read(self, opening: bool = True) -> float | None:
+        """Seconds left, read as the timer shows or, failing that and ``opening``, with it
+        opened to show, and remembered as when the round ends. None if it can't be read, which
+        forgets nothing."""
         if self.region is None or self.read_text is None:
             return None
         left = parse_timer(self.read_text(self.screen.grab(self.region)))
-        if left is None and self.show is not None:
+        if left is None and opening and self.show is not None:
             self.show()
             try:
                 left = parse_timer(self.read_text(self.screen.grab(self.region)))

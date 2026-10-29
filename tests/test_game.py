@@ -738,6 +738,46 @@ def test_the_timer_shows_a_cut_whose_notice_was_missed(party, capsys):
     assert bot.signs.scenes == [] and room.keys == []  # no time to read signs or walk on
 
 
+def reading_slowly(bot, room, seconds):
+    """Make ``bot`` take ``seconds`` to read each picture, and another player guess in ``room``
+    as it starts reading, unseen: its notice is gone before the bot looks for it."""
+    room.notice, read = 0.0, bot.signs.read
+
+    def read_slowly(images, min_box_score=None):
+        if not room.others_in:
+            room.others_guess = room.t - room.start
+            room.sleep(0.0)  # they guess now, before the reading takes its time
+        room.sleep(seconds * len(images))
+        return read(images, min_box_score)
+
+    bot.signs.read = read_slowly
+
+
+def test_stops_reading_signs_once_the_timer_is_cut(party, capsys):
+    room = MultiplayerRoom(rounds=1, length=120.0, others_guess=1000.0, duel=True)
+    bot = party(room)
+    reading_slowly(bot, room, seconds=4.0)
+
+    bot.play()
+
+    out = capsys.readouterr().out
+    assert "timer was cut to 1" in out and "the round was cut short: no more reading" in out
+    assert len(bot.signs.scenes) == 1  # then it guessed with what it had
+    assert room.locked[0] is not None  # in time
+
+
+def test_gives_up_a_round_that_ended_while_it_read_signs(party, capsys):
+    room = MultiplayerRoom(rounds=1, length=120.0, others_guess=1000.0, duel=True)
+    bot = party(room)
+    reading_slowly(bot, room, seconds=20.0)  # longer than the 15 s the round is cut to
+
+    bot.play()
+
+    assert room.locked == [None] and room.idle_clicks == []  # nothing clicked on the result
+    assert "the round ended before the bot could guess" in capsys.readouterr().out
+    assert len(bot.signs.scenes) == 1
+
+
 def test_stops_looking_round_as_soon_as_another_player_guesses(party, capsys):
     room = MultiplayerRoom(rounds=1, length=100.0, others_guess=6.0, duel=True)
     predictor = FakePredictor(expected=(1000.0,))  # unsure: would walk on, given time

@@ -459,8 +459,10 @@ def _devices(args: argparse.Namespace, dry_run: bool = False):
     from .join import ROOMS_URL
 
     if join := getattr(args, "join", None):
-        session = BrowserSession(url=ROOMS_URL, size=args.window)
-        print(f"Opened a browser of the bot's own, to join room {join} in it.")
+        hidden = getattr(args, "hidden", False)
+        session = BrowserSession(url=ROOMS_URL, size=args.window, hidden=hidden)
+        where = " off screen, out of your way" if hidden else ""
+        print(f"Opened a browser of the bot's own{where}, to join room {join} in it.")
     else:
         session = BrowserSession(url=GAME_URL, size=args.window)
         print(
@@ -517,6 +519,8 @@ def cmd_friends(args: argparse.Namespace) -> None:
         except ValueError as wrong:
             raise SystemExit(str(wrong)) from None
         args.browser = True  # it joins in a browser of its own
+    elif args.hidden:
+        raise SystemExit("--hidden needs --join CODE: nobody could join a room off screen")
     settings = _bot_settings(
         args,
         party=True,
@@ -689,6 +693,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--join",
         metavar="CODE",
         help="join the room with this code by itself, in a browser of its own (as --browser)",
+    )
+    p.add_argument(
+        "--hidden",
+        action="store_true",
+        help="with --join, keep the bot's browser off screen, so you can play it on this computer",
     )
 
     p = add(

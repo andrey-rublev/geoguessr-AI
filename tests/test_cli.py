@@ -124,6 +124,17 @@ def test_friends_joins_a_room_by_its_code_in_a_browser_of_its_own(monkeypatch):
         main(["friends", "--join", "EW2-78"])
 
 
+def test_friends_can_join_off_screen_but_only_by_a_code(monkeypatch):
+    ran = []
+    monkeypatch.setattr(cli, "_run_bot", lambda args, settings: ran.append(args))
+
+    main(["friends", "--join", "EW2-78U", "--hidden"])
+
+    assert ran[0].hidden and ran[0].browser
+    with pytest.raises(SystemExit, match="--hidden needs --join"):
+        main(["friends", "--hidden"])
+
+
 def test_finding_the_game_joins_the_room_first(monkeypatch, capsys):
     done = []
     monkeypatch.setattr(join, "join_room", lambda *args: done.append(("join", args[-1])) or False)

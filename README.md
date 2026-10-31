@@ -26,7 +26,7 @@ The bot finds the game by itself, on any screen, and switches to its tab if anot
 
 **`geoguessr-ai play`** plays a Singleplayer game on its own: 5 rounds, or `--rounds 10`. After each round it reads the answer and says how far off its pin was and whether it got the country right, like `our pin was 111 km away, guessed NG`. When it stops, it gives the average distance and how often the country was right. Each round is saved to `runs/` with its answer, for `train`.
 
-**`geoguessr-ai friends`** plays in a multiplayer room until you stop it. It plays each round the host starts, keeps to the round's timer, and waits for the host to press Continue. It needs a browser of its own, with a friend hosting the room on their device: `friends --join EW2-78U` opens one and joins the room with that code, or `friends --browser` opens one for you to join in yourself. OpenGuessr's bot check may stop the bot's own browser, though; if it does, use `--hidden` (below). Its rounds are saved like `play`'s.
+**`geoguessr-ai friends`** plays in a multiplayer room until you stop it. It plays each round the host starts, keeps to the round's timer, and waits for the host to press Continue. It needs a browser of its own, with a friend hosting the room on their device: `friends --join EW2-78U` opens one and joins the room with that code, or `friends --browser` opens one for you to join in yourself. OpenGuessr's bot check may stop the bot's own browser, though; if it does, use `--hidden` (below). It puts a rough pin down right after its first look, since the game counts a pin that's down when the round ends, so a player guessing early and cutting the clock doesn't cost it the round. Its rounds are saved like `play`'s.
 
 **`geoguessr-ai train`** learns from the street photos and the rounds in `runs/`. It builds a new model and keeps it only if it scores better than the current one on rounds held out from training, so training never makes it worse. `--shards 1 2` first downloads and adds more photos, about 2.5 GB a shard. Once you have a few thousand rounds, `--backbone geolocal/StreetCLIP` tries StreetCLIP, a sharper image model; it needs a GPU to be quick, and on an Intel one it runs through OpenVINO.
 
@@ -66,7 +66,7 @@ Then host a room in your own browser and run, with its code:
 geoguessr-ai friends --join EW2-78U --hidden
 ```
 
-The bot joins the room on its own screen and plays each round you start. To watch it, or to do something there yourself, such as passing a check or starting a Singleplayer game for `play`, open `http://localhost:6080/vnc.html?autoconnect=1&resize=scale`. Ctrl+C stops it. With an Intel GPU, the image model runs on it from WSL too.
+The bot joins the room on its own screen and plays each round you start. To watch it, or to do something there yourself, such as passing a check or starting a Singleplayer game for `play`, open `http://localhost:6080/vnc.html?autoconnect=1&resize=scale`. Ctrl+C stops it. With an Intel GPU, both Street View and the image model run on it from WSL.
 
 ## How it works
 

@@ -51,6 +51,5 @@ echo "Setting up the bot, about a gigabyte: this takes a few minutes..."
 "$VENV/bin/pip" install -q --upgrade pip
 # The versions in wsl-constraints.txt, as Windows has from uv.lock: what's been tested together.
 pins=$REPO/scripts/wsl-constraints.txt
-"$VENV/bin/pip" install -q -c "$pins" torch --index-url https://download.pytorch.org/whl/cpu
-"$VENV/bin/pip" install -q -c "$pins" -e "$REPO"
+"$VENV/bin/pip" install -q -c "$pins" --extra-index-url https://download.pytorch.org/whl/cpu -e "$REPO"
 echo "All set up: you can close this window."

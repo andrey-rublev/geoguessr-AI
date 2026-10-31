@@ -117,3 +117,21 @@ begin
   if CurStep = ssPostInstall then
     InstallLibraries;
 end;
+
+{ What it keeps outside its folder, as other programs look there too, and the rounds it played: only
+  if asked to, and so never when uninstalling silently. }
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Home: String;
+begin
+  if CurUninstallStep = usPostUninstall then begin
+    if SuppressibleMsgBox('Also delete the rounds it played and the image model it downloaded, about 2 GB?', mbConfirmation, MB_YESNO, IDNO) = IDYES then begin
+      Home := GetEnv('USERPROFILE');
+      DelTree(Home + '\.cache\huggingface\hub\models--geolocal--StreetCLIP', True, True, True);
+      DelTree(Home + '\.cache\geoguessr-ai', True, True, True);
+      DelTree(Home + '\.cache\geoguessr_ai', True, True, True);
+      DelTree(ExpandConstant('{localappdata}\geoguessr-ai'), True, True, True);
+      DelTree(ExpandConstant('{app}'), True, True, True);
+    end;
+  end;
+end;

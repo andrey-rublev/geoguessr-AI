@@ -301,7 +301,7 @@ LOCAL_PHONES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 _TOKEN = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*")
 _EURO = ("AT", "BE", "CY", "DE", "EE", "ES", "FI", "FR", "GR", "HR", "IE", "IT", "LT", "LU", "LV")
-_EURO += ("MT", "NL", "PT", "SI", "SK", "AD", "MC", "ME", "SM", "VA", "XK", "RE", "GP", "MQ")
+_EURO += ("MT", "NL", "PT", "SI", "SK", "AD", "MC", "ME", "SM", "VA", "XK", "RE", "GP", "MQ", "BG")
 _MPH = ("US", "GB", "IM", "JE", "GG", "PR", "GU", "AS", "MP", "VI", "LR", "BS", "BZ", "KY", "VG")
 _MPH += ("AG", "DM", "GD", "KN", "LC", "VC", "TC", "AI", "FK")
 _BRAZIL_STATES = "sp|mg|rs|go|pe|ce|es|rj|pb|rn|pi|ro|ac|am|rr|ap|df"

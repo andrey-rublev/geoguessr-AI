@@ -18,6 +18,8 @@ from PIL import Image
 
 # Or a model on Hugging Face in the old format, like StreetCLIP, gets downloaded again in the new.
 os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
+# Its advice to sign in, for faster downloads, is no use to anyone playing.
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 
 DEFAULT_BACKBONE = "openai/clip-vit-base-patch32"
 OPENVINO_DIR = Path.home() / ".cache" / "geoguessr-ai" / "openvino"

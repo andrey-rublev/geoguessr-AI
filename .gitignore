@@ -14,6 +14,9 @@ layout.json
 layout-continue.png
 calibration_preview.png
 .playwright-mcp/
+installer/uv/
+installer/Output/
+geoguessr-model-*.zip
 layout-party.json
 layout-browser.json
 layout-party-browser.json

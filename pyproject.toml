@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geoguessr-ai"
-version = "0.1.0"
+version = "1.0.0"
 description = "A self-trained geolocation AI that plays OpenGuessr by watching your screen and controlling your mouse."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,6 +20,7 @@ dependencies = [
     "transformers>=5",
     "huggingface_hub>=1",
     "scikit-learn>=1.4",
+    "scipy>=1.11",
     "pandas>=2",
     "tqdm>=4.66",
     "rapidocr>=3.9,<3.10",  # 3.10 no longer hands out its detector and recogniser

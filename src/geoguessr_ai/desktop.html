@@ -1280,8 +1280,10 @@ $("#form").addEventListener("submit", async (event) => {
     return;
   }
   showProblem("");
+  $("#go").disabled = true;  // till the app's answer, or a second press would start it twice over
   const problem = await post("/start", picks);
   if (problem) showProblem(problem);
+  drawChoices();
 });
 $("#room").addEventListener("input", (event) => {
   event.target.value = formatCode(event.target.value);

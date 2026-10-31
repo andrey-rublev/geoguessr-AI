@@ -1175,8 +1175,7 @@ function drawChoices() {
   let blocked = "";
   if (!running) {
     if (fetching) blocked = "It's getting what it plays with: it only takes this once.";
-    else if (setup.fetch_failed) blocked = setup.fetch_failed;
-    else if (setup.model === false) blocked = "It has no model to play with yet.";
+    else if (setup.model === false) blocked = setup.fetch_failed || "It has no model to play with yet.";
     else if (picks.where === "hidden" && setup.ubuntu === false) blocked = "Set up the hidden screen, or choose another place.";
     else if (picks.where === "browser" && setup.chrome === false) blocked = "Its own window needs Playwright.";
   }

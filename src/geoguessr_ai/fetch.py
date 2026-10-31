@@ -117,7 +117,7 @@ def fetch_image_model(name: str = IMAGE_MODEL) -> None:
     from huggingface_hub import snapshot_download
     from huggingface_hub.errors import HfHubHTTPError
 
-    print(f"Fetching the image model, {name}...", flush=True)
+    print("Fetching the image model...", flush=True)
     try:
         snapshot_download(
             name,

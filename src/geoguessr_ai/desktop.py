@@ -37,6 +37,7 @@ from global_land_mask import globe
 
 from .botrun import NO_WINDOW, BotRun, Choices, _bot_program, _end_process_tree
 from .config import REPO, wsl_command, wsl_distros
+from .fetch import IMAGE_MODEL
 from .geo import inverse_mercator, mercator_xy
 
 PAGE = Path(__file__).with_name("desktop.html")
@@ -92,6 +93,17 @@ def land_rows(
     lat, lon = inverse_mercator(x, top + (y + 0.5) / columns)
     land = globe.is_land(np.clip(lat, -89.9, 89.9), np.clip(lon, -179.9, 179.9))
     return ["".join("1" if dot else "0" for dot in row) for row in land]
+
+
+def model_is_here() -> bool:
+    """Whether it has what it plays with: a window closed during the download leaves part of it,
+    and the bot would then sit getting the rest with nothing to show for it."""
+    if not MODEL.exists():
+        return False
+    from huggingface_hub import try_to_load_from_cache
+
+    weights = ("pytorch_model.bin", "model.safetensors")
+    return any(isinstance(try_to_load_from_cache(IMAGE_MODEL, name), str) for name in weights)
 
 
 def wsl_is_there() -> bool:
@@ -183,7 +195,7 @@ class App:
     def check_setup(self) -> None:
         self.setup["wsl"] = wsl_is_there()
         self.setup["ubuntu"] = self.setup["wsl"] and ubuntu_is_set_up()
-        self.setup["model"] = MODEL.exists()
+        self.setup["model"] = model_is_here()
         self.changed()
 
     def start(self, data: dict) -> None:

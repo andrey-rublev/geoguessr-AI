@@ -54,6 +54,21 @@ class Served:
                     yield json.loads(line[6:])
 
 
+def test_a_model_without_its_image_model_isnt_all_there(monkeypatch, tmp_path):
+    import huggingface_hub
+
+    model = tmp_path / "geoguessr.pt"
+    monkeypatch.setattr(desktop, "MODEL", model)
+    assert not desktop.model_is_here()
+
+    model.write_bytes(b"model")
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lambda *_: None)
+    assert not desktop.model_is_here()
+
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lambda *_: "weights.bin")
+    assert desktop.model_is_here()
+
+
 def test_offers_to_install_wsl_where_its_not_there(monkeypatch):
     monkeypatch.setattr(desktop, "wsl_distros", lambda: [])
     monkeypatch.setattr(desktop, "ubuntu_is_set_up", lambda: pytest.fail("no WSL to ask"))

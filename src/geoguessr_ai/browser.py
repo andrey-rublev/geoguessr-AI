@@ -86,6 +86,7 @@ class BrowserSession:
                 args=[
                     "--disable-backgrounding-occluded-windows",
                     "--disable-renderer-backgrounding",
+                    "--mute-audio",  # its game's sounds and music would only get in the way
                 ],
             )
             page = context.pages[0] if context.pages else context.new_page()

@@ -63,8 +63,9 @@ for _ in $(seq 50); do timeout 1 xdpyinfo >/dev/null 2>&1 && break; sleep 0.1; d
 openbox >/dev/null 2>&1 &
 pids+=($!)
 
-# A plain Chrome, as you'd run it. Street View needs WebGL: on the GPU, through Windows' Direct3D,
-# where WSL can reach one, or else on the CPU, more slowly.
+# A plain Chrome, as you'd run it, but muted, should this Ubuntu have what it takes to reach your
+# speakers. Street View needs WebGL: on the GPU, through Windows' Direct3D, where WSL can reach
+# one, or else on the CPU, more slowly.
 graphics=(--enable-unsafe-swiftshader)
 if [ -e /dev/dxg ] && [ -e /usr/lib/x86_64-linux-gnu/dri/d3d12_dri.so ]; then
     export GALLIUM_DRIVER=d3d12
@@ -75,7 +76,7 @@ fi
 url=https://openguessr.com/multiplayer
 [ "${1:-}" = play ] && url=https://openguessr.com/
 google-chrome --user-data-dir="$PROFILE" --no-first-run --no-default-browser-check \
-    --start-maximized "${graphics[@]}" "$url" >/dev/null 2>&1 &
+    --start-maximized --mute-audio "${graphics[@]}" "$url" >/dev/null 2>&1 &
 pids+=($!)
 unset GALLIUM_DRIVER
 

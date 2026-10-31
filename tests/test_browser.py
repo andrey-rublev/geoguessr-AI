@@ -1,6 +1,8 @@
 import io
 import queue
+import sys
 import threading
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -111,6 +113,31 @@ def test_dry_run_clicks_and_presses_nothing(session):
     finally:
         controls.close()
     assert [d[0] for d in session.page.done] == ["move"]
+
+
+def test_the_bots_browser_is_muted(monkeypatch):
+    started = {}
+
+    class Playwright:
+        def start(self):
+            self.chromium = self
+            return self
+
+        def launch_persistent_context(self, profile, **options):
+            started.update(options)
+            page = SimpleNamespace(goto=lambda url: None)
+            return SimpleNamespace(pages=[page], close=lambda: None)
+
+        def stop(self):
+            pass
+
+    api = SimpleNamespace(sync_playwright=Playwright)
+    monkeypatch.setitem(sys.modules, "playwright", SimpleNamespace(sync_api=api))
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", api)
+
+    BrowserSession().close()
+
+    assert "--mute-audio" in started["args"]
 
 
 def test_closing_the_bots_browser_stops_the_bot():

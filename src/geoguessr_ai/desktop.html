@@ -1158,6 +1158,8 @@ function drawChoices() {
   if (!running && !(state && state.progress)) drawIdle(picks);
 }
 
+const roundsOf = (count) => `${count.toLocaleString("en")} round${count === 1 ? "" : "s"}`;
+
 function drawIdle(picks) {
   $("#playing-what").textContent = "";
   const onScreen = picks.where === "screen";
@@ -1166,7 +1168,7 @@ function drawIdle(picks) {
     $("#detail").textContent = onScreen
       ? "Open a Singleplayer game first, then press Start."
       : picks.rounds >= 1
-        ? `Press Start, and it plays ${picks.rounds} rounds.`
+        ? `Press Start, and it plays ${roundsOf(picks.rounds)}.`
         : "Enter how many rounds to play.";
   } else if (onScreen) {
     $("#headline").textContent = "Ready for a room";
@@ -1257,7 +1259,7 @@ function restoredOnce() {
 
 function playingWhat(choices) {
   const parts = [];
-  if (choices.mode === "play") parts.push(`Solo game, ${choices.rounds} rounds`);
+  if (choices.mode === "play") parts.push(`Solo game, ${roundsOf(choices.rounds)}`);
   else parts.push(choices.room ? `Room ${formatCode(choices.room)}` : "Friends' room");
   parts.push(WHERE_NAMES[choices.where]);
   if (choices.nmpz) parts.push("One view only");

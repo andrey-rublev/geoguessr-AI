@@ -25,7 +25,9 @@ if [ "${1:-}" = --check ]; then
     exit
 fi
 
-WINDOWS_HOME=${WINDOWS_HOME:-/mnt/c/Users/$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')}
+# Windows' own home, wherever it is, as cmd.exe runs from there: it complains from a Linux folder.
+profile=$(cd /mnt/c && cmd.exe /c "echo %USERPROFILE%" 2>/dev/null | tr -d '\r')
+WINDOWS_HOME=${WINDOWS_HOME:-$(wslpath -u "$profile" 2>/dev/null || echo "/mnt/c/Users/$USER")}
 
 pids=()
 stop() {

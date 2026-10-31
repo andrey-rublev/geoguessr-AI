@@ -124,6 +124,12 @@ def test_friends_joins_a_room_by_its_code_in_a_browser_of_its_own(monkeypatch):
         main(["friends", "--join", "EW2-78"])
 
 
+@pytest.mark.parametrize("command", ["play", "friends"])
+def test_nmpz_can_be_asked_for_in_any_game(command):
+    assert cli._bot_settings(build_parser().parse_args([command, "--nmpz"])).nmpz
+    assert not cli._bot_settings(build_parser().parse_args([command])).nmpz
+
+
 def test_hidden_plays_on_a_screen_of_its_own_in_wsl(monkeypatch):
     ran = []
 
@@ -138,11 +144,11 @@ def test_hidden_plays_on_a_screen_of_its_own_in_wsl(monkeypatch):
     monkeypatch.setattr(cli.subprocess, "Popen", Bot)
     monkeypatch.setattr(cli, "_run_bot", lambda *a: pytest.fail("played here, not in WSL"))
 
-    main(["friends", "--join", "EW2-78U", "--hidden"])
+    main(["friends", "--join", "EW2-78U", "--hidden", "--nmpz"])
 
     assert ran == [
         ["wsl", "-d", "Ubuntu", "--cd", str(cli.REPO), "-e", "bash", "scripts/wsl_screen.sh"]
-        + ["friends", "--join", "EW2-78U"]
+        + ["friends", "--join", "EW2-78U", "--nmpz"]
     ]
     with pytest.raises(SystemExit, match="leave out --browser"):
         main(["play", "--hidden", "--browser"])

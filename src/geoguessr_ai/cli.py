@@ -506,6 +506,7 @@ def _bot_settings(args: argparse.Namespace, **settings):
         look_up=not args.no_look_up,
         look_down=args.look_down,
         walk_below=0.0 if args.no_walk else BotSettings.walk_below,
+        nmpz=args.nmpz,
         debug_dir=None if args.no_save else args.runs,
         **settings,
     )
@@ -627,6 +628,12 @@ def build_parser() -> argparse.ArgumentParser:
             help=f"rounds to play (default {rounds or 'as many as the host starts'})",
         )
         p.add_argument("--dry-run", action="store_true", help="one round, never clicks")
+        p.add_argument(
+            "--nmpz",
+            action="store_true",
+            help="no moving, panning or zooming: guess from the one view each round starts with. "
+            "For a game with NMPZ on, or in any game, to make the bot easier to beat",
+        )
         p.add_argument("--no-text", action="store_true", help="don't read signs (faster)")
         p.add_argument(
             "--no-walk",

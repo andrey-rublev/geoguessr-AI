@@ -193,6 +193,26 @@ def test_sets_up_only_what_it_knows_how_to(served):
     assert unknown.value.code == 400
 
 
+def test_sets_up_in_a_console_that_can_be_read(served, monkeypatch):
+    started = []
+
+    class Finished:
+        def __init__(self, command, **_):
+            started.append(command)
+
+        def wait(self):
+            pass
+
+    monkeypatch.setattr(subprocess, "Popen", Finished)
+    monkeypatch.setattr(desktop, "ubuntu_is_set_up", lambda: True)
+
+    served.app.set_up("model")
+
+    assert "train" in str(started[0]) and "pythonw" not in str(started[0])
+    if sys.platform == "win32":
+        assert started[0].endswith('& echo. & pause"')
+
+
 def test_ends_a_while_after_the_last_window_closes(served, monkeypatch):
     monkeypatch.setattr(desktop, "WINDOW_GONE_S", 0.0)
     app = served.app

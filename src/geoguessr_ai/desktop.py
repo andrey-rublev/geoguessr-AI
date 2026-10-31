@@ -34,7 +34,7 @@ from urllib.parse import parse_qs, urlsplit
 import numpy as np
 from global_land_mask import globe
 
-from .botrun import NO_WINDOW, BotRun, Choices
+from .botrun import NO_WINDOW, BotRun, Choices, _bot_program
 from .config import REPO, wsl_command
 from .geo import inverse_mercator, mercator_xy
 
@@ -66,7 +66,7 @@ CHART_NORTH, CHART_SOUTH = 78.0, -58.0
 On Mercator's projection, like OpenGuessr's map and sailors' charts."""
 SETUP_COMMANDS = {
     "ubuntu": wsl_command("bash", "scripts/wsl_setup.sh"),
-    "model": [sys.executable, "-m", "geoguessr_ai", "train", "--shards", "0"],
+    "model": [*_bot_program(), "train", "--shards", "0"],
 }
 """What sets up what the app needs: in a window of their own, as one asks for a password."""
 
@@ -187,9 +187,8 @@ class App:
 
     def set_up(self, what: str) -> None:
         """Set up ``what``, in a window of its own, and see how that went once it's closed."""
-        command = SETUP_COMMANDS[what]
         console = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-        process = subprocess.Popen(command, cwd=REPO, creationflags=console)
+        process = subprocess.Popen(_staying_open(SETUP_COMMANDS[what]), cwd=REPO, creationflags=console)
 
         def wait() -> None:
             process.wait()
@@ -216,6 +215,14 @@ class App:
                 allowed = WINDOW_GONE_S if self.opened_one else FIRST_WINDOW_S
                 if not self.windows and gone > allowed:
                     return
+
+
+def _staying_open(command: list[str]) -> list[str] | str:
+    """``command`` in a console that waits for a key once it's done, so that what it says, good or
+    bad, can be read before the window goes."""
+    if sys.platform != "win32":
+        return command
+    return f'cmd /s /c "{subprocess.list2cmdline(command)} & echo. & pause"'
 
 
 def _page(land: list[str]) -> bytes:

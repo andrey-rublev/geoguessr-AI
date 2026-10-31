@@ -6,6 +6,7 @@ from PIL import Image
 from geoguessr_ai.knowledge.countries import country_codes
 from geoguessr_ai.knowledge.evidence import DEFAULT_COVERAGE_STRENGTH, Evidence
 from geoguessr_ai.model import predictor as predictor_module
+from geoguessr_ai.model.backbone import square_crops
 from geoguessr_ai.model.detail import COLS, ROWS, fit
 from geoguessr_ai.model.geocells import DEFAULT_GAME_PRIOR_STRENGTH, GeoCells
 from geoguessr_ai.model.head import Checkpoint, Ensemble, GeoHead
@@ -44,6 +45,44 @@ def test_predict_uses_every_crop_and_returns_likeliest_place(tmp_path, monkeypat
     assert (guess.lat, guess.lon) == pytest.approx(tuple(CENTROIDS[1]))
     assert guess.top_cells[0][2] > 0.9
     assert guess.expected_score > 4000
+
+
+def test_views_seen_already_are_not_embedded_again(tmp_path, monkeypatch):
+    class EachCropItsOwn(FakeEncoder):
+        def encode(self, images):
+            self.seen += len(images)
+            pixels = [np.asarray(image, dtype=np.float32) for image in images]
+            return torch.tensor([[p.mean(), p.std(), p.shape[1], p.shape[0]] for p in pixels])
+
+    path = tmp_path / "model.pt"
+    head = GeoHead(embed_dim=4, n_cells=3, hidden=4)
+    Checkpoint(head, GeoCells(CENTROIDS), "fake/backbone").save(path)
+    monkeypatch.setattr(predictor_module, "ImageEncoder", EachCropItsOwn)
+    model = predictor_module.GeoPredictor(path)
+    rng = np.random.default_rng(0)
+
+    def view():
+        return Image.fromarray(rng.integers(0, 255, (100, 200, 3), dtype=np.uint8))
+
+    first, second, third = view(), view(), view()
+    crops = [crop for image in (first, second) for crop in square_crops(image)]
+    all_at_once = model.encoder.encode(crops)
+    model.encoder.seen = 0
+
+    quick = model._embedded([first, second], quick=True)
+    assert model.encoder.seen == 2  # each view as a whole
+    assert quick.equal(model.encoder.encode([first, second]))
+    model.encoder.seen = 0
+
+    assert model._embedded([first, second]).equal(all_at_once)
+    assert model.encoder.seen == 4  # only the crops it hadn't got yet, the same in the same order
+    assert model._embedded([first, second]).equal(all_at_once)
+    assert model.encoder.seen == 4  # guessing again
+
+    assert len(model._embedded([first, second, third])) == 9
+    assert model.encoder.seen == 7  # walked on: only the new view's
+    model._embedded([third])
+    assert set(model._kept) == {id(third)}  # and it keeps no more than it was last asked for
 
 
 def test_prior_strength_corrects_for_crowded_training_regions(tmp_path, monkeypatch):
@@ -176,7 +215,7 @@ def test_close_ups_of_the_views_reweigh_places_once_a_detail_expert_is_learned(
     model.predict(looked)
     seen = model.encoder.seen
     model.predict([*looked, *(Image.new("RGB", (800, 400)) for _ in range(4))])  # walked on
-    assert model.encoder.seen == seen + 8 * 3  # the first look's close-ups weren't read again
+    assert model.encoder.seen == seen + 4 * 3  # only the new views' crops
 
 
 def test_places_the_guess_by_the_photos_that_look_most_alike(tmp_path, monkeypatch):

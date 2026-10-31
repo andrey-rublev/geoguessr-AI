@@ -109,6 +109,8 @@ class GeoPredictor:
                 self.detail = None  # learned from another encoder's embeddings
         self._details: tuple[tuple[int, ...], np.ndarray] | None = None
         """The last views' close-ups' say, kept: walking on, the same first views come again."""
+        self._kept: dict[int, tuple[Image.Image, list[torch.Tensor]]] = {}
+        """The last views, by their ids, each with what its crops have been embedded as so far."""
         self.neighbours: Neighbours | None = None
         """Photos and rounds to choose the cell by, and the guess within it (see
         :mod:`.neighbours`)."""
@@ -125,14 +127,20 @@ class GeoPredictor:
         self.game_prior_strength = game_prior_strength
         self.coverage_strength = coverage_strength
 
-    def predict(self, images: Sequence[Image.Image], evidence: Evidence | None = None) -> Guess:
-        """Guess one location from several views of the same place."""
+    def predict(
+        self,
+        images: Sequence[Image.Image],
+        evidence: Evidence | None = None,
+        quick: bool = False,
+    ) -> Guess:
+        """Guess one location from several views of the same place. ``quick``: from each view as a
+        whole only, a quarter of the work, for a first guess when time is short: with no GPU, that
+        saves many seconds, for a score about 1% lower (see :func:`.backbone.square_crops`)."""
         if not images:
             raise ValueError("predict() needs at least one image")
-        crops = [crop for image in images for crop in square_crops(image)]
         if self.detail is not None:
             evidence = self._with_details(images[:LOOKS], evidence)
-        embedded = self.encoder.encode(crops)
+        embedded = self._embedded(images, quick)
         alike = embedded.numpy().mean(axis=0)
         votes = None
         if self.neighbours is not None:
@@ -151,6 +159,24 @@ class GeoPredictor:
         cell = int(self.model.cells.assign(guess.lat, guess.lon))
         place = self.neighbours.near(alike, cell)
         return guess if place is None else replace(guess, lat=place[0], lon=place[1])
+
+    def _embedded(self, images: Sequence[Image.Image], quick: bool = False) -> torch.Tensor:
+        """Every crop of ``images`` embedded, only those not embedded last time being worked out:
+        guessing again, or walking on, the same views come again, and with no GPU each crop takes
+        a second or more."""
+        kept, self._kept = self._kept, {}
+        wanted, owners, rows = [], [], []
+        for image in images:
+            crops = square_crops(image, 1) if quick else square_crops(image)
+            _, known = kept.get(id(image), (image, []))
+            self._kept[id(image)] = image, known  # holding on to it keeps its id its own
+            wanted += crops[len(known) :]
+            owners += [known] * (len(crops) - len(known))
+            rows.append((known, len(crops)))
+        if wanted:
+            for known, row in zip(owners, self.encoder.encode(wanted), strict=True):
+                known.append(row)
+        return torch.stack([row for known, count in rows for row in known[:count]])
 
     def _with_details(self, views: Sequence[Image.Image], evidence: Evidence | None) -> Evidence:
         """``evidence``, and what close-ups of ``views`` say of each country."""

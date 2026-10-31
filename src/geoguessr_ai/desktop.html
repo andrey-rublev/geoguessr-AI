@@ -176,7 +176,7 @@ h1 { margin: 0; font: 600 44px/1.02 var(--display); font-stretch: 75%; letter-sp
 @keyframes plotted { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes fixed { from { transform: scale(0); } to { transform: scale(1); } }
 
-.rounds-holder { flex: 1 1 0; min-height: 96px; overflow-y: auto; border-top: 1px solid var(--ink); scrollbar-width: thin; }
+.rounds-holder { position: relative; flex: 1 1 0; min-height: 96px; overflow-y: auto; border-top: 1px solid var(--ink); scrollbar-width: thin; }
 table { width: 100%; border-collapse: collapse; }
 th { position: sticky; top: 0; background: var(--paper); text-align: left; padding: 6px 10px 5px 0; font: 600 12px/1.2 var(--display); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
 td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--sea); font: 400 13px/1.4 var(--data); white-space: nowrap; }

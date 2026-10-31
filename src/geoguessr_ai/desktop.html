@@ -170,13 +170,15 @@ h1 { margin: 0; font: 600 44px/1.02 var(--display); font-stretch: 75%; letter-sp
 .chart-holder.dragging { cursor: grabbing; }
 .chart-holder:focus-visible { outline-offset: -2px; }
 #land, #chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.chart-tools { position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; border: 1px solid var(--ink); border-radius: 5px; overflow: hidden; background: var(--paper); }
+.chart-tools { position: absolute; top: var(--above); right: var(--beside); display: flex; flex-direction: column; border: 1px solid var(--ink); border-radius: 5px; overflow: hidden; background: var(--paper); }
 .chart-tools button { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; background: none; border: 0; font: 600 18px/1 var(--display); cursor: pointer; }
 .chart-tools button + button { border-top: 1px solid var(--rule); }
 .chart-tools button:hover { background: var(--ink); color: var(--paper); }
 .chart-tools button:focus-visible { outline-offset: -3px; }
 .chart-tools svg { width: 16px; height: 16px; }
-.round-card { position: absolute; right: 16px; bottom: 16px; width: min(340px, calc(100% - 32px)); padding: 9px 12px 10px; background: var(--paper); border: 1px solid var(--ink); border-radius: 5px; box-shadow: 0 2px 10px rgb(15 44 56 / .18); cursor: default; }
+.round-card { position: absolute; right: var(--beside); bottom: var(--above); width: min(340px, calc(100% - 32px)); padding: 9px 12px 10px; background: var(--paper); border: 1px solid var(--ink); border-radius: 5px; box-shadow: 0 2px 10px rgb(15 44 56 / .18); pointer-events: none; }
+.round-card.west { right: auto; left: var(--beside); }
+.round-card.north { bottom: auto; top: var(--above); }
 .round-card p { margin: 0; display: flex; gap: 10px; font-size: 13px; line-height: 1.5; }
 .round-card .card-top { justify-content: space-between; align-items: baseline; margin-bottom: 3px; font-family: var(--data); font-size: 12px; color: var(--ink-soft); }
 .round-card strong { font: 600 16px/1.2 var(--display); color: var(--ink); }
@@ -460,11 +462,6 @@ function setChart() {
   const clip = element("clipPath", { id: "inside-chart" }, defs);
   element("rect", { id: "inside-rect" }, clip);
   element("g", { id: "grid", "clip-path": "url(#inside-chart)" }, svg);
-  element("g", { class: "plots", id: "plots", "clip-path": "url(#inside-chart)" }, svg);
-  element("path", { class: "scale-light", id: "bars-light" }, svg);
-  element("path", { class: "scale-dark", id: "bars-dark" }, svg);
-  element("rect", { class: "neatline", id: "neatline-outer" }, svg);
-  element("rect", { class: "neatline", id: "neatline-inner" }, svg);
 
   // The key, in the empty South Pacific: where charts keep theirs.
   const key = element("g", { id: "key" }, svg);
@@ -475,6 +472,12 @@ function setChart() {
   element("circle", { class: "fix-dot", cx: 4.5, cy: 24, r: 1.6 }, key);
   element("text", { class: "legend", x: 16, y: 28 }, key).textContent = "The answer";
   element("text", { class: "legend hint", x: -1, y: 46 }, key).textContent = "Scroll to zoom, drag to move";
+
+  element("g", { class: "plots", id: "plots", "clip-path": "url(#inside-chart)" }, svg);
+  element("path", { class: "scale-light", id: "bars-light" }, svg);
+  element("path", { class: "scale-dark", id: "bars-dark" }, svg);
+  element("rect", { class: "neatline", id: "neatline-outer" }, svg);
+  element("rect", { class: "neatline", id: "neatline-inner" }, svg);
 }
 
 // Where things are on screen, for the view as it stands.
@@ -487,7 +490,14 @@ function measure() {
   const half = (size) => size / 2 / world;
   view.x = world <= width ? 0.5 : Math.min(Math.max(view.x, half(width)), 1 - half(width));
   view.y = world * TALL <= height ? TALL / 2 : Math.min(Math.max(view.y, half(height)), TALL - half(height));
-  shown = { width, height, world, left: width / 2 - view.x * world, top: height / 2 - view.y * world };
+  // The tools and the card keep to the corners of the whole world, which stay put as you zoom.
+  const beside = (width - fit) / 2 + 16;
+  const above = (height - fit * TALL) / 2 + 16;
+  if (beside !== shown.beside || above !== shown.above) {
+    holder.style.setProperty("--beside", `${beside}px`);
+    holder.style.setProperty("--above", `${above}px`);
+  }
+  shown = { width, height, world, left: width / 2 - view.x * world, top: height / 2 - view.y * world, beside, above };
 }
 
 const toScreen = (lat, lon) => [
@@ -514,6 +524,7 @@ function requestDraw() {
       drawLand(edges);
       drawGrid(edges);
       placePlots(edges);
+      placeCard();
       wantLand(edges);
     }
   });
@@ -821,6 +832,7 @@ function drawHot() {
       plots.get(old)?.group.classList.toggle("hot", on);
       rows.get(old)?.classList.toggle("hot", on);
     }
+    $("#round-card").classList.remove("west", "north");
     const plot = plots.get(number);
     if (plot) {
       plot.group.classList.remove("new");  // or moving it would draw it all over again
@@ -834,6 +846,7 @@ function drawHot() {
     markedRound = pickedRound;
   }
   drawCard(number);
+  placeCard();
 }
 
 const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
@@ -865,6 +878,25 @@ function drawCard(number) {
     : round.unread ? "Couldn't be read off the game" : "Not known yet";
 }
 
+// The card stays where it hides none of its round, or moves to where it doesn't, if there's such a
+// place. Not up by the chart's tools.
+const CARD_PLACES = [[false, false], [true, false], [true, true]];  // to the west? to the north?
+
+function placeCard() {
+  const card = $("#round-card");
+  const round = gameRounds().find((one) => one.number === hotShown);
+  if (card.hidden || !round || flight !== null) return;
+  const marks = [round.guess, round.answer].filter(Boolean).map((point) => toScreen(point[0], point[1]));
+  const wide = shown.beside + card.offsetWidth + 12;
+  const high = shown.above + card.offsetHeight + 12;
+  const clear = ([west, north]) => !marks.some(([x, y]) =>
+    (west ? x < wide : x > shown.width - wide) && (north ? y < high : y > shown.height - high));
+  if (clear([card.classList.contains("west"), card.classList.contains("north")])) return;
+  const [west, north] = CARD_PLACES.find(clear) || [card.classList.contains("west"), card.classList.contains("north")];
+  card.classList.toggle("west", west);
+  card.classList.toggle("north", north);
+}
+
 function pick(number, fly = true) {
   pickedRound = number === pickedRound && !fly ? null : number;
   drawHot();
@@ -878,6 +910,7 @@ function pick(number, fly = true) {
   }
 }
 
+// A round is framed in the space its card leaves: above the card or beside it, whichever shows it larger.
 function showRound(number) {
   const round = gameRounds().find((one) => one.number === number);
   if (!round) return;
@@ -885,27 +918,38 @@ function showRound(number) {
   if (!points.length) return;
   const xs = points.map((p) => (p[1] + 180) / 360);
   const ys = points.map((p) => (NORTH - mercator(p[0])) / (2 * Math.PI));
-  if (Math.max(...xs) - Math.min(...xs) > 0.5) return flyTo({ zoom: 1, x: 0.5, y: TALL / 2 });  // round the world
+  const across = Math.max(...xs) - Math.min(...xs);
+  const down = Math.max(...ys) - Math.min(...ys);
+  if (across > 0.5) return flyTo({ zoom: 1, x: 0.5, y: TALL / 2 });  // round the world
+  const card = $("#round-card");
+  card.classList.remove("west", "north");
   const fit = Math.min(shown.width, shown.height / TALL);
-  const room = (span, size) => (span > 0 ? (size * 0.6) / (span * fit) : FIT_ZOOM);
-  const zoom = Math.min(
-    room(Math.max(...xs) - Math.min(...xs), shown.width),
-    room(Math.max(...ys) - Math.min(...ys), shown.height),
+  const zoomFor = ([wide, high]) => Math.max(Math.min(
+    across ? (wide * 0.6) / (across * fit) : FIT_ZOOM,
+    down ? (high * 0.6) / (down * fit) : FIT_ZOOM,
     FIT_ZOOM,
-  );
+  ), 1);
+  const aboveCard = [shown.width, shown.height - shown.above - card.offsetHeight];
+  const besideCard = [shown.width - shown.beside - card.offsetWidth, shown.height];
+  const space = besideCard[0] >= 160 && zoomFor(besideCard) > zoomFor(aboveCard) ? besideCard : aboveCard;
+  const zoom = zoomFor(space);
   flyTo({
-    zoom: Math.max(zoom, 1),
-    x: (Math.max(...xs) + Math.min(...xs)) / 2,
-    y: (Math.max(...ys) + Math.min(...ys)) / 2,
+    zoom,
+    x: (Math.max(...xs) + Math.min(...xs)) / 2 + (shown.width - space[0]) / 2 / (fit * zoom),
+    y: (Math.max(...ys) + Math.min(...ys)) / 2 + (shown.height - space[1]) / 2 / (fit * zoom),
   });
 }
 
 // Moving about the chart.
 const quiet = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function flyTo(target, duration = 450) {
+function stopFlying() {
   cancelAnimationFrame(flight);
   flight = null;
+}
+
+function flyTo(target, duration = 450) {
+  stopFlying();
   if (quiet()) {
     Object.assign(view, target);
     requestDraw();
@@ -936,13 +980,13 @@ function zoomAt(factor, atX = shown.width / 2, atY = shown.height / 2, glide = f
     flyTo({ zoom, x, y }, 220);
     return;
   }
-  cancelAnimationFrame(flight);
+  stopFlying();
   Object.assign(view, { zoom, x, y });
   requestDraw();
 }
 
 function panBy(dx, dy) {
-  cancelAnimationFrame(flight);
+  stopFlying();
   view.x -= dx / shown.world;
   view.y -= dy / shown.world;
   requestDraw();
@@ -963,7 +1007,7 @@ let dragging = null;
 holder.addEventListener("pointerdown", (event) => {
   if (dragging || event.button !== 0 || event.target.closest("button")) return;  // a second finger's no use
   holder.setPointerCapture(event.pointerId);
-  dragging = { x: event.clientX, y: event.clientY, moved: 0, on: event.target.closest(".plot") };
+  dragging = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: 0, on: event.target.closest(".plot") };
   holder.classList.add("dragging");
 });
 holder.addEventListener("pointermove", (event) => {
@@ -987,7 +1031,7 @@ const endDrag = (event) => {
 holder.addEventListener("pointerup", endDrag);
 holder.addEventListener("pointercancel", endDrag);
 holder.addEventListener("dblclick", (event) => {
-  if (event.target.closest("button, .plot, .round-card")) return;
+  if (event.target.closest("button, .plot")) return;
   const box = holder.getBoundingClientRect();
   zoomAt(2, event.clientX - box.left, event.clientY - box.top, true);
 });
@@ -1089,6 +1133,7 @@ function drawRounds(rounds) {
           tabToRow(moves[event.key], true);
           moves[event.key].focus();
         }
+        event.preventDefault();
       });
       rows.set(round.number, row);
       body.append(row);
@@ -1133,7 +1178,6 @@ const formatCode = (text) => {
 };
 
 function chosen() {
-        event.preventDefault();
   return {
     mode: document.querySelector("[name=mode]:checked").value,
     room: $("#room").value,

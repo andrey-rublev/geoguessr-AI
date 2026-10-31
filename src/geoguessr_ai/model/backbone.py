@@ -23,6 +23,8 @@ from ..thermal import running_cool
 os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
 # Its advice to sign in, for faster downloads, is no use to anyone playing.
 os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+# Windows lets few programs make links, so the download makes copies: nothing to warn anyone of.
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 DEFAULT_BACKBONE = "openai/clip-vit-base-patch32"
 OPENVINO_DIR = Path.home() / ".cache" / "geoguessr-ai" / "openvino"

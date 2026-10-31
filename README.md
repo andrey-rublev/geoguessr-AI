@@ -10,7 +10,7 @@ For fun and learning. Only play it against friends who know it's a bot, never in
 
 On Windows 10 or 11, download **[geoguessr-AI-Setup.exe](https://github.com/andrey-rublev/geoguessr-AI/releases/latest/download/geoguessr-AI-Setup.exe)** and run it. It needs no administrator or Python. Windows may warn that it doesn't recognise the installer, as it isn't signed: choose **More info**, then **Run anyway**.
 
-It fetches the libraries it needs as it installs (about 1 GB), then opens the app, which offers to download the model (about 2.2 GB). It takes about 4 GB of disk in all, and it plays best with 8 GB of memory or more.
+It fetches the libraries it needs as it installs (about 1 GB), then opens the app, which offers to download the model (about 2.2 GB). It takes about 4 GB of disk in all, and it plays best with 8 GB of memory or more. On an Intel GPU it thinks in under a second a look. On any other computer it thinks on the CPU, in 10 seconds or more, so a very short round in a room may catch it out.
 
 ## Play
 

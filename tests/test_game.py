@@ -573,6 +573,23 @@ def test_keeps_what_it_saw_when_it_cant_find_continue(monkeypatch, tmp_path, cap
     assert next(tmp_path.glob("*/round_01/continue_not_found.png")).exists()
 
 
+def test_plays_on_with_the_disk_full(monkeypatch, tmp_path, capsys):
+    def no_room(*_):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(game_module, "ResultReader", FakeReader)
+    monkeypatch.setattr(OpenGuessrBot, "_save_round", staticmethod(no_room))
+    monkeypatch.setattr(OpenGuessrBot, "_save_reading", staticmethod(no_room))
+    controls = FakeControls()
+    settings = BotSettings(rounds=2, views=4, debug_dir=tmp_path)
+
+    OpenGuessrBot(LAYOUT, FakePredictor(), settings, FakeScreen(), controls).play()
+
+    assert controls.clicks.count(LAYOUT.guess_button) == 2
+    assert controls.clicks.count(LAYOUT.continue_button) == 2
+    assert "couldn't save to disk, playing on" in capsys.readouterr().out
+
+
 def test_a_corner_slam_ends_the_run_like_the_stop_key(tmp_path, capsys):
     controls = FakeControls(slam_on_click=3)  # part-way into the second round
     settings = BotSettings(rounds=3, record_answers=False, read_text=False, debug_dir=tmp_path)

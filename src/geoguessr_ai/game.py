@@ -391,8 +391,17 @@ class OpenGuessrBot:
             nonlocal saved
             if folder is not None and not saved:
                 how = self._how() | {"early_pin_stood": placement is early}
-                self._save_round(
-                    folder, look, lines, evidence, guess, placement, sure, self.camera, how
+                _try_saving(
+                    self._save_round,
+                    folder,
+                    look,
+                    lines,
+                    evidence,
+                    guess,
+                    placement,
+                    sure,
+                    self.camera,
+                    how,
                 )
             saved = True
 
@@ -434,7 +443,7 @@ class OpenGuessrBot:
                     reading = self.reader.read(*placed)
                 self._report(reading, placed)
                 if folder is not None:
-                    self._save_reading(folder, reading)
+                    _try_saving(self._save_reading, folder, reading)
             if not s.party:
                 self._press_continue(folder)
         return placement
@@ -1008,8 +1017,7 @@ class OpenGuessrBot:
             self.controls.sleep(1.0)
             waited += 1.0
         if folder is not None:
-            folder.mkdir(parents=True, exist_ok=True)
-            patch.save(folder / "continue_blocked.png")
+            _try_saving(_save_picture, patch, folder / "continue_blocked.png")
         raise ContinueBlocked(
             "the Continue button stayed covered, maybe by an advert, so it wasn't clicked. "
             "Close whatever covers it and play again; if nothing does, re-run calibrate."
@@ -1032,8 +1040,7 @@ class OpenGuessrBot:
                 break
             if waited >= self.settings.continue_timeout:
                 if folder is not None:
-                    folder.mkdir(parents=True, exist_ok=True)
-                    seen.save(folder / "continue_not_found.png")
+                    _try_saving(_save_picture, seen, folder / "continue_not_found.png")
                 raise ContinueBlocked("couldn't find the Continue button on the result screen")
             self.controls.sleep(1.0)
             waited += 1.0
@@ -1042,7 +1049,7 @@ class OpenGuessrBot:
         self.continue_image = self.screen.grab(button_region(button))
         self.layout = replace(self.layout, continue_button=button)
         if self.save_layout is not None:
-            self.save_layout(self.layout, self.continue_image)
+            _try_saving(self.save_layout, self.layout, self.continue_image)
 
     def _wait_for_street_view(self) -> None:
         """Wait while Street View is still a black screen."""
@@ -1140,6 +1147,19 @@ class OpenGuessrBot:
         if reading.problem:
             info["answer_problem"] = reading.problem
         _write_round(path, info)
+
+
+def _try_saving(save: Callable[..., None], *what) -> None:
+    """Save something for later, but never at the cost of playing on: the disk may be full."""
+    try:
+        save(*what)
+    except OSError as error:
+        print(f"  couldn't save to disk, playing on: {error}")
+
+
+def _save_picture(picture: Image.Image, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    picture.save(path)
 
 
 def _write_round(path: Path, info: dict) -> None:

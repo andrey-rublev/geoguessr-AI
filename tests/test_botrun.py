@@ -183,6 +183,10 @@ def test_says_what_it_needs_from_you(line, says):
     assert says in played(line).attention["text"]
 
 
+def test_says_when_its_starting_a_solo_game_itself():
+    assert played("Starting a Singleplayer game").detail == "Starting a solo game"
+
+
 def test_finds_where_to_watch_the_bots_screen():
     url = "http://localhost:6080/vnc.html?autoconnect=1&resize=scale"
     progress = played(f"The bot's screen: {url}")

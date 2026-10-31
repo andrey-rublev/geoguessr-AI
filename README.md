@@ -10,7 +10,7 @@ For fun and learning. Only play it against friends who know it's a bot, never in
 
 On Windows 10 or 11, download **[geoguessr-AI-Setup.exe](https://github.com/andrey-rublev/geoguessr-AI/releases/latest/download/geoguessr-AI-Setup.exe)** and run it. It needs no administrator or Python. Windows may warn that it doesn't recognise the installer, as it isn't signed: choose **More info**, then **Run anyway**.
 
-It fetches the libraries it needs as it installs (about 1 GB), then opens the app, which offers to download the model (about 2.2 GB).
+It fetches the libraries it needs as it installs (about 1 GB), then opens the app, which offers to download the model (about 2.2 GB). It takes about 4 GB of disk in all, and it plays best with 8 GB of memory or more.
 
 ## Play
 
@@ -18,7 +18,7 @@ Enter the room's code and press **Start the bot**, or choose **Solo game** and h
 
 **Where it plays:**
 
-- **On a hidden screen** leaves your mouse and screen yours, so you can play against it on the same computer. It needs WSL, Windows' own Linux, which the app sets up (about 1.5 GB). **Bot's screen** shows that screen, where you can tick OpenGuessr's box if it asks.
+- **On a hidden screen** leaves your mouse and screen yours, so you can play against it on the same computer. It needs WSL, Windows' own Linux, which the app sets up (a 1.5 GB download, about 5 GB of disk). **Bot's screen** shows that screen, where you can tick OpenGuessr's box if it asks.
 - **In its own browser window** needs nothing more, but OpenGuessr's person check may stop it there.
 - **On this screen** plays in your own browser, taking over your mouse until you press F8.
 

@@ -58,6 +58,8 @@ STILL_HERE_S = 2.0
 """How often to write to a window with nothing to say, which shows when it has closed."""
 MAX_REQUEST = 10_000
 LOG_NAME = "app.log"
+MUTEX = "geoguessr-AI"
+"""The AppMutex of installer/geoguessr-AI.iss."""
 CHART_COLUMNS = 180
 LAND_LEVELS = 8
 """How many times the chart's dots may halve as it's zoomed in: to about the land mask's own."""
@@ -534,11 +536,19 @@ def _say_what_went_wrong(error: BaseException) -> None:
         ctypes.windll.user32.MessageBoxW(0, str(error), "geoguessr-AI couldn't open", 0x10)
 
 
+def _say_its_running() -> None:
+    """Held till it ends, for Setup to see: it won't change or remove the app while it's running, as
+    Windows keeps the files it's running from."""
+    if sys.platform == "win32":
+        ctypes.windll.kernel32.CreateMutexW(None, False, MUTEX)
+
+
 def _run() -> None:
     url = _running_url()
     if url is not None:
         open_window(url)
         return
+    _say_its_running()
     app = App()
     server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
     port = server.server_address[1]

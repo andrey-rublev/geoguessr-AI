@@ -16,6 +16,7 @@ AppName={#Name}
 AppVersion={#Version}
 AppVerName={#Name} {#Version}
 AppPublisherURL=https://github.com/andrey-rublev/geoguessr-AI
+AppMutex={#Name}
 DefaultDirName={localappdata}\Programs\{#Name}
 DisableDirPage=yes
 DisableProgramGroupPage=yes

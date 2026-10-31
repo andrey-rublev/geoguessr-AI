@@ -354,6 +354,12 @@ def test_the_window_opens_as_an_app_with_a_profile_of_its_own(monkeypatch, tmp_p
     assert f"--user-data-dir={tmp_path / 'window'}" in started[0]
 
 
+def test_setup_can_see_the_app_is_running():
+    setup = (desktop.REPO / "installer" / "geoguessr-AI.iss").read_text(encoding="utf-8")
+    assert '#define Name "geoguessr-AI"' in setup and "AppMutex={#Name}" in setup
+    assert desktop.MUTEX == "geoguessr-AI"
+
+
 def test_makes_shortcuts_on_the_desktop_and_in_start_that_run_with_no_terminal(monkeypatch):
     ran = []
 

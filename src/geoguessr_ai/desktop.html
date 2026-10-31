@@ -1345,7 +1345,8 @@ $(".tabs").addEventListener("keydown", (event) => {
 });
 
 addEventListener("beforeunload", (event) => {
-  if (state && state.running) event.preventDefault();  // closing the window stops the bot
+  // Closing the window stops the bot, unless the app has gone already.
+  if (state && state.running && $("#lost-touch").hidden) event.preventDefault();
 });
 
 setChart();

@@ -5,6 +5,7 @@ same one the terminal runs, and knows nothing of the app.
 
 from __future__ import annotations
 
+import _thread
 import os
 import re
 import subprocess
@@ -31,6 +32,38 @@ STOP_TRIES, STOP_WAIT_S = 4, 5.0
 LEFTOVER_TRIES, LEFTOVER_WAIT_S = 5, 2.0
 """How long a bot left behind on its screen, as by a crash, gets to stop before a new one starts."""
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+EOF_LOOK_S = 0.25
+"""How often, on Windows, to look whether standard input has closed."""
+
+
+def _wait_for_eof() -> None:
+    """Wait for standard input to close, on Windows without reading it. There, a read waiting on a
+    pipe holds up whatever else so much as asks what kind of file that pipe is, and every program
+    the bot starts asks on starting: Playwright's hung for good, and no browser ever opened."""
+    if sys.platform != "win32":
+        sys.stdin.buffer.read()
+        return
+    import _winapi
+    import msvcrt
+
+    pipe = msvcrt.get_osfhandle(sys.stdin.fileno())
+    try:
+        while True:
+            _winapi.PeekNamedPipe(pipe, 0)
+            time.sleep(EOF_LOOK_S)
+    except OSError:  # the other end has closed
+        return
+
+
+def stop_on_eof() -> None:
+    """Stop, as Ctrl+C does, once standard input closes: how the desktop app stops the bot, and
+    what stops it should the app go away."""
+
+    def wait() -> None:
+        _wait_for_eof()
+        _thread.interrupt_main()
+
+    threading.Thread(target=wait, daemon=True).start()
 
 
 @dataclass(frozen=True)
@@ -259,6 +292,7 @@ class Progress:
 
     def _screen(self, found: re.Match) -> None:
         self.screen = found[1]
+        self.detail = "Loading the model"
 
     def _stopped(self, found: re.Match) -> None:
         self.reason = found[1]

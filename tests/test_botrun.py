@@ -145,7 +145,8 @@ def test_says_what_it_needs_from_you(line, says):
 
 def test_finds_where_to_watch_the_bots_screen():
     url = "http://localhost:6080/vnc.html?autoconnect=1&resize=scale"
-    assert played(f"The bot's screen: {url}").screen == url
+    progress = played(f"The bot's screen: {url}")
+    assert progress.screen == url and progress.detail == "Loading the model"
 
 
 def test_sums_up_a_game_it_was_asked_to_stop():
@@ -176,6 +177,35 @@ sys.stdin.read()
 print("Stopped by user.", flush=True)
 sys.exit(130)
 """
+
+
+def test_programs_it_starts_can_start_while_it_waits_for_its_input_to_close():
+    """A program started with the same standard input, as Playwright's is: waiting on a pipe by
+    reading it hung these for good on Windows."""
+    source = """
+import subprocess, sys, time
+from geoguessr_ai.botrun import stop_on_eof
+stop_on_eof()
+time.sleep(0.5)
+subprocess.run([sys.executable, "-c", "print('it started', flush=True)"], timeout=20, check=True)
+try:
+    time.sleep(30)
+except KeyboardInterrupt:
+    print("stopped", flush=True)
+"""
+    bot_process = subprocess.Popen(
+        [sys.executable, "-c", source],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    assert bot_process.stdout.readline().strip() == "it started"
+
+    bot_process.stdin.close()
+
+    assert bot_process.stdout.readline().strip() == "stopped"
+    assert bot_process.wait(10) == 0
 
 
 def bot(source, choices=Choices(where="browser")):

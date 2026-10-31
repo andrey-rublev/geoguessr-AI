@@ -1,10 +1,8 @@
-import io
 import json
 import time
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -24,7 +22,7 @@ from test_game import (
 )
 from test_mapcal import render_map
 
-from geoguessr_ai import calibrate, cli, controls, join, screen, windows
+from geoguessr_ai import botrun, calibrate, cli, controls, desktop, join, screen, windows
 from geoguessr_ai import game as game_module
 from geoguessr_ai.buttons import HALF_HEIGHT, HALF_WIDTH
 from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
@@ -133,12 +131,24 @@ def test_nmpz_can_be_asked_for_in_any_game(command):
     assert not cli._bot_settings(build_parser().parse_args([command])).nmpz
 
 
+def test_app_opens_the_app_or_makes_its_icon(monkeypatch, capsys):
+    opened = []
+    monkeypatch.setattr(desktop, "main", lambda: opened.append(True))
+    monkeypatch.setattr(desktop, "make_shortcut", lambda: "C:\\Desktop\\geoguessr-AI.lnk")
+
+    main(["app", "--shortcut"])
+    assert not opened and "geoguessr-AI.lnk" in capsys.readouterr().out
+
+    main(["app"])
+    assert opened
+
+
 def test_closing_standard_input_stops_the_bot(monkeypatch, capsys):
     def play(*_):
         time.sleep(5)
         pytest.fail("played on")
 
-    monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(buffer=io.BytesIO()))
+    monkeypatch.setattr(botrun, "_wait_for_eof", lambda: None)
     monkeypatch.setattr(cli, "_run_bot", play)
 
     with pytest.raises(SystemExit) as stopped:

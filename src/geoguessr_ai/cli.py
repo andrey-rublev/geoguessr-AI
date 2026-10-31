@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import _thread
 import argparse
 import json
 import os
 import subprocess
 import sys
-import threading
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -903,17 +901,6 @@ def _play_hidden(argv: list[str], args: argparse.Namespace) -> None:
         raise SystemExit(code)
 
 
-def _stop_on_eof() -> None:
-    """Stop, as Ctrl+C does, once standard input closes: how the desktop app stops the bot, and
-    what stops it should the app go away."""
-
-    def wait() -> None:
-        sys.stdin.buffer.read()
-        _thread.interrupt_main()
-
-    threading.Thread(target=wait, daemon=True).start()
-
-
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else list(argv)
     args = build_parser().parse_args(argv)
@@ -922,7 +909,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     try:
         if getattr(args, "stop_on_eof", False):
-            _stop_on_eof()
+            from .botrun import stop_on_eof
+
+            stop_on_eof()
         args.func(args)
     except KeyboardInterrupt:  # as the bot's own screen stops it, in WSL
         print("Stopped by user.")

@@ -171,6 +171,8 @@ h1 { margin: 0; font: 600 44px/1.02 var(--display); font-stretch: 75%; letter-sp
 .fix-dot { fill: var(--ink); }
 .plot.new .fix { animation: fixed .3s .65s ease-out both; transform-box: fill-box; transform-origin: center; }
 .plot-name { font: 600 12.5px var(--display); fill: var(--ink); stroke: var(--paper); stroke-width: 3.5; paint-order: stroke; stroke-linejoin: round; }
+.plot.old:not(.hot) :is(.plot-line, .guess-mark, .fix-ring, .plot-name) { display: none; }
+.plot.old:not(.hot) .fix-dot { opacity: .55; }
 .plots.has-hot .plot:not(.hot) { opacity: .28; }
 .plot { transition: opacity .12s; cursor: pointer; }
 @keyframes plotted { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
@@ -455,6 +457,10 @@ function lineBetween(guess, answer) {
   return `M${x1} ${y1}L${edgeX} ${edgeY}M${WIDTH - edgeX} ${edgeY}L${x2} ${y2}`;
 }
 
+// The latest rounds drawn in full. Earlier ones keep a dot at the answer, showing in full when
+// pointed at, since hundreds of lines would hide the chart.
+const CLEAR_PLOTS = 20;
+
 function drawPlots(rounds) {
   const plots = $("#plots");
   const shown = new Set();
@@ -487,6 +493,8 @@ function drawPlots(rounds) {
     }
   }
   for (const plot of [...plots.children]) if (!shown.has(plot.id)) plot.remove();
+  const count = plots.children.length;
+  [...plots.children].forEach((plot, at) => plot.classList.toggle("old", at < count - CLEAR_PLOTS));
 }
 
 function setHot(number) {

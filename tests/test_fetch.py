@@ -65,7 +65,7 @@ def test_a_damaged_download_is_refused_and_not_kept(served, tmp_path):
 def test_says_how_a_download_went_wrong_when_it_never_works(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch, "DOWNLOAD_TRIES", 2)
 
-    with pytest.raises(fetch.FetchFailed, match="Couldn't download the model"):
+    with pytest.raises(fetch.FetchFailed, match="couldn't reach the server"):
         fetch.download("http://127.0.0.1:9/", tmp_path / "x", "0", 10, "the model", wait=0.0)
 
 

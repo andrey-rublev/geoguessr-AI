@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import http.client
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from collections.abc import Callable
@@ -31,6 +32,7 @@ RETRY_WAIT_S = 5.0
 CHUNK = 1 << 20
 SAY_EVERY_S = 1.0
 """How often to say how a download is going."""
+TRY_AGAIN = "Check your connection and that the disk has room, then try again."
 
 
 class FetchFailed(RuntimeError):
@@ -57,7 +59,7 @@ def download(url: str, to: Path, expected: str, size: int, what: str, wait: floa
         except (OSError, http.client.HTTPException) as error:  # a dropped connection, a full disk
             problem = error
     else:
-        raise FetchFailed(f"Couldn't download {what}: {problem}. Check the connection, then retry.")
+        raise FetchFailed(f"Couldn't download {what} ({_why(problem)}). {TRY_AGAIN}")
     digest = hashlib.sha256()
     with open(partial, "rb") as file:
         while chunk := file.read(CHUNK):
@@ -66,6 +68,15 @@ def download(url: str, to: Path, expected: str, size: int, what: str, wait: floa
         partial.unlink()
         raise FetchFailed(f"{what.capitalize()} came out damaged. Try again.")
     partial.replace(to)
+
+
+def _why(problem: Exception | None) -> str:
+    """What went wrong with a download, for anyone to read."""
+    if isinstance(problem, urllib.error.HTTPError):
+        return f"the server said {problem.code}"
+    if isinstance(problem, urllib.error.URLError):
+        return "couldn't reach the server"
+    return str(problem)
 
 
 def _download_rest(url: str, partial: Path, size: int, what: str) -> None:
@@ -125,7 +136,7 @@ def fetch_image_model(name: str = IMAGE_MODEL) -> None:
             tqdm_class=_progress_as_lines("the image model"),
         )
     except (HfHubHTTPError, OSError) as error:
-        raise FetchFailed(f"Couldn't download the image model: {error}") from error
+        raise FetchFailed(f"Couldn't download the image model. {TRY_AGAIN}") from error
 
 
 def _progress_as_lines(what: str) -> type:

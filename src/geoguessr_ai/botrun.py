@@ -293,9 +293,11 @@ class Progress:
         )
 
     def _check(self, _: re.Match) -> None:
-        self._ask(
-            "check", f"OpenGuessr wants a person to tick its box {self.place}. The bot waits."
-        )
+        said = f"OpenGuessr wants a person to tick its box {self.place}. The bot waits."
+        if self.place == PLACE_NAMES["browser"]:  # a browser the bot drives can be told from others
+            said += " If it asks again and again, it won't let this window through: stop the bot"
+            said += " and choose another place."
+        self._ask("check", said)
 
     def _no_round(self, found: re.Match) -> None:
         if found[1].startswith("start"):

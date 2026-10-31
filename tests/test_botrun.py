@@ -167,6 +167,17 @@ def test_asks_a_person_only_for_what_a_person_must_do():
     assert progress.attention is None
 
 
+def test_says_what_to_do_should_the_person_check_not_let_its_own_window_through():
+    line = "OpenGuessr is checking that a person is there: tick its box in the bot's browser"
+    progress = Progress(Choices(mode="play", where="browser"))
+    progress.read(line)
+    assert "choose another place" in progress.attention["text"]
+
+    progress = Progress(Choices(mode="play", where="hidden"))
+    progress.read(line)
+    assert "choose another place" not in progress.attention["text"]
+
+
 @pytest.mark.parametrize(
     "line,says",
     [

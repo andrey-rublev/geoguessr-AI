@@ -335,6 +335,9 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
   </header>
 
   <div>
+    <div class="needs-you" id="lost-touch" role="alert" hidden>
+      <p>This window has lost touch with the app. Close it and open the app again.</p>
+    </div>
     <div class="needs-you" id="needs-you" role="alert" hidden>
       <p id="needs-you-text"></p>
       <button type="button" id="needs-you-show" hidden>Show the bot's screen</button>
@@ -394,14 +397,20 @@ let state = null;
 let game = null;
 let tab = "chart";
 
+const OUT_OF_TOUCH = "This window has lost touch with the app. Close it and open the app again.";
+
 async function post(path, body = {}) {
-  const answer = await fetch(`${path}?token=${encodeURIComponent(token)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (answer.ok) return null;
-  return (await answer.json()).error || "That didn't work.";
+  try {
+    const answer = await fetch(`${path}?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (answer.ok) return null;
+    return (await answer.json()).error || "That didn't work.";
+  } catch {
+    return OUT_OF_TOUCH;
+  }
 }
 
 // The chart: Mercator's projection, on which a straight line keeps one compass course. Drawn in the
@@ -1310,7 +1319,17 @@ addEventListener("beforeunload", (event) => {
 setChart();
 requestDraw();
 drawChoices();
-new EventSource(`/events?token=${encodeURIComponent(token)}`).onmessage = (event) => draw(JSON.parse(event.data));
+const events = new EventSource(`/events?token=${encodeURIComponent(token)}`);
+let outOfTouch = null;
+events.onmessage = (event) => {
+  clearTimeout(outOfTouch);
+  outOfTouch = null;
+  $("#lost-touch").hidden = true;
+  draw(JSON.parse(event.data));
+};
+events.onerror = () => {  // it tries again by itself, so only say so if that doesn't work
+  outOfTouch ??= setTimeout(() => { $("#lost-touch").hidden = false; }, 4000);
+};
 </script>
 </body>
 </html>

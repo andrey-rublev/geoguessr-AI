@@ -523,6 +523,7 @@ def make_shortcuts() -> list[str]:
         ],
         capture_output=True,
         text=True,
+        errors="replace",  # it answers in the console's code page, whatever a folder's name is in
         check=False,
     )
     if done.returncode != 0:

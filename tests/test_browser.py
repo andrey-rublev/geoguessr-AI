@@ -138,6 +138,7 @@ def test_the_bots_browser_is_muted(monkeypatch):
     BrowserSession().close()
 
     assert "--mute-audio" in started["args"]
+    assert "--lang=en-US" in started["args"]
 
 
 def test_closing_the_bots_browser_stops_the_bot():

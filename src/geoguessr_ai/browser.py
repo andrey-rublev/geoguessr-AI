@@ -85,6 +85,9 @@ class BrowserSession:
                     "--disable-backgrounding-occluded-windows",
                     "--disable-renderer-backgrounding",
                     "--mute-audio",  # its game's sounds and music would only get in the way
+                    # The game is in English whatever the browser's language, and a browser in
+                    # another offers to translate it, over Menu. So do Google's labels change.
+                    "--lang=en-US",
                 ],
             }
             launch = playwright.chromium.launch_persistent_context

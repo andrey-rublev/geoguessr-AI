@@ -131,6 +131,7 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .go-button:disabled { opacity: .45; cursor: not-allowed; }
 .go-button.stops { background: var(--ink); color: var(--paper); }
 .go-note { margin: 7px 0 0; font-size: 12.5px; color: var(--ink-soft); text-align: center; }
+.go .wrong { margin-top: 7px; text-align: center; }
 #set-up-model { display: block; margin: 6px auto 0; }
 fieldset:disabled .place, fieldset:disabled .switch, fieldset:disabled .modes label { opacity: .55; cursor: default; }
 
@@ -233,7 +234,6 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
       <div class="section" id="room-section">
         <label class="section-name" for="room">Room code</label>
         <input class="code" id="room" maxlength="7" placeholder="EW2-78U" autocomplete="off" spellcheck="false" aria-describedby="room-hint" autofocus>
-        <p class="wrong" id="room-wrong" role="alert" hidden></p>
         <p class="hint" id="room-hint">The host's screen shows it. Leave it empty to join the room yourself, once the bot has started.</p>
       </div>
 
@@ -287,6 +287,7 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
   </div>
   <div class="go">
     <button class="go-button" id="go" type="submit">Start the bot</button>
+    <p class="wrong" id="start-wrong" role="alert" hidden></p>
     <p class="go-note" id="go-note" hidden></p>
     <button type="button" class="set-up" id="set-up-model" hidden>Build it (downloads about 5.4 GB)</button>
   </div>
@@ -589,10 +590,10 @@ function restore(saved) {
   }
 }
 
-function showRoomProblem(problem) {
-  $("#room-wrong").textContent = problem;
-  $("#room-wrong").hidden = !problem;
-  if (problem) $("#room").setAttribute("aria-invalid", "true");
+function showProblem(problem) {
+  $("#start-wrong").textContent = problem;
+  $("#start-wrong").hidden = !problem;
+  if (problem && !$("#room-section").hidden) $("#room").setAttribute("aria-invalid", "true");
   else $("#room").removeAttribute("aria-invalid");
 }
 
@@ -640,7 +641,9 @@ function drawIdle(picks) {
     $("#headline").textContent = "Ready for a solo game";
     $("#detail").textContent = onScreen
       ? "Open a Singleplayer game first, then press Start."
-      : `Press Start, and it plays ${picks.rounds || 5} rounds.`;
+      : picks.rounds >= 1
+        ? `Press Start, and it plays ${picks.rounds} rounds.`
+        : "Enter how many rounds to play.";
   } else if (onScreen) {
     $("#headline").textContent = "Ready for a room";
     $("#detail").textContent = "Join the room in your browser first, then press Start.";
@@ -747,19 +750,19 @@ $("#form").addEventListener("submit", async (event) => {
   const picks = chosen();
   const typed = picks.room.replace(/[^0-9a-z]/gi, "");
   if (picks.mode === "friends" && picks.where !== "screen" && typed && typed.length !== 6) {
-    showRoomProblem("A room code has six letters and digits, like EW2-78U.");
+    showProblem("A room code has six letters and digits, like EW2-78U.");
     $("#room").focus();
     return;
   }
-  showRoomProblem("");
+  showProblem("");
   const problem = await post("/start", picks);
-  if (problem) showRoomProblem(problem);
+  if (problem) showProblem(problem);
 });
 $("#room").addEventListener("input", (event) => {
   event.target.value = formatCode(event.target.value);
-  showRoomProblem("");
   drawChoices();
 });
+$("#form").addEventListener("input", () => showProblem(""));
 $("#form").addEventListener("change", drawChoices);
 $("#set-up-ubuntu").addEventListener("click", (event) => {
   event.preventDefault();

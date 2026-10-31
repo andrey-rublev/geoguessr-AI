@@ -1,7 +1,21 @@
 import numpy as np
+import pytest
+import rapidocr
+from rapidocr.utils.download_file import DownloadFileException
 
 from geoguessr_ai.knowledge.text import TextLine
-from geoguessr_ai.ocr import _pad_width, _steep, pick_reading, script_of
+from geoguessr_ai.ocr import SignReader, _pad_width, _steep, pick_reading, script_of
+
+
+@pytest.mark.parametrize("wrong", [DownloadFileException("Failed to download"), OSError("cut off")])
+def test_says_so_if_it_cant_download_its_models(monkeypatch, wrong):
+    def cant(**_):
+        raise wrong
+
+    monkeypatch.setattr(rapidocr, "RapidOCR", cant)
+
+    with pytest.raises(ConnectionError, match="Couldn't download the sign reader"):
+        SignReader(models=["latin"])
 
 
 def test_lines_are_padded_to_a_few_widths():

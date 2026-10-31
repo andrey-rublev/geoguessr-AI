@@ -1105,3 +1105,13 @@ def test_uses_a_sign_reader_loaded_before_the_round(monkeypatch):
     bot = OpenGuessrBot(LAYOUT, FakePredictor(), settings, street_view, street_view, signs=signs)
 
     assert bot.signs is signs
+
+
+def test_plays_without_reading_signs_if_the_reader_cant_be_downloaded(monkeypatch, capsys):
+    def cant():
+        raise ConnectionError("Couldn't download the sign reader.")
+
+    monkeypatch.setattr(game_module, "SignReader", cant)
+
+    assert game_module.load_sign_reader() is None
+    assert "Not reading signs: Couldn't download" in capsys.readouterr().out

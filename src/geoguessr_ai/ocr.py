@@ -149,6 +149,7 @@ class SignReader:
         import importlib.util
 
         from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion, RapidOCR
+        from rapidocr.utils.download_file import DownloadFileException
 
         if models is None:  # right-to-left Arabic needs python-bidi to come out in reading order
             models = [m for m in RECOGNISERS if m != "arabic" or importlib.util.find_spec("bidi")]
@@ -170,7 +171,10 @@ class SignReader:
                 }
             )
 
-        engines = {model: engine(model) for model in models}
+        try:
+            engines = {model: engine(model) for model in models}
+        except (DownloadFileException, OSError) as error:  # it fetches them the first time
+            raise ConnectionError("Couldn't download the sign reader.") from error
         self._detect = engines[models[0]].text_det
         self._recognisers = {model: e.text_rec for model, e in engines.items()}
         self.min_score = min_score

@@ -171,7 +171,10 @@ def fetch_sign_reader() -> None:
     from .ocr import SignReader
 
     print("Fetching the sign reader...", flush=True)
-    SignReader()
+    try:
+        SignReader()
+    except ConnectionError as error:
+        raise FetchFailed(f"{error} {TRY_AGAIN}") from error
 
 
 def ready_image_model(name: str = IMAGE_MODEL) -> None:

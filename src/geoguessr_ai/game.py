@@ -228,6 +228,9 @@ def load_sign_reader() -> SignReader | None:
     except ImportError:
         print("Not reading signs: install RapidOCR with `pip install rapidocr onnxruntime`")
         return None
+    except ConnectionError as error:
+        print(f"Not reading signs: {error}")
+        return None
 
 
 class OpenGuessrBot:

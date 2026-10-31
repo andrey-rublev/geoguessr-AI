@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from geoguessr_ai import fetch
+from geoguessr_ai import fetch, ocr
 
 CONTENT = bytes(range(256)) * 5000
 
@@ -119,6 +119,16 @@ def test_fetches_unpacks_and_clears_away_the_pack(tmp_path, monkeypatch):
 
     assert (tmp_path / "models" / "geoguessr.pt").exists()
     assert not (tmp_path / "data" / "geoguessr-model.zip").exists()
+
+
+def test_says_what_to_do_if_the_sign_reader_cant_be_downloaded(monkeypatch):
+    def cant():
+        raise ConnectionError("Couldn't download the sign reader.")
+
+    monkeypatch.setattr(ocr, "SignReader", cant)
+
+    with pytest.raises(fetch.FetchFailed, match="sign reader. Check your connection"):
+        fetch.fetch_sign_reader()
 
 
 def test_says_a_big_downloads_progress_in_lines_for_the_app(capsys, monkeypatch):

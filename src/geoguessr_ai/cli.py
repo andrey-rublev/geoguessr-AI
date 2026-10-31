@@ -60,9 +60,13 @@ def _predictor(args: argparse.Namespace):
 
 def _read_words():
     """What reads the game's own words on screen, like Menu and Guess, to find it by."""
+    from .fetch import TRY_AGAIN
     from .ocr import SignReader
 
-    return SignReader(models=["latin"], threads=2).words
+    try:
+        return SignReader(models=["latin"], threads=2).words
+    except ConnectionError as error:
+        raise SystemExit(f"{error} {TRY_AGAIN}") from None
 
 
 def _find_game(

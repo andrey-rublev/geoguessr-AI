@@ -8,7 +8,7 @@ For fun and learning. Only play it against friends who know it's a bot, never in
 
 On Windows 10 or 11, download **[geoguessr-AI-Setup.exe](https://github.com/andrey-rublev/geoguessr-AI/releases/latest/download/geoguessr-AI-Setup.exe)** and run it. It needs no administrator or Python. Windows may warn that it doesn't recognise the installer, as it isn't signed: choose **More info**, then **Run anyway**.
 
-It fetches Python and its libraries as it installs (about 1 GB), then opens the app, which offers to download the model (about 2.2 GB).
+It fetches the libraries it needs as it installs (about 1 GB), then opens the app, which offers to download the model (about 2.2 GB).
 
 ## Play
 

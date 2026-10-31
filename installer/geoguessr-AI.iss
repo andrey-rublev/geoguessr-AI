@@ -1,6 +1,9 @@
 ; The Windows installer. GitHub builds it (see .github/workflows/setup.yml), with uv.exe beside this
-; file in uv\. It needs no administrator: everything goes in the user's own programs folder, Python
-; included, and that folder is where the bot works, keeping its model and rounds there too.
+; file in uv\ and a Python in python\. It needs no administrator: everything goes in the user's own
+; programs folder, and that folder is where the bot works, keeping its model and rounds there too.
+;
+; It brings its Python rather than having uv fetch one, as uv would link to that with a junction, and
+; what Setup starts can't follow one: Windows' redirection guard, which Setup turns on, stops it.
 
 #ifndef Version
   #define Version "0.0.0"
@@ -30,7 +33,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 
 [Messages]
-WelcomeLabel2=This installs geoguessr-AI, an AI that plays OpenGuessr from what it sees on screen.%n%nIt fetches Python and its libraries as it installs, about 1 GB, which takes a few minutes. Then the app offers to download the model, about 2.2 GB.%n%nOnly play it against friends who know it's a bot, never in ranked or public games.
+WelcomeLabel2=This installs geoguessr-AI, an AI that plays OpenGuessr from what it sees on screen.%n%nIt fetches the libraries it needs as it installs, about 1 GB, which takes a few minutes. Then the app offers to download the model, about 2.2 GB.%n%nOnly play it against friends who know it's a bot, never in ranked or public games.
 
 [Tasks]
 Name: "desktopicon"; Description: "Put an icon on my desktop"
@@ -50,13 +53,15 @@ Source: "..\uv.lock"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "install_libraries.cmd"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "uv\uv.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "python\*"; DestDir: "{app}\python"; Flags: recursesubdirs ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#Name}"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: "-m geoguessr_ai.desktop"; WorkingDir: "{app}"; IconFilename: "{app}\src\geoguessr_ai\desktop.ico"; Comment: "Start the geoguessr-AI bot and watch it play"
 Name: "{autodesktop}\{#Name}"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: "-m geoguessr_ai.desktop"; WorkingDir: "{app}"; IconFilename: "{app}\src\geoguessr_ai\desktop.ico"; Comment: "Start the geoguessr-AI bot and watch it play"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: "-m geoguessr_ai.desktop"; WorkingDir: "{app}"; Description: "Open geoguessr-AI"; Flags: postinstall nowait skipifsilent; Check: LibrariesInstalled
+; By way of Explorer, like pressing its icon: started by Setup itself, it would be under the guard too.
+Filename: "{win}\explorer.exe"; Parameters: """{autoprograms}\{#Name}.lnk"""; Description: "Open geoguessr-AI"; Flags: postinstall nowait skipifsilent; Check: LibrariesInstalled
 
 [UninstallDelete]
 ; All it fetched or made since. Rounds it played stay in runs, for whoever wants them.
@@ -93,7 +98,7 @@ procedure InstallLibraries;
 var
   Code: Integer;
 begin
-  WizardForm.StatusLabel.Caption := 'Fetching Python and its libraries, about 1 GB. This takes a few minutes...';
+  WizardForm.StatusLabel.Caption := 'Fetching the libraries it needs, about 1 GB. This takes a few minutes...';
   WizardForm.FilenameLabel.Caption := '';
   WizardForm.ProgressGauge.Style := npbstMarquee;
   try
@@ -104,7 +109,7 @@ begin
   end;
   WizardForm.ProgressGauge.Style := npbstNormal;
   if not Installed then
-    SuppressibleMsgBox('Python and its libraries couldn''t be installed:'#13#10#13#10 + LastSaid + #13#10#13#10'Check the connection, then run Setup again.', mbError, MB_OK, IDOK);
+    SuppressibleMsgBox('The libraries it needs couldn''t be installed:'#13#10#13#10 + LastSaid + #13#10#13#10'Check your connection and that the disk has room, then run Setup again.', mbError, MB_OK, IDOK);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

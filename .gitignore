@@ -15,6 +15,7 @@ layout-continue.png
 calibration_preview.png
 .playwright-mcp/
 installer/uv/
+installer/python/
 installer/Output/
 geoguessr-model-*.zip
 layout-party.json

@@ -25,6 +25,12 @@ jobs:
           $url = "https://github.com/astral-sh/uv/releases/download/$env:UV_VERSION/uv-x86_64-pc-windows-msvc.zip"
           Invoke-WebRequest $url -OutFile uv.zip
           Expand-Archive uv.zip installer/uv
+      - name: Get a Python to bring along
+        shell: pwsh
+        run: |
+          installer/uv/uv.exe python install 3.13 --install-dir pythons --no-bin
+          $python = Get-ChildItem pythons -Directory | Where-Object Name -Match '^cpython-3\.13\.\d+' | Select-Object -First 1
+          Move-Item $python.FullName installer/python
       - name: Get Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Build it

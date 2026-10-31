@@ -16,6 +16,9 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
+# Or a model on Hugging Face in the old format, like StreetCLIP, gets downloaded again in the new.
+os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
+
 DEFAULT_BACKBONE = "openai/clip-vit-base-patch32"
 OPENVINO_DIR = Path.home() / ".cache" / "geoguessr-ai" / "openvino"
 """Where encoders converted to run on an Intel GPU are kept: converting one takes minutes."""

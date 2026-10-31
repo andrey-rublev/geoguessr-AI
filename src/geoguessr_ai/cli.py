@@ -130,6 +130,15 @@ def cmd_download(args: argparse.Namespace) -> None:
     download_osv5m(args.root, args.split, args.shards)
 
 
+def cmd_fetch_model(args: argparse.Namespace) -> None:
+    from .fetch import FetchFailed, fetch_model
+
+    try:
+        fetch_model()
+    except FetchFailed as failed:
+        raise SystemExit(str(failed)) from None
+
+
 def cmd_embed(args: argparse.Namespace) -> None:
     from .model.backbone import ImageEncoder
     from .model.embed import embed_folder, embed_osv5m_shard
@@ -406,7 +415,7 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
     from .game import OpenGuessrBot, load_sign_reader
 
     if not args.model.exists():
-        raise SystemExit(f"{args.model} not found. Build a model with `geoguessr-ai train` first.")
+        raise SystemExit(f"{args.model} not found. Get one with `geoguessr-ai fetch-model`.")
     if args.layout is None:
         args.layout = _browser_layout(args.default_layout, args.browser)
     predictor = _predictor(args)
@@ -740,6 +749,13 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="CODE",
         help="join the room with this code by itself, in a browser of its own (as --browser), "
         "or with --own-screen on that screen",
+    )
+
+    add(
+        "fetch-model",
+        cmd_fetch_model,
+        "Setup: download the model, ready to play with (about 2.2 GB).",
+        "It's what `train --shards 0` builds, and better: it learned from thousands of rounds.",
     )
 
     p = add(

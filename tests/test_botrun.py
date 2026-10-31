@@ -144,6 +144,11 @@ def test_says_how_the_last_round_went_while_waiting_for_the_host():
     assert progress.detail == "290 km off: it guessed MX, the answer was GT"
 
 
+def test_says_when_a_rounds_answer_couldnt_be_read():
+    progress = played("Round 1\n  couldn't read the answer: the result map went\n")
+    assert progress.rounds[0].unread and "Couldn't read" in progress.detail
+
+
 def test_a_round_with_no_pin_counts_as_missed():
     progress = played("Round 1\n  the round ended before the bot could guess\n")
     assert progress.rounds[0].missed

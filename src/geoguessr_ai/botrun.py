@@ -147,6 +147,8 @@ class Round:
     right: bool | None = None
     missed: bool = False
     """No pin went down in time, or the round went wrong."""
+    unread: bool = False
+    """The answer couldn't be read off the game."""
 
 
 class Progress:
@@ -255,6 +257,11 @@ class Progress:
             self.rounds[-1].missed = True
         self.detail = "The round ended before the bot could put a pin down"
 
+    def _unread(self, _: re.Match) -> None:
+        if self.rounds:
+            self.rounds[-1].unread = True
+        self.detail = "Couldn't read the answer this time"
+
     def _wrong_round(self, _: re.Match) -> None:
         if self.rounds:
             self.rounds[-1].missed = True
@@ -320,6 +327,8 @@ def _result(done: Round) -> str:
     if done.right:
         return f"{done.km:,} km off, the right country"
     guessed, really = done.guess_country, done.answer_country
+    if not guessed or not really:
+        return f"{done.km:,} km off"
     return f"{done.km:,} km off: it guessed {guessed}, the answer was {really}"
 
 
@@ -350,7 +359,7 @@ _LINES: Sequence[tuple[re.Pattern, Callable[[Progress, re.Match], None]]] = [
         (r"another player guessed, leaving (\d+) s", _saying("Another player guessed: {} s left")),
         (r"^the timer was cut to (\d+) s", _saying("The clock was cut to {} s")),
         (r"round ended with the pin down", _saying("Time ran out with the pin down, which counts")),
-        (r"^couldn't read the answer", _saying("Couldn't read the answer this time")),
+        (r"^couldn't read the answer", Progress._unread),
         (r"^(?:no guess this round|the round ended before)", Progress._missed),
         (r"^something went wrong this round", Progress._wrong_round),
         (r"^Waiting for the host", Progress._waiting),

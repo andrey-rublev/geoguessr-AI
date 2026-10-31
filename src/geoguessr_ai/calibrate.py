@@ -58,10 +58,12 @@ def ensure_layout(
     again: bool = False,
     bring_forward: Callable[[], bool] | None = None,
     expand_wait: float = 1.0,
+    loading_s: float = 0.0,
 ) -> Layout:
     """The game's layout: the one saved at ``path``, while the game still shows there, or else
     found afresh, waiting until the game shows, and saved there. ``again`` finds it afresh
-    regardless. Raises :class:`WrongGame` if the game found is the other kind."""
+    regardless. Raises :class:`WrongGame` if the game found is the other kind. ``loading_s``: how
+    long a game just started may take to show before anyone is asked to start one."""
     if not again and Path(path).exists():
         layout = Layout.load(path)
         outdated = layout.page is not None and layout.found_by < VERSION  # by an older finder
@@ -74,7 +76,7 @@ def ensure_layout(
     kind = "start a Singleplayer game"
     if party:
         kind = "join a multiplayer room, and its host starts one"
-    said = None
+    said, waited = None, 0.0
     while True:
         try:
             layout = find_layout(screen, controls, party, read_words, bring_forward, expand_wait)
@@ -83,10 +85,11 @@ def ensure_layout(
             layout, why = None, str(narrow)
         if layout is not None:
             break
-        if why != said:  # each once
+        if why != said and waited >= loading_s:  # each once
             print(f"{why} ({getattr(controls, 'stop_name', 'F8')} stops.)")
             said = why
         controls.sleep(LOOK_AGAIN_S)
+        waited += LOOK_AGAIN_S
     layout.save(path)
     button_image_path(path).unlink(missing_ok=True)  # the bot snapshots Continue when it shows
     _save_preview(screen, layout, PREVIEW_PATH)

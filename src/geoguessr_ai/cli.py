@@ -30,6 +30,8 @@ DEFAULT_REST = 1.0
 # Even so, it went down again embedding beside other work, which alone kept it at 80 to 90 C:
 # long jobs wait whenever the CPU reaches this, until it has cooled a few degrees.
 DEFAULT_MAX_TEMP = 85.0
+SOLO_LOADS_S = 30.0
+"""How long a Singleplayer game the bot has just started may take to show: 25 s on its screen."""
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
@@ -91,8 +93,7 @@ def _find_game(
                 f"Join room {join} yourself, in the bot's browser "
                 "(with --hidden, at http://localhost:6080/vnc.html)."
             )
-        if solo:
-            start_solo(screen, controls, read_words)
+        started = solo and start_solo(screen, controls, read_words)
         return ensure_layout(
             screen,
             controls,
@@ -101,6 +102,7 @@ def _find_game(
             read_words,
             again=again,
             bring_forward=None if own else bring_forward,
+            loading_s=SOLO_LOADS_S if started else 0.0,
         )
     except StopRequested:
         print("Stopped by user.")

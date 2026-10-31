@@ -152,10 +152,20 @@ class App:
             self.updates.wait_for(lambda: self.version != seen, STILL_HERE_S)
             return self.version
 
-    def state(self) -> dict:
-        run = self.run
+    def message(self, game: int | None, printed: int) -> tuple[dict, int, int]:
+        """What to tell a window that has heard of ``game`` up to its line ``printed``, then which
+        game that is and which line it has now heard to. With a new game, or a new window, it
+        starts over, which ``restart`` tells it."""
+        with self.updates:
+            run, number = self.run, self.game
+        restart = number != game
+        lines = [] if run is None else run.lines[0 if restart else printed :]
+        said = self.state(run, number) | {"lines": lines, "restart": restart}
+        return said, number, (0 if restart else printed) + len(lines)
+
+    def state(self, run: BotRun | None, game: int) -> dict:
         return {
-            "game": self.game,
+            "game": game,
             "running": run is not None and not run.over.is_set(),
             "choices": None if run is None else asdict(run.choices),
             "progress": None if run is None else run.progress.as_dict(),
@@ -176,9 +186,10 @@ class App:
         self.saved = asdict(replace(choices, room=""))  # a room's code is good for one game
         APP_DIR.mkdir(parents=True, exist_ok=True)
         LAST_CHOICES.write_text(json.dumps(self.saved), encoding="utf-8")
-        self.game += 1
-        self.run = BotRun(choices, self.changed, self.program)
-        self.run.start()
+        run = BotRun(choices, self.changed, self.program)
+        with self.updates:
+            self.run, self.game = run, self.game + 1
+        run.start()
         self.changed()
 
     def stop(self) -> None:
@@ -347,13 +358,8 @@ def handler_for(app: App, port_host: str) -> type[BaseHTTPRequestHandler]:
                         self.wfile.write(b": still here\n\n")
                     else:
                         seen = version
-                        state = app.state()
-                        if state["game"] != game:
-                            game, printed = state["game"], 0
-                        lines = [] if app.run is None else app.run.lines[printed:]
-                        printed += len(lines)
-                        message = json.dumps(state | {"lines": lines})
-                        self.wfile.write(f"data: {message}\n\n".encode())
+                        said, game, printed = app.message(game, printed)
+                        self.wfile.write(f"data: {json.dumps(said)}\n\n".encode())
                     self.wfile.flush()
             except OSError:  # the window has closed
                 pass

@@ -1201,12 +1201,13 @@ function drawScreen() {
 function draw(message) {
   state = message;
   const progress = state.progress;
+  if (message.restart && state.game > 0) $("#messages").textContent = "";
   if (state.game !== game) {
     game = state.game;
-    if (game > 0) {
-      $("#messages").textContent = "";
-      $("#use-screen").checked = false;
-    }
+    if (game > 0) $("#use-screen").checked = false;
+    pickedRound = pointedRound = null;
+    drawPlots([]);
+    drawRounds([]);
     restoredOnce();
     if (progress) setTab(tab === "screen" ? "chart" : tab);
   }

@@ -168,6 +168,19 @@ def test_starts_the_bot_and_follows_it_until_stopped(served):
     assert "Stopped by user." in served.app.run.lines
 
 
+def test_a_new_window_hears_it_all_from_the_start_and_says_so(served):
+    served.post("/start", {"mode": "friends", "where": "browser"})
+    for message in served.events():
+        if message["lines"]:
+            break
+
+    again = next(served.events())
+
+    assert again["restart"] and again["lines"][0] == "Round 1"
+    said, game, printed = served.app.message(again["game"], len(again["lines"]))
+    assert not said["restart"] and said["lines"] == [] and printed == len(again["lines"])
+
+
 def test_wont_start_a_second_game_over_the_first(served):
     start = {"mode": "friends", "where": "browser"}
     served.post("/start", start)

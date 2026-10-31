@@ -48,6 +48,17 @@ KEYS = {
 """pyautogui's key names, as Playwright knows them."""
 
 
+def _open(page, url: str) -> None:
+    """Go to ``url``. On a slow connection its adverts may not finish loading in the time Playwright
+    allows, which stops nothing, as the bot goes by what shows. Not reaching it at all does."""
+    try:
+        page.goto(url)
+    except Exception as error:  # noqa: BLE001 - Playwright's, of a kind only it can import
+        if type(error).__name__ != "TimeoutError":
+            why = str(error).splitlines()[0] if str(error) else type(error).__name__
+            raise ConnectionError(f"Couldn't open {url}: check your connection. ({why})") from None
+
+
 class BrowserSession:
     """A Chrome window of the bot's own, run by a thread of its own: :meth:`call` hands it work
     from any thread and waits for the result."""
@@ -66,7 +77,10 @@ class BrowserSession:
         args = (url, size, profile, channel, headless, started)
         self._thread = threading.Thread(target=self._run, args=args, daemon=True)
         self._thread.start()
-        started.result()  # raises here if the browser couldn't start
+        try:
+            started.result()  # raises here if the browser couldn't start
+        except ConnectionError as cant:
+            raise SystemExit(str(cant)) from None
 
     def _run(self, url, size, profile, channel, headless, started: Future) -> None:
         try:
@@ -99,7 +113,7 @@ class BrowserSession:
                 print("No Google Chrome here: using Microsoft Edge, as Windows comes with it.")
                 context = launch(str(profile), channel="msedge", **options)
             page = context.pages[0] if context.pages else context.new_page()
-            page.goto(url)
+            _open(page, url)
         except Exception as error:  # noqa: BLE001 - handed to whoever started the session
             started.set_exception(error)
             return

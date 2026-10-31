@@ -7,7 +7,13 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from geoguessr_ai.browser import WHEEL_DELTA, BrowserControls, BrowserScreen, BrowserSession
+from geoguessr_ai.browser import (
+    WHEEL_DELTA,
+    BrowserControls,
+    BrowserScreen,
+    BrowserSession,
+    _open,
+)
 from geoguessr_ai.config import Point, Region
 from geoguessr_ai.controls import StopRequested
 
@@ -198,6 +204,36 @@ class FakePlaywright:
 
     def close(self):
         pass
+
+
+def test_a_page_slow_to_finish_loading_stops_nothing_but_one_it_cant_reach_says_so():
+    class TimeoutError(Exception):  # noqa: A001
+        """What Playwright raises when a page takes too long to load."""
+
+    def raises(error):
+        def goto(url):
+            raise error
+
+        return SimpleNamespace(goto=goto)
+
+    _open(raises(TimeoutError("Page.goto: Timeout 30000ms exceeded")), "https://openguessr.com/")
+
+    down = Exception("Page.goto: net::ERR_INTERNET_DISCONNECTED at the site\nCall log:")
+    with pytest.raises(ConnectionError, match="check your connection.*DISCONNECTED at"):
+        _open(raises(down), "https://openguessr.com/")
+
+
+def test_says_plainly_that_it_couldnt_reach_the_game(monkeypatch, tmp_path):
+    fake = FakePlaywright(("chrome",))
+
+    def goto(url):
+        raise Exception("Page.goto: net::ERR_NAME_NOT_RESOLVED at https://openguessr.com/")
+
+    fake.goto = goto
+    monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: fake)
+
+    with pytest.raises(SystemExit, match="Couldn't open https://openguessr.com/: check your"):
+        BrowserSession(profile=tmp_path)
 
 
 @pytest.mark.parametrize(

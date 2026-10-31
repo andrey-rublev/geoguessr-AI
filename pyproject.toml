@@ -52,4 +52,4 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.flake8-bugbear]
 # A frozen dataclass: safe as a default.
-extend-immutable-calls = ["geoguessr_ai.config.Point"]
+extend-immutable-calls = ["geoguessr_ai.config.Point", "geoguessr_ai.botrun.Choices"]

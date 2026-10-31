@@ -85,6 +85,37 @@ def test_the_chart_shows_land_where_there_is_land():
     assert dot(-30.0, -120.0) == "0"  # the South Pacific
 
 
+def test_part_of_the_land_is_the_same_dots_as_all_of_it():
+    whole = land_rows(columns=360)
+    part = land_rows(360, first_row=40, first_column=100, rows=10, across=20)
+    assert part == [row[100:120] for row in whole[40:50]]
+    assert land_rows(360, first_row=len(whole) + 5, rows=3) == []
+
+
+def test_answers_for_finer_land_where_the_chart_is_zoomed_in(served):
+    ask = "/land?level=2&row=10&column=20&rows=5&columns=6&token=" + served.app.token
+    with urllib.request.urlopen(f"http://127.0.0.1:{served.port}{ask}", timeout=10) as answer:
+        rows = json.loads(answer.read())["rows"]
+    assert len(rows) == 5 and {len(row) for row in rows} == {6}
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "level=99&row=0&column=0&rows=5&columns=5",  # finer than the land mask
+        "level=1&row=0&column=0&rows=5000&columns=5",  # too much at once
+        "level=1&row=-1&column=0&rows=5&columns=5",
+        "level=x&row=0&column=0&rows=5&columns=5",
+        "level=1",
+    ],
+)
+def test_refuses_land_that_makes_no_sense(served, query):
+    url = f"http://127.0.0.1:{served.port}/land?{query}&token={served.app.token}"
+    with pytest.raises(urllib.error.HTTPError) as refused:
+        urllib.request.urlopen(url, timeout=10)
+    assert refused.value.code == 400
+
+
 def test_serves_the_page_with_the_chart_in_it(served):
     with served.get("/") as answer:
         page = answer.read().decode()

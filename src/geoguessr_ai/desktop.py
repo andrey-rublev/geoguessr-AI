@@ -57,6 +57,10 @@ STILL_HERE_S = 2.0
 MAX_REQUEST = 10_000
 LOG_NAME = "app.log"
 CHART_COLUMNS = 180
+LAND_LEVELS = 8
+"""How many times the chart's dots may halve as it's zoomed in: to about the land mask's own."""
+LAND_MOST = 800
+"""The most rows or columns of dots a window may ask for at once."""
 CHART_NORTH, CHART_SOUTH = 78.0, -58.0
 """The chart runs from here to here: Street View goes no further, bar a few rounds in the Arctic.
 On Mercator's projection, like OpenGuessr's map and sailors' charts."""
@@ -67,13 +71,26 @@ SETUP_COMMANDS = {
 """What sets up what the app needs: in a window of their own, as one asks for a password."""
 
 
-def land_rows(columns: int = CHART_COLUMNS) -> list[str]:
-    """Which dots of the chart are on land, row by row, as 1s and 0s. Every other row is half a
-    dot along, as in a halftone print. The dots are spaced alike across and down the chart."""
+def land_rows(
+    columns: int = CHART_COLUMNS,
+    first_row: int = 0,
+    first_column: int = 0,
+    rows: int | None = None,
+    across: int | None = None,
+) -> list[str]:
+    """Which dots of the chart are on land, row by row, as 1s and 0s, with ``columns`` of them
+    round the world: all of them, or ``rows`` by ``across`` of them, from those firsts. Every
+    other row is half a dot along, as in a halftone print. The dots are spaced alike across and
+    down the chart."""
     _, top = mercator_xy(CHART_NORTH, 0.0)
     _, bottom = mercator_xy(CHART_SOUTH, 0.0)
-    rows = round((bottom - top) * columns)
-    y, x = np.mgrid[0:rows, 0:columns].astype(np.float64)
+    last_row = round((bottom - top) * columns)
+    if rows is not None:
+        last_row = min(first_row + rows, last_row)
+    last_column = columns if across is None else min(first_column + across, columns)
+    if first_row >= last_row or first_column >= last_column:
+        return []
+    y, x = np.mgrid[first_row:last_row, first_column:last_column].astype(np.float64)
     x = ((x + 0.5 + 0.5 * (y % 2 == 1)) / columns) % 1.0
     lat, lon = inverse_mercator(x, top + (y + 0.5) / columns)
     land = globe.is_land(np.clip(lat, -89.9, 89.9), np.clip(lon, -179.9, 179.9))
@@ -247,10 +264,33 @@ def handler_for(app: App, port_host: str) -> type[BaseHTTPRequestHandler]:
                 self._send(200, page, "text/html; charset=utf-8")
             elif route == "/ping":
                 self._send(200, b"{}")
+            elif route == "/land":
+                self._land()
             elif route == "/events":
                 self._events()
             else:
                 self._send(404, b"{}")
+
+        def _land(self) -> None:
+            """Part of the chart's land, finer than what the page came with, for zooming in."""
+            asked = parse_qs(urlsplit(self.path).query)
+            try:
+                level, row, column, rows, across = (
+                    int(asked[name][0]) for name in ("level", "row", "column", "rows", "columns")
+                )
+            except (KeyError, ValueError):
+                self._send(400, b"{}")
+                return
+            if not (
+                0 <= level < LAND_LEVELS
+                and min(row, column) >= 0
+                and 0 < rows <= LAND_MOST
+                and 0 < across <= LAND_MOST
+            ):
+                self._send(400, b"{}")
+                return
+            found = land_rows(CHART_COLUMNS * 2**level, row, column, rows, across)
+            self._send(200, json.dumps({"rows": found}).encode())
 
         def do_POST(self) -> None:
             if not self._allowed() or self.headers.get("Content-Type") != "application/json":

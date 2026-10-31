@@ -153,38 +153,55 @@ h1 { margin: 0; font: 600 44px/1.02 var(--display); font-stretch: 75%; letter-sp
 .needs-you button { flex: none; padding: 5px 12px; background: var(--on-plot); color: var(--plot); border: 0; border-radius: 4px; font-weight: 700; cursor: pointer; }
 
 .tab { min-height: 0; padding: 0 24px 16px; display: flex; flex-direction: column; gap: 12px; }
-.chart-holder { flex: 0 1 auto; width: 100%; aspect-ratio: 1000 / 557; min-height: 200px; position: relative; }
-#chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.land { stroke: var(--land); stroke-width: 3.1; stroke-linecap: round; fill: none; }
-.graticule { stroke: var(--rule); stroke-width: .6; opacity: .55; }
+.chart-holder { flex: 0 1 auto; width: 100%; aspect-ratio: 1000 / 557; min-height: 200px; position: relative; overflow: hidden; cursor: grab; touch-action: none; user-select: none; }
+.chart-holder.dragging { cursor: grabbing; }
+.chart-holder:focus-visible { outline-offset: -2px; }
+#land, #chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.chart-tools { position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; border: 1px solid var(--ink); border-radius: 5px; overflow: hidden; background: var(--paper); }
+.chart-tools button { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; background: none; border: 0; font: 600 18px/1 var(--display); cursor: pointer; }
+.chart-tools button + button { border-top: 1px solid var(--rule); }
+.chart-tools button:hover { background: var(--ink); color: var(--paper); }
+.chart-tools button:focus-visible { outline-offset: -3px; }
+.chart-tools svg { width: 16px; height: 16px; }
+.round-card { position: absolute; right: 16px; bottom: 16px; width: min(340px, calc(100% - 32px)); padding: 9px 12px 10px; background: var(--paper); border: 1px solid var(--ink); border-radius: 5px; box-shadow: 0 2px 10px rgb(15 44 56 / .18); cursor: default; }
+.round-card p { margin: 0; display: flex; gap: 10px; font-size: 13px; line-height: 1.5; }
+.round-card .card-top { justify-content: space-between; align-items: baseline; margin-bottom: 3px; font-family: var(--data); font-size: 12px; color: var(--ink-soft); }
+.round-card strong { font: 600 16px/1.2 var(--display); color: var(--ink); }
+.card-name { flex: none; width: 58px; color: var(--ink-soft); }
+.graticule { stroke: var(--rule); stroke-width: .6; opacity: .6; }
 .scale-dark { fill: var(--ink); }
 .scale-light { fill: var(--paper); }
-.neatline { fill: none; stroke: var(--ink); stroke-width: 1; }
+.neatline { fill: none; stroke: var(--ink); stroke-width: 1; pointer-events: none; }
 .degrees { font: 400 10px var(--data); fill: var(--ink-soft); }
 .legend { font: 400 11px var(--body); fill: var(--ink-soft); }
-.legend-box { fill: var(--paper); fill-opacity: .82; }
+.legend-box { fill: var(--paper); fill-opacity: .86; }
+.hint { font-size: 10.5px; }
 
-.plot-line { stroke: var(--plot); stroke-width: 1.6; fill: none; stroke-dasharray: 1; stroke-dashoffset: 0; }
+.plot-line { stroke: var(--plot); stroke-width: 1.5; fill: none; stroke-dasharray: 1; stroke-dashoffset: 0; }
 .plot.new .plot-line { animation: plotted .8s cubic-bezier(.3, .7, .2, 1) both; }
 .guess-mark { fill: var(--paper); stroke: var(--plot); stroke-width: 1.8; }
 .fix-ring { fill: var(--paper); stroke: var(--ink); stroke-width: 1.6; }
 .fix-dot { fill: var(--ink); }
 .plot.new .fix { animation: fixed .3s .65s ease-out both; transform-box: fill-box; transform-origin: center; }
-.plot-name { font: 600 12.5px var(--display); fill: var(--ink); stroke: var(--paper); stroke-width: 3.5; paint-order: stroke; stroke-linejoin: round; }
-.plot.old:not(.hot) :is(.plot-line, .guess-mark, .fix-ring, .plot-name) { display: none; }
+.plot-name { font: 600 11.5px var(--display); fill: var(--ink); stroke: var(--paper); stroke-width: 3; paint-order: stroke; stroke-linejoin: round; }
+.plot.old:not(.hot) :is(.guess-mark, .fix-ring, .plot-name) { display: none; }
+.plot.old:not(.hot) .plot-line { stroke-width: .8; opacity: .3; }
 .plot.old:not(.hot) .fix-dot { opacity: .55; }
-.plots.has-hot .plot:not(.hot) { opacity: .28; }
-.plot { transition: opacity .12s; cursor: pointer; }
+.plots.has-hot .plot:not(.hot) { opacity: .25; }
+.plot { cursor: pointer; }
+.plot-line { pointer-events: stroke; }
 @keyframes plotted { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes fixed { from { transform: scale(0); } to { transform: scale(1); } }
 
-.rounds-holder { contain: paint; flex: 1 1 0; min-height: 96px; overflow-y: auto; border-top: 1px solid var(--ink); scrollbar-width: thin; }
+.rounds-holder { contain: paint; flex: 1 1 0; min-height: 96px; overflow-y: auto; border-top: 1px solid var(--ink); }
 table { width: 100%; border-collapse: collapse; }
 th { position: sticky; top: 0; background: var(--paper); text-align: left; padding: 6px 10px 5px 0; font: 600 12px/1.2 var(--display); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
 td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--sea); font: 400 13px/1.4 var(--data); white-space: nowrap; }
 .number { text-align: right; padding-right: 0; padding-left: 10px; }
-tbody tr { cursor: default; }
+tbody tr { cursor: pointer; }
 tbody tr:hover, tbody tr.hot { background: var(--sea); }
+tbody tr[aria-current] td:first-child { box-shadow: inset 3px 0 0 var(--plot); padding-left: 8px; }
+tbody tr:focus-visible { outline-offset: -2px; }
 .wrong-country { color: var(--plot); font-weight: 600; }
 .right-country { color: var(--right); }
 .soft { color: var(--ink-soft); }
@@ -317,8 +334,21 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
   </div>
 
   <section class="tab" id="chart-tab" role="tabpanel" aria-labelledby="tab-chart">
-    <div class="chart-holder">
-      <svg id="chart" viewBox="0 0 1000 557" preserveAspectRatio="xMidYMin meet" role="img" aria-label="A map of the world, with each round's guess and answer plotted on it. The table below lists the same rounds."></svg>
+    <div class="chart-holder" id="chart-holder" tabindex="0" aria-label="A map of the world, with each round's guess and answer plotted on it, and a line between them. The list below it has the same rounds. Arrow keys move the map, plus and minus zoom it, and 0 shows the whole world.">
+      <canvas id="land" aria-hidden="true"></canvas>
+      <svg id="chart" aria-hidden="true"></svg>
+      <div class="chart-tools" role="group" aria-label="Zoom the map">
+        <button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+        <button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+        <button type="button" id="zoom-world" aria-label="Show the whole world" title="Show the whole world">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 8h12M8 2c-4 4-4 8 0 12M8 2c4 4 4 8 0 12" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+        </button>
+      </div>
+      <div class="round-card" id="round-card" hidden>
+        <p class="card-top"><strong id="card-round"></strong><span id="card-off"></span></p>
+        <p><span class="card-name">Guessed</span><span id="card-guess"></span></p>
+        <p><span class="card-name">Answer</span><span id="card-answer"></span></p>
+      </div>
     </div>
     <div class="rounds-holder" id="rounds-holder">
       <table id="rounds-table" hidden>
@@ -351,13 +381,10 @@ const CHART = "__CHART__";
 const token = new URLSearchParams(location.search).get("token");
 const $ = (selector) => document.querySelector(selector);
 const SVG = "http://www.w3.org/2000/svg";
-const WIDTH = 1000;
-const SCALE_BAR = 7;
 
 let state = null;
 let game = null;
 let tab = "chart";
-let hotRound = null;
 
 async function post(path, body = {}) {
   const answer = await fetch(`${path}?token=${encodeURIComponent(token)}`, {
@@ -369,13 +396,28 @@ async function post(path, body = {}) {
   return (await answer.json()).error || "That didn't work.";
 }
 
-// The chart: Mercator's projection, on which a straight line keeps one compass course.
+// The chart: Mercator's projection, on which a straight line keeps one compass course. Drawn in the
+// window's own pixels, each frame, for the part of the world in view: the land on a canvas, as it
+// can be many dots, and all that goes over it in the SVG.
 const mercator = (lat) => Math.log(Math.tan(Math.PI / 4 + (Math.min(Math.max(lat, -85), 85) * Math.PI) / 360));
-const top_ = mercator(CHART.north);
-const bottom = mercator(CHART.south);
-const HEIGHT = (WIDTH * (top_ - bottom)) / (2 * Math.PI);
-const toX = (lon) => ((lon + 180) / 360) * WIDTH;
-const toY = (lat) => Math.min(Math.max(((top_ - mercator(lat)) / (top_ - bottom)) * HEIGHT, 0), HEIGHT);
+const unmercator = (y) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
+const NORTH = mercator(CHART.north);
+const TALL = (NORTH - mercator(CHART.south)) / (2 * Math.PI);  // the chart's height, in widths
+const COLUMNS = CHART.land[0].length;
+const MAX_ZOOM = 128;
+const MAX_LAND_LEVEL = 7;  // the land mask goes no finer than this many halvings of the first dots
+const DOT = 0.28;  // a land dot's radius, as a share of the space between dots
+const BAR = 6;  // how wide the chart's border of degree bars is, in pixels
+const FIT_ZOOM = 32;  // the closest a round is shown when picked, for a guess right on the answer
+const GRID_STEPS = [30, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05];
+
+const holder = $("#chart-holder");
+const canvas = $("#land");
+const svg = $("#chart");
+const view = { zoom: 1, x: 0.5, y: TALL / 2 };  // the middle of the view, in chart widths
+let shown = { width: 0, height: 0, world: 0, left: 0, top: 0 };
+let drawPending = false;
+let flight = null;
 
 function element(name, attributes = {}, parent = null) {
   const made = document.createElementNS(SVG, name);
@@ -384,165 +426,621 @@ function element(name, attributes = {}, parent = null) {
   return made;
 }
 
-function drawChart() {
-  const chart = $("#chart");
-  chart.setAttribute("viewBox", `0 0 ${WIDTH} ${HEIGHT.toFixed(1)}`);
-  const step = WIDTH / CHART.land[0].length;
-  let dots = "";
-  CHART.land.forEach((row, y) => {
-    for (let x = 0; x < row.length; x++) {
-      if (row[x] === "1") {
-        const across = (x + 0.5 + (y % 2) * 0.5) * step;
-        dots += `M${across.toFixed(1)} ${((y + 0.5) * step).toFixed(1)}h0`;
-      }
-    }
-  });
-  element("path", { class: "land", d: dots }, chart);
-
-  for (let lon = -150; lon <= 150; lon += 30) {
-    element("line", { class: "graticule", x1: toX(lon), x2: toX(lon), y1: 0, y2: HEIGHT }, chart);
-  }
-  for (const lat of [-30, 0, 30, 60]) {
-    element("line", { class: "graticule", x1: 0, x2: WIDTH, y1: toY(lat), y2: toY(lat) }, chart);
-  }
-
-  // The chart's border: bars of ten degrees, which grow towards the poles as the map does.
-  for (let lon = -180, dark = true; lon < 180; lon += 10, dark = !dark) {
-    const cls = dark ? "scale-dark" : "scale-light";
-    const x = toX(lon);
-    const across = toX(lon + 10) - x;
-    element("rect", { class: cls, x, y: 0, width: across, height: SCALE_BAR }, chart);
-    element("rect", { class: cls, x, y: HEIGHT - SCALE_BAR, width: across, height: SCALE_BAR }, chart);
-  }
-  for (let lat = -60, dark = true; lat < 80; lat += 10, dark = !dark) {
-    const cls = dark ? "scale-dark" : "scale-light";
-    const y = toY(lat + 10);
-    const down = toY(lat) - y;
-    element("rect", { class: cls, x: 0, y, width: SCALE_BAR, height: down }, chart);
-    element("rect", { class: cls, x: WIDTH - SCALE_BAR, y, width: SCALE_BAR, height: down }, chart);
-  }
-  element("rect", { class: "neatline", x: 0.5, y: 0.5, width: WIDTH - 1, height: HEIGHT - 1 }, chart);
-  element("rect", { class: "neatline", x: SCALE_BAR, y: SCALE_BAR, width: WIDTH - 2 * SCALE_BAR, height: HEIGHT - 2 * SCALE_BAR }, chart);
-
-  const named = (lon) => (lon === 0 ? "0°" : `${Math.abs(lon)}°${lon < 0 ? "W" : "E"}`);
-  for (const lon of [-120, -60, 0, 60, 120]) {
-    const label = element("text", { class: "degrees", x: toX(lon) + 3, y: SCALE_BAR + 12 }, chart);
-    label.textContent = named(lon);
-  }
-  for (const lat of [-30, 0, 30, 60]) {
-    const label = element("text", { class: "degrees", x: SCALE_BAR + 4, y: toY(lat) - 3 }, chart);
-    label.textContent = lat === 0 ? "0°" : `${Math.abs(lat)}°${lat < 0 ? "S" : "N"}`;
-  }
+function setChart() {
+  const defs = element("defs", {}, svg);
+  const clip = element("clipPath", { id: "inside-chart" }, defs);
+  element("rect", { id: "inside-rect" }, clip);
+  element("g", { id: "grid", "clip-path": "url(#inside-chart)" }, svg);
+  element("g", { class: "plots", id: "plots", "clip-path": "url(#inside-chart)" }, svg);
+  element("path", { class: "scale-light", id: "bars-light" }, svg);
+  element("path", { class: "scale-dark", id: "bars-dark" }, svg);
+  element("rect", { class: "neatline", id: "neatline-outer" }, svg);
+  element("rect", { class: "neatline", id: "neatline-inner" }, svg);
 
   // The key, in the empty South Pacific: where charts keep theirs.
-  const key = element("g", { transform: `translate(${SCALE_BAR + 14} ${HEIGHT - SCALE_BAR - 50})` }, chart);
-  element("rect", { class: "legend-box", x: -6, y: -8, width: 112, height: 46 }, key);
+  const key = element("g", { id: "key" }, svg);
+  element("rect", { class: "legend-box", x: -6, y: -8, width: 138, height: 62 }, key);
   element("rect", { class: "guess-mark", x: 0, y: 0, width: 9, height: 9 }, key);
   element("text", { class: "legend", x: 16, y: 9 }, key).textContent = "The bot's guess";
   element("circle", { class: "fix-ring", cx: 4.5, cy: 24, r: 5.2 }, key);
   element("circle", { class: "fix-dot", cx: 4.5, cy: 24, r: 1.6 }, key);
   element("text", { class: "legend", x: 16, y: 28 }, key).textContent = "The answer";
-
-  element("g", { class: "plots", id: "plots" }, chart);
+  element("text", { class: "legend hint", x: -1, y: 46 }, key).textContent = "Scroll to zoom, drag to move";
 }
 
-// Each round's plot: a line from the guess, the shorter way round the world, to the answer.
-function lineBetween(guess, answer) {
-  const [x1, y1] = [toX(guess[1]), toY(guess[0])];
-  const [x2, y2] = [toX(answer[1]), toY(answer[0])];
-  if (Math.abs(x2 - x1) <= WIDTH / 2) return `M${x1} ${y1}L${x2} ${y2}`;
-  const across = x2 > x1 ? x2 - WIDTH : x2 + WIDTH;
-  const edgeX = x2 > x1 ? 0 : WIDTH;
-  const edgeY = y1 + ((edgeX - x1) / (across - x1)) * (y2 - y1);
-  return `M${x1} ${y1}L${edgeX} ${edgeY}M${WIDTH - edgeX} ${edgeY}L${x2} ${y2}`;
+// Where things are on screen, for the view as it stands.
+function measure() {
+  const width = holder.clientWidth;
+  const height = holder.clientHeight;
+  const fit = Math.min(width, height / TALL);
+  const world = fit * view.zoom;
+  // The view stays on the chart, and a chart smaller than the window stays in the middle of it.
+  const half = (size) => size / 2 / world;
+  view.x = world <= width ? 0.5 : Math.min(Math.max(view.x, half(width)), 1 - half(width));
+  view.y = world * TALL <= height ? TALL / 2 : Math.min(Math.max(view.y, half(height)), TALL - half(height));
+  shown = { width, height, world, left: width / 2 - view.x * world, top: height / 2 - view.y * world };
 }
 
-// The latest rounds drawn in full. Earlier ones keep a dot at the answer, showing in full when
-// pointed at, since hundreds of lines would hide the chart.
-const CLEAR_PLOTS = 20;
+const toScreen = (lat, lon) => [
+  shown.left + ((lon + 180) / 360) * shown.world,
+  shown.top + ((NORTH - mercator(lat)) / (2 * Math.PI)) * shown.world,
+];
 
-function drawPlots(rounds) {
-  const plots = $("#plots");
-  const shown = new Set();
-  for (const round of rounds) {
-    if (!round.guess) continue;
-    const id = `plot-${round.number}`;
-    shown.add(id);
-    let plot = document.getElementById(id);
-    if (!plot) {
-      plot = element("g", { class: "plot", id, "data-round": round.number }, plots);
-      plot.addEventListener("mouseenter", () => setHot(round.number));
-      plot.addEventListener("mouseleave", () => setHot(null));
-      const x = toX(round.guess[1]);
-      const y = toY(round.guess[0]);
-      element("rect", { class: "guess-mark", x: x - 4.5, y: y - 4.5, width: 9, height: 9 }, plot);
+function frame() {
+  const left = Math.max(shown.left, 0);
+  const top = Math.max(shown.top, 0);
+  const right = Math.min(shown.left + shown.world, shown.width);
+  const bottom = Math.min(shown.top + shown.world * TALL, shown.height);
+  return { left, top, right, bottom };
+}
+
+function requestDraw() {
+  if (drawPending) return;
+  drawPending = true;
+  requestAnimationFrame(() => {
+    drawPending = false;
+    measure();
+    if (shown.width && shown.height) {
+      const edges = frame();
+      drawLand(edges);
+      drawGrid(edges);
+      placePlots(edges);
+      wantLand(edges);
     }
-    if (round.answer && !plot.dataset.answered) {
-      plot.dataset.answered = "yes";
-      plot.classList.add("new");
-      const x = toX(round.answer[1]);
-      const y = toY(round.answer[0]);
-      const line = element("path", { class: "plot-line", d: lineBetween(round.guess, round.answer), pathLength: 1 });
-      plot.prepend(line);
-      const fix = element("g", { class: "fix" }, plot);
-      element("circle", { class: "fix-ring", cx: x, cy: y, r: 5.8 }, fix);
-      element("circle", { class: "fix-dot", cx: x, cy: y, r: 1.8 }, fix);
-      const nearEdge = x > WIDTH - 40;
-      const label = element("text", { class: "plot-name", x: x + (nearEdge ? -9 : 9), y: y + 4.5, "text-anchor": nearEdge ? "end" : "start" }, plot);
-      label.textContent = round.number;
+  });
+}
+
+// The land: dots, as in a halftone print, spaced alike across and down the chart. Sheets of them are
+// asked of the app for the level the view is at, and until one comes, the coarser ones will do.
+const sheets = new Map([[0, [{ row: 0, column: 0, rows: CHART.land }]]]);
+let landAsked = "";
+
+const levelNow = () => Math.min(Math.max(Math.floor(Math.log2(view.zoom)), 0), MAX_LAND_LEVEL);
+
+function drawLand(edges) {
+  const ratio = devicePixelRatio || 1;
+  const wide = Math.round(shown.width * ratio);
+  const high = Math.round(shown.height * ratio);
+  if (canvas.width !== wide || canvas.height !== high) {
+    canvas.width = wide;
+    canvas.height = high;
+  }
+  const paint = canvas.getContext("2d");
+  paint.setTransform(ratio, 0, 0, ratio, 0, 0);
+  paint.clearRect(0, 0, shown.width, shown.height);
+  paint.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--land");
+  let level = levelNow();
+  while (level > 0 && !sheetFor(level, edges)) level -= 1;
+  const sheet = sheetFor(level, edges) || sheets.get(0)[0];
+  const columns = COLUMNS * 2 ** level;
+  const step = shown.world / columns;
+  const radius = step * DOT;
+  const firstRow = Math.max(Math.floor((edges.top - shown.top) / step) - 1, sheet.row);
+  const lastRow = Math.min(Math.ceil((edges.bottom - shown.top) / step) + 1, sheet.row + sheet.rows.length);
+  const firstColumn = Math.floor((edges.left - shown.left) / step) - 1;
+  const lastColumn = Math.ceil((edges.right - shown.left) / step) + 1;
+  paint.beginPath();
+  for (let j = firstRow; j < lastRow; j++) {
+    const row = sheet.rows[j - sheet.row];
+    const y = shown.top + (j + 0.5) * step;
+    const along = j % 2 ? 1 : 0.5;
+    for (let i = Math.max(firstColumn, sheet.column); i < Math.min(lastColumn, sheet.column + row.length); i++) {
+      if (row[i - sheet.column] === "1") {
+        const x = shown.left + (i + along) * step;
+        paint.moveTo(x + radius, y);
+        paint.arc(x, y, radius, 0, 2 * Math.PI);
+      }
     }
   }
-  for (const plot of [...plots.children]) if (!shown.has(plot.id)) plot.remove();
-  const count = plots.children.length;
-  [...plots.children].forEach((plot, at) => plot.classList.toggle("old", at < count - CLEAR_PLOTS));
+  paint.fill();
 }
 
-function setHot(number) {
-  hotRound = number;
+// The rows and columns of dots the view takes at ``level``.
+function landWanted(level, edges) {
+  const step = shown.world / (COLUMNS * 2 ** level);
+  return {
+    firstRow: Math.max(Math.floor((edges.top - shown.top) / step), 0),
+    lastRow: Math.ceil((edges.bottom - shown.top) / step),
+    firstColumn: Math.max(Math.floor((edges.left - shown.left) / step), 0),
+    lastColumn: Math.ceil((edges.right - shown.left) / step),
+  };
+}
+
+function sheetFor(level, edges) {
+  const want = landWanted(level, edges);
+  return (sheets.get(level) || []).find((sheet) =>
+    sheet.row <= want.firstRow &&
+    sheet.column <= want.firstColumn &&
+    sheet.row + sheet.rows.length >= Math.min(want.lastRow, COLUMNS * 2 ** level) &&
+    sheet.column + sheet.rows[0].length >= Math.min(want.lastColumn, COLUMNS * 2 ** level));
+}
+
+const askForLand = debounced(async (level, edges) => {
+  const want = landWanted(level, edges);
+  const marginRows = want.lastRow - want.firstRow;
+  const marginColumns = want.lastColumn - want.firstColumn;
+  const row = Math.max(want.firstRow - (marginRows >> 1), 0);
+  const column = Math.max(want.firstColumn - (marginColumns >> 1), 0);
+  const rows = marginRows * 2;
+  const columns = marginColumns * 2;
+  try {
+    const answer = await fetch(`/land?token=${encodeURIComponent(token)}&level=${level}&row=${row}&column=${column}&rows=${rows}&columns=${columns}`);
+    if (!answer.ok) return;
+    const got = await answer.json();
+    if (!got.rows.length) return;
+    const kept = sheets.get(level) || [];
+    kept.unshift({ row, column, rows: got.rows });
+    sheets.set(level, kept.slice(0, 4));
+    requestDraw();
+  } catch {
+    // The dots already there will do.
+  }
+}, 120);
+
+function wantLand(edges) {
+  const level = levelNow();
+  if (level === 0 || sheetFor(level, edges)) return;
+  const key = JSON.stringify([level, landWanted(level, edges)]);
+  if (key === landAsked) return;
+  landAsked = key;
+  askForLand(level, edges);
+}
+
+function debounced(work, wait) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => work(...args), wait);
+  };
+}
+
+// The grid, and the border's bars of degrees, at whatever spacing suits the view.
+const gridLabel = (degrees, positive, negative) => {
+  const size = Math.abs(degrees);
+  const number = Number.isInteger(size) ? size : size.toFixed(size * 10 % 1 ? 2 : 1);
+  return degrees === 0 ? "0°" : `${number}°${degrees < 0 ? negative : positive}`;
+};
+
+function barsPath(from, to, step, place, bar) {
+  let dark = "";
+  let light = "";
+  for (let at = Math.floor(from / step) * step; at < to; at += step) {
+    const start = place(at);
+    const end = place(at + step);
+    const piece = bar(Math.min(start, end), Math.abs(end - start));
+    if (((Math.round(at / step) % 2) + 2) % 2 === 0) dark += piece;
+    else light += piece;
+  }
+  return [dark, light];
+}
+
+function drawGrid(edges) {
+  const west = ((edges.left - shown.left) / shown.world) * 360 - 180;
+  const east = ((edges.right - shown.left) / shown.world) * 360 - 180;
+  const north = unmercator(NORTH - ((edges.top - shown.top) / shown.world) * 2 * Math.PI);
+  const south = unmercator(NORTH - ((edges.bottom - shown.top) / shown.world) * 2 * Math.PI);
+  const step = GRID_STEPS.find((size) => (east - west) / size >= 4) || GRID_STEPS.at(-1);
+  const barStep = step === 30 ? 10 : step / 2;
+  const grid = $("#grid");
+  const made = [];
+  const line = (x1, y1, x2, y2) => {
+    const drawn = document.createElementNS(SVG, "line");
+    drawn.setAttribute("class", "graticule");
+    for (const [key, value] of Object.entries({ x1, y1, x2, y2 })) drawn.setAttribute(key, value.toFixed(1));
+    made.push(drawn);
+  };
+  const text = (x, y, words) => {
+    const label = document.createElementNS(SVG, "text");
+    label.setAttribute("class", "degrees");
+    label.setAttribute("x", x.toFixed(1));
+    label.setAttribute("y", y.toFixed(1));
+    label.textContent = words;
+    made.push(label);
+  };
+  const labelled = (at, size) => step !== 30 || Math.round(at / size) % 2 === 0;
+  for (let at = Math.ceil(west / step) * step; at < east; at += step) {
+    const nice = Number(at.toFixed(4));
+    if (nice <= -180 || nice >= 180) continue;
+    const x = toScreen(0, nice)[0];
+    line(x, edges.top, x, edges.bottom);
+    if (labelled(nice, step)) text(x + 3, edges.top + BAR + 12, gridLabel(nice, "E", "W"));
+  }
+  for (let at = Math.ceil(south / step) * step; at < north; at += step) {
+    const nice = Number(at.toFixed(4));
+    if (nice >= CHART.north || nice <= CHART.south) continue;
+    const y = toScreen(nice, 0)[1];
+    line(edges.left, y, edges.right, y);
+    text(edges.left + BAR + 4, y - 3, gridLabel(nice, "N", "S"));
+  }
+  grid.replaceChildren(...made);
+
+  const barAcross = (x, wide) =>
+    `M${x.toFixed(1)} ${edges.top}h${wide.toFixed(1)}v${BAR}h${(-wide).toFixed(1)}z` +
+    `M${x.toFixed(1)} ${edges.bottom - BAR}h${wide.toFixed(1)}v${BAR}h${(-wide).toFixed(1)}z`;
+  const barDown = (y, high) =>
+    `M${edges.left} ${y.toFixed(1)}h${BAR}v${high.toFixed(1)}h${-BAR}z` +
+    `M${edges.right - BAR} ${y.toFixed(1)}h${BAR}v${high.toFixed(1)}h${-BAR}z`;
+  const across = barsPath(Math.max(west, -180), Math.min(east, 180), barStep, (at) => Math.min(Math.max(toScreen(0, at)[0], edges.left), edges.right), barAcross);
+  const down = barsPath(Math.max(south, CHART.south), Math.min(north, CHART.north), barStep, (at) => Math.min(Math.max(toScreen(at, 0)[1], edges.top), edges.bottom), barDown);
+  $("#bars-dark").setAttribute("d", across[0] + down[0]);
+  $("#bars-light").setAttribute("d", across[1] + down[1]);
+
+  const box = (selector, inset) => {
+    const rect = $(selector);
+    rect.setAttribute("x", edges.left + inset);
+    rect.setAttribute("y", edges.top + inset);
+    rect.setAttribute("width", Math.max(edges.right - edges.left - 2 * inset, 0));
+    rect.setAttribute("height", Math.max(edges.bottom - edges.top - 2 * inset, 0));
+  };
+  box("#neatline-outer", 0.5);
+  box("#neatline-inner", BAR);
+  box("#inside-rect", BAR);
+  $("#key").setAttribute("transform", `translate(${edges.left + BAR + 13} ${edges.bottom - BAR - 62})`);
+}
+
+// Each round's plot: a line from the guess, the shorter way round the world, to the answer. The
+// latest rounds are drawn in full; earlier ones as faint lines and dots, in full when pointed at.
+const CLEAR_PLOTS = 20;
+const plots = new Map();
+const gameRounds = () => (state && state.progress ? state.progress.rounds : []);
+
+function lineBetween(guess, answer) {
+  const [x1, y1] = toScreen(guess[0], guess[1]);
+  const [x2, y2] = toScreen(answer[0], answer[1]);
+  const round = (value) => value.toFixed(1);
+  if (Math.abs(x2 - x1) <= shown.world / 2) return `M${round(x1)} ${round(y1)}L${round(x2)} ${round(y2)}`;
+  const across = x2 > x1 ? x2 - shown.world : x2 + shown.world;
+  const edgeX = x2 > x1 ? shown.left : shown.left + shown.world;
+  const edgeY = y1 + ((edgeX - x1) / (across - x1)) * (y2 - y1);
+  const otherX = x2 > x1 ? shown.left + shown.world : shown.left;
+  return `M${round(x1)} ${round(y1)}L${round(edgeX)} ${round(edgeY)}M${round(otherX)} ${round(edgeY)}L${round(x2)} ${round(y2)}`;
+}
+
+function drawPlots(rounds) {
+  const group = $("#plots");
+  const wanted = rounds.filter((round) => round.guess || round.answer);
+  const numbers = new Set(wanted.map((round) => round.number));
+  for (const [number, plot] of plots) {
+    if (!numbers.has(number)) {
+      plot.group.remove();
+      plots.delete(number);
+    }
+  }
+  wanted.forEach((round, at) => {
+    let plot = plots.get(round.number);
+    if (!plot) {
+      const made = element("g", { class: "plot", "data-round": round.number }, group);
+      made.addEventListener("mouseenter", () => pointAt(round.number));
+      made.addEventListener("mouseleave", () => pointAt(null));
+      made.addEventListener("animationend", () => made.classList.remove("new"));
+      plot = { group: made, line: null, mark: null, fix: null, ring: null, dot: null, name: null };
+      plots.set(round.number, plot);
+    }
+    if (round.guess && !plot.mark) {
+      plot.mark = element("rect", { class: "guess-mark", width: 8, height: 8 }, plot.group);
+    }
+    if (round.answer && !plot.fix) {
+      plot.group.classList.add("new");
+      if (round.guess) {
+        plot.line = element("path", { class: "plot-line", pathLength: 1 });
+        plot.group.prepend(plot.line);
+      }
+      plot.fix = element("g", { class: "fix" }, plot.group);
+      plot.ring = element("circle", { class: "fix-ring", r: 5 }, plot.fix);
+      plot.dot = element("circle", { class: "fix-dot", r: 1.7 }, plot.fix);
+      plot.name = element("text", { class: "plot-name" }, plot.group);
+      plot.name.textContent = round.number;
+    }
+    plot.round = round;
+    plot.group.classList.toggle("old", at < wanted.length - CLEAR_PLOTS);
+  });
+  requestDraw();
+}
+
+function placePlots(edges) {
+  for (const { group, line, mark, fix, ring, dot, name, round } of plots.values()) {
+    const guess = round.guess && toScreen(round.guess[0], round.guess[1]);
+    const answer = round.answer && toScreen(round.answer[0], round.answer[1]);
+    const points = [guess, answer].filter(Boolean);
+    const wraps = guess && answer && Math.abs(guess[0] - answer[0]) > shown.world / 2;
+    const away = !wraps && (
+      Math.max(...points.map((p) => p[0])) < edges.left - 12 ||
+      Math.min(...points.map((p) => p[0])) > edges.right + 12 ||
+      Math.max(...points.map((p) => p[1])) < edges.top - 12 ||
+      Math.min(...points.map((p) => p[1])) > edges.bottom + 12);
+    group.style.display = away ? "none" : "";
+    if (away) continue;
+    if (mark && guess) {
+      mark.setAttribute("x", (guess[0] - 4).toFixed(1));
+      mark.setAttribute("y", (guess[1] - 4).toFixed(1));
+    }
+    if (line && guess && answer) line.setAttribute("d", lineBetween(round.guess, round.answer));
+    if (fix && answer) {
+      for (const circle of [ring, dot]) {
+        circle.setAttribute("cx", answer[0].toFixed(1));
+        circle.setAttribute("cy", answer[1].toFixed(1));
+      }
+      const nearEdge = answer[0] > edges.right - 40;
+      name.setAttribute("x", (answer[0] + (nearEdge ? -8 : 8)).toFixed(1));
+      name.setAttribute("y", (answer[1] + 4).toFixed(1));
+      name.setAttribute("text-anchor", nearEdge ? "end" : "start");
+    }
+  }
+}
+
+// Which round is pointed at or picked: shown in full, with what's known of it, and all else dimmed.
+let pickedRound = null;
+let pointedRound = null;
+let hotShown = null;
+
+function pointAt(number) {
+  pointedRound = number;
+  drawHot();
+}
+
+function drawHot() {
+  const number = pointedRound ?? pickedRound;
   $("#plots").classList.toggle("has-hot", number !== null);
-  for (const plot of $("#plots").children) plot.classList.toggle("hot", Number(plot.dataset.round) === number);
-  for (const row of $("#rounds-body").children) row.classList.toggle("hot", Number(row.dataset.round) === number);
+  if (number !== hotShown) {
+    for (const old of [hotShown, number]) {
+      if (old === null) continue;
+      const on = old === number;
+      plots.get(old)?.group.classList.toggle("hot", on);
+      rows.get(old)?.classList.toggle("hot", on);
+    }
+    const plot = plots.get(number);
+    if (plot) {
+      plot.group.classList.remove("new");  // or moving it would draw it all over again
+      $("#plots").append(plot.group);  // on top of the rest
+    }
+    hotShown = number;
+  }
+  for (const [at, row] of rows) {
+    row.toggleAttribute("aria-current", at === pickedRound);
+  }
+  drawCard(number);
+}
+
+const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+const countryName = (code) => {
+  try {
+    return code ? regionNames.of(code) : "";
+  } catch {
+    return code;
+  }
+};
+
+function drawCard(number) {
+  const card = $("#round-card");
+  const round = gameRounds().find((one) => one.number === number);
+  card.hidden = !round;
+  if (!round) return;
+  $("#card-round").textContent = `Round ${round.number}`;
+  $("#card-off").textContent = round.answer
+    ? `${round.km.toLocaleString("en")} km off · ${round.points.toLocaleString("en")} points`
+    : round.expected ? `expects ~${round.expected.toLocaleString("en")} points` : "";
+  const sure = round.sure ? `, ${round.sure}% sure` : "";
+  $("#card-guess").textContent = round.guess
+    ? `${countryName(round.guess_country) || "A pin down"}${sure}`
+    : round.missed ? "No pin went down" : "Still looking";
+  const answerText = $("#card-answer");
+  answerText.className = round.answer ? (round.right ? "right-country" : "wrong-country") : "soft";
+  answerText.textContent = round.answer
+    ? `${countryName(round.answer_country) || "Unknown"}${round.right ? ", the right country" : ", the wrong country"}`
+    : round.unread ? "Couldn't be read off the game" : "Not known yet";
+}
+
+function pick(number, fly = true) {
+  pickedRound = number === pickedRound && !fly ? null : number;
+  drawHot();
+  if (pickedRound === null) return;
+  if (fly) showRound(pickedRound);
+  const row = rows.get(pickedRound);
+  if (row) {
+    const list = $("#rounds-holder");
+    const top = row.offsetTop - list.scrollTop;
+    if (top < 30 || top > list.clientHeight - 60) list.scrollTop = row.offsetTop - list.clientHeight / 2;
+  }
+}
+
+function showRound(number) {
+  const round = gameRounds().find((one) => one.number === number);
+  if (!round) return;
+  const points = [round.guess, round.answer].filter(Boolean);
+  if (!points.length) return;
+  const xs = points.map((p) => (p[1] + 180) / 360);
+  const ys = points.map((p) => (NORTH - mercator(p[0])) / (2 * Math.PI));
+  if (Math.max(...xs) - Math.min(...xs) > 0.5) return flyTo({ zoom: 1, x: 0.5, y: TALL / 2 });  // round the world
+  const fit = Math.min(shown.width, shown.height / TALL);
+  const room = (span, size) => (span > 0 ? (size * 0.6) / (span * fit) : FIT_ZOOM);
+  const zoom = Math.min(
+    room(Math.max(...xs) - Math.min(...xs), shown.width),
+    room(Math.max(...ys) - Math.min(...ys), shown.height),
+    FIT_ZOOM,
+  );
+  flyTo({
+    zoom: Math.max(zoom, 1),
+    x: (Math.max(...xs) + Math.min(...xs)) / 2,
+    y: (Math.max(...ys) + Math.min(...ys)) / 2,
+  });
+}
+
+// Moving about the chart.
+const quiet = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function flyTo(target, duration = 450) {
+  cancelAnimationFrame(flight);
+  flight = null;
+  if (quiet()) {
+    Object.assign(view, target);
+    requestDraw();
+    return;
+  }
+  const from = { ...view };
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min((now - start) / duration, 1);
+    const eased = 1 - (1 - t) ** 3;
+    view.zoom = from.zoom * (target.zoom / from.zoom) ** eased;
+    view.x = from.x + (target.x - from.x) * eased;
+    view.y = from.y + (target.y - from.y) * eased;
+    requestDraw();
+    flight = t < 1 ? requestAnimationFrame(step) : null;
+  };
+  flight = requestAnimationFrame(step);
+}
+
+function zoomAt(factor, atX = shown.width / 2, atY = shown.height / 2, glide = false) {
+  const zoom = Math.min(Math.max(view.zoom * factor, 1), MAX_ZOOM);
+  // What's under the pointer stays under it.
+  const world = Math.min(shown.width, shown.height / TALL) * zoom;
+  const x = (atX - shown.left) / shown.world - (atX - shown.width / 2) / world;
+  const y = (atY - shown.top) / shown.world - (atY - shown.height / 2) / world;
+  if (glide) {
+    flyTo({ zoom, x, y }, 220);
+    return;
+  }
+  cancelAnimationFrame(flight);
+  Object.assign(view, { zoom, x, y });
+  requestDraw();
+}
+
+function panBy(dx, dy) {
+  cancelAnimationFrame(flight);
+  view.x -= dx / shown.world;
+  view.y -= dy / shown.world;
+  requestDraw();
+}
+
+const showWholeWorld = () => flyTo({ zoom: 1, x: 0.5, y: TALL / 2 });
+
+holder.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const box = holder.getBoundingClientRect();
+  const lines = event.deltaMode === 1 ? 30 : 1;
+  zoomAt(Math.exp(-event.deltaY * lines * 0.0022), event.clientX - box.left, event.clientY - box.top);
+}, { passive: false });
+
+let dragging = null;
+holder.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || event.target.closest("button")) return;
+  holder.setPointerCapture(event.pointerId);
+  dragging = { x: event.clientX, y: event.clientY, moved: 0, on: event.target.closest(".plot") };
+  holder.classList.add("dragging");
+});
+holder.addEventListener("pointermove", (event) => {
+  if (!dragging) return;
+  const dx = event.clientX - dragging.x;
+  const dy = event.clientY - dragging.y;
+  dragging.moved += Math.abs(dx) + Math.abs(dy);
+  dragging.x = event.clientX;
+  dragging.y = event.clientY;
+  if (dragging.moved > 3) panBy(dx, dy);
+});
+const endDrag = (event) => {
+  if (!dragging) return;
+  const { moved, on } = dragging;
+  dragging = null;
+  holder.classList.remove("dragging");
+  if (event.type !== "pointerup" || moved > 3) return;
+  if (on) pick(Number(on.dataset.round));
+  else if (pickedRound !== null) pick(null, false);
+};
+holder.addEventListener("pointerup", endDrag);
+holder.addEventListener("pointercancel", endDrag);
+holder.addEventListener("dblclick", (event) => {
+  if (event.target.closest("button, .plot")) return;
+  const box = holder.getBoundingClientRect();
+  zoomAt(2, event.clientX - box.left, event.clientY - box.top, true);
+});
+holder.addEventListener("keydown", (event) => {
+  const moves = { ArrowLeft: [80, 0], ArrowRight: [-80, 0], ArrowUp: [0, 80], ArrowDown: [0, -80] };
+  if (moves[event.key]) panBy(...moves[event.key]);
+  else if (event.key === "+" || event.key === "=") zoomAt(1.5, undefined, undefined, true);
+  else if (event.key === "-" || event.key === "_") zoomAt(1 / 1.5, undefined, undefined, true);
+  else if (event.key === "0") showWholeWorld();
+  else if (event.key === "Escape") pick(null, false);
+  else return;
+  event.preventDefault();
+});
+$("#zoom-in").addEventListener("click", () => zoomAt(2, undefined, undefined, true));
+$("#zoom-out").addEventListener("click", () => zoomAt(0.5, undefined, undefined, true));
+$("#zoom-world").addEventListener("click", showWholeWorld);
+new ResizeObserver(requestDraw).observe(holder);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", requestDraw);
+
+// The list of rounds. Only rows that changed are touched: in a long game, redrawing them all at each
+// line the bot prints would lose your place and your keyboard's.
+const rows = new Map();
+
+function fillRow(row, round) {
+  row.replaceChildren();
+  const cell = (text, cls = "") => {
+    const made = document.createElement("td");
+    made.textContent = text;
+    made.className = cls;
+    row.append(made);
+    return made;
+  };
+  cell(round.number);
+  const place = round.guess_country ? `${round.guess_country} ${round.sure}%` : "";
+  cell(round.guess ? place || "pin down" : round.missed ? "no pin" : "looking…", round.guess ? "" : "soft");
+  if (round.answer) {
+    const answer = cell(round.answer_country || "?", round.right ? "right-country" : "wrong-country");
+    const said = document.createElement("span");
+    said.className = "hidden-text";
+    said.textContent = round.right ? " the right country" : " the wrong country";
+    answer.append(said);
+    if (round.right) answer.prepend("✓ ");
+    cell(`${round.km.toLocaleString("en")} km`, "number");
+    cell(round.points.toLocaleString("en"), "number");
+  } else {
+    cell(round.unread ? "not read" : "", "soft");
+    cell("", "number");
+    cell(round.expected ? `expects ~${round.expected.toLocaleString("en")}` : "", "number soft");
+  }
 }
 
 function drawRounds(rounds) {
   const body = $("#rounds-body");
-  const holder = $("#rounds-holder");
-  const atEnd = holder.scrollHeight - holder.scrollTop - holder.clientHeight < 40;
+  const list = $("#rounds-holder");
+  const atEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
   $("#rounds-table").hidden = rounds.length === 0;
   $("#no-rounds").hidden = rounds.length > 0;
-  body.replaceChildren(
-    ...rounds.map((round) => {
-      const row = document.createElement("tr");
+  const numbers = new Set(rounds.map((round) => round.number));
+  for (const [number, row] of rows) {
+    if (!numbers.has(number)) {
+      row.remove();
+      rows.delete(number);
+    }
+  }
+  for (const round of rounds) {
+    let row = rows.get(round.number);
+    if (!row) {
+      row = document.createElement("tr");
       row.dataset.round = round.number;
-      row.addEventListener("mouseenter", () => setHot(round.number));
-      row.addEventListener("mouseleave", () => setHot(null));
-      const cell = (text, cls = "") => {
-        const made = document.createElement("td");
-        made.textContent = text;
-        made.className = cls;
-        row.append(made);
-        return made;
-      };
-      cell(round.number);
-      const place = round.guess_country ? `${round.guess_country} ${round.sure}%` : "";
-      cell(round.guess ? place || "pin down" : round.missed ? "no pin" : "looking…", round.guess ? "" : "soft");
-      if (round.answer) {
-        const answer = cell(round.answer_country || "?", round.right ? "right-country" : "wrong-country");
-        const said = document.createElement("span");
-        said.className = "hidden-text";
-        said.textContent = round.right ? " the right country" : " the wrong country";
-        answer.append(said);
-        if (round.right) answer.prepend("✓ ");
-        cell(`${round.km.toLocaleString("en")} km`, "number");
-        cell(round.points.toLocaleString("en"), "number");
-      } else {
-        cell("", "soft");
-        cell("", "number");
-        cell(round.expected ? `expects ~${round.expected.toLocaleString("en")}` : "", "number soft");
-      }
-      return row;
-    }),
-  );
+      row.tabIndex = 0;
+      row.addEventListener("mouseenter", () => pointAt(round.number));
+      row.addEventListener("mouseleave", () => pointAt(null));
+      row.addEventListener("click", () => pick(round.number));
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          pick(round.number);
+        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          (event.key === "ArrowDown" ? row.nextElementSibling : row.previousElementSibling)?.focus();
+        }
+      });
+      rows.set(round.number, row);
+      body.append(row);
+    }
+    const said = JSON.stringify(round);
+    if (row.dataset.said !== said) {
+      row.dataset.said = said;
+      fillRow(row, round);
+    }
+  }
   const answered = rounds.filter((round) => round.answer);
   const foot = $("#rounds-foot");
   foot.replaceChildren();
@@ -564,8 +1062,8 @@ function drawRounds(rounds) {
     }
     foot.append(row);
   }
-  if (atEnd) holder.scrollTop = holder.scrollHeight;
-  if (hotRound !== null) setHot(hotRound);
+  if (atEnd) list.scrollTop = list.scrollHeight;
+  drawHot();
 }
 
 // The choices.
@@ -800,7 +1298,8 @@ addEventListener("beforeunload", (event) => {
   if (state && state.running) event.preventDefault();  // closing the window stops the bot
 });
 
-drawChart();
+setChart();
+requestDraw();
 drawChoices();
 new EventSource(`/events?token=${encodeURIComponent(token)}`).onmessage = (event) => draw(JSON.parse(event.data));
 </script>

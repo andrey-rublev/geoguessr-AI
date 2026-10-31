@@ -229,7 +229,7 @@ def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monke
     saved = json.loads((folder / "round.json").read_text(encoding="utf-8"))
     assert saved["guess"]["lat"] == 6.45 and saved["headings"] == [None] * 4
     assert (saved["placed"]["lat"], saved["placed"]["lon"]) == pytest.approx((6.46, 3.39))
-    assert saved["answer"] == {"lat": 6.52, "lon": 3.38, "zoom_outs": 2}
+    assert saved["answer"] == {"lat": 6.52, "lon": 3.38, "zoom_outs": 2, "rough": False}
     assert saved["pin_seen"] is True
     assert (folder / "result.png").exists() and (folder / "map.png").exists()
     assert Image.open(folder / "view_0.jpg").size == (1600, 700)

@@ -1,3 +1,4 @@
+import io
 import json
 import time
 from contextlib import nullcontext
@@ -583,3 +584,16 @@ def test_friends_plays_each_round_the_host_starts_without_pressing_continue(
     assert "on the clock" in out and "another player guessed" in out
     saved = [json.loads(p.read_text()) for p in tmp_path.glob("runs/*/round_*/round.json")]
     assert [(r["answer"]["lat"], r["answer"]["lon"]) for r in saved] == [(6.52, 3.38)] * 2
+
+
+def test_prints_a_sign_in_any_script_to_a_file_with_a_narrower_code_page(monkeypatch):
+    written = io.BytesIO()
+    file = io.TextIOWrapper(written, encoding="cp1252")
+    monkeypatch.setattr("sys.stdout", file)
+
+    cli._print_anything()
+    print("clue: Devanagari: दिल्ली, Müller")
+
+    file.flush()
+    assert written.getvalue().decode("cp1252").startswith(r"clue: Devanagari: \u0926")
+    assert "Müller" in written.getvalue().decode("cp1252")

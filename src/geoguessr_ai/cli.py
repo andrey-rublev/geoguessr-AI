@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import subprocess
@@ -926,7 +927,15 @@ def _play_hidden(argv: list[str], args: argparse.Namespace) -> None:
         raise SystemExit(code)
 
 
+def _print_anything() -> None:
+    """Have what can't be printed come out as codes: on Windows, a file or a pipe takes only what
+    its code page has, and any sign the bot reads in another script would stop it there."""
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(errors="backslashreplace")
+
+
 def main(argv: list[str] | None = None) -> None:
+    _print_anything()
     argv = sys.argv[1:] if argv is None else list(argv)
     args = build_parser().parse_args(argv)
     if getattr(args, "hidden", False):

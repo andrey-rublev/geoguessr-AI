@@ -201,10 +201,11 @@ class Progress:
         answered = [r for r in self.rounds if r.km is not None]
         if not answered:
             return ""
+        if len(answered) == 1:
+            return _result(answered[0])
         km = sum(r.km for r in answered) / len(answered)
         right = sum(bool(r.right) for r in answered)
-        rounds = f"{len(answered)} round{'s' * (len(answered) != 1)}"
-        return f"{rounds}, on average {km:,.0f} km off, {right} in the right country"
+        return f"{len(answered)} rounds, on average {km:,.0f} km off, {right} in the right country"
 
     def as_dict(self) -> dict:
         return {

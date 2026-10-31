@@ -220,6 +220,12 @@ def test_stays_stopping_whatever_the_bot_prints_on_its_way_out():
     assert [r.number for r in progress.rounds] == [1, 2]
 
 
+def test_sums_up_one_round_as_itself():
+    progress = played(GAME.split("Waiting for the host to start a round...")[1])
+    progress.finish(0, asked_to=False)
+    assert progress.detail == "290 km off: it guessed MX, the answer was GT"
+
+
 def test_says_why_a_game_ended_by_itself():
     progress = played("models/geoguessr.pt not found. Build a model first.\n")
     progress.finish(1, asked_to=False)

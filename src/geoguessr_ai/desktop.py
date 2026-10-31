@@ -41,6 +41,7 @@ from .fetch import IMAGE_MODEL
 from .geo import inverse_mercator, mercator_xy
 
 PAGE = Path(__file__).with_name("desktop.html")
+BORDERS = Path(__file__).with_name("knowledge") / "borders.json"
 ICON = Path(__file__).with_name("desktop.ico")
 MODEL = REPO / "models" / "geoguessr.pt"
 APP_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share") / "geoguessr-ai"
@@ -313,7 +314,8 @@ def _staying_open(command: list[str]) -> list[str] | str:
 
 
 def _page(land: list[str]) -> bytes:
-    chart = {"north": CHART_NORTH, "south": CHART_SOUTH, "land": land}
+    borders = json.loads(BORDERS.read_text(encoding="utf-8"))
+    chart = {"north": CHART_NORTH, "south": CHART_SOUTH, "land": land, "borders": borders}
     return PAGE.read_text(encoding="utf-8").replace('"__CHART__"', json.dumps(chart)).encode()
 
 

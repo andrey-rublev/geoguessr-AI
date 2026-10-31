@@ -14,6 +14,7 @@
   --sea: #d5e6ec;
   --sea-deep: #bfd6df;
   --land: #cdb678;
+  --border: #6f5c28;
   --ink: #0f2c38;
   --ink-soft: #456170;
   --rule: #8caab6;
@@ -30,6 +31,7 @@
     --sea: #15303b;
     --sea-deep: #24434f;
     --land: #5d6240;
+    --border: #b4b98c;
     --ink: #dceaee;
     --ink-soft: #a3bbc5;
     --rule: #3f606d;
@@ -428,8 +430,8 @@ async function post(path, body = {}) {
 }
 
 // The chart: Mercator's projection, on which a straight line keeps one compass course. Drawn in the
-// window's own pixels, each frame, for the part of the world in view: the land on a canvas, as it
-// can be many dots, and all that goes over it in the SVG.
+// window's own pixels, each frame, for the part of the world in view: the land and its borders on a
+// canvas, as they can be many dots and points, and all that goes over them in the SVG.
 const mercator = (lat) => Math.log(Math.tan(Math.PI / 4 + (Math.min(Math.max(lat, -85), 85) * Math.PI) / 360));
 const unmercator = (y) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
 const NORTH = mercator(CHART.north);
@@ -439,6 +441,7 @@ const MAX_ZOOM = 128;
 const MAX_LAND_LEVEL = 7;  // the land mask goes no finer than this many halvings of the first dots
 const LAND_MOST = 800;  // the most rows or columns of dots to ask for at once
 const DOT = 0.28;  // a land dot's radius, as a share of the space between dots
+const BORDERS_FINE_FROM = 6;  // pixels to a degree, from which the coarse borders would show corners
 const BAR = 6;  // how wide the chart's border of degree bars is, in pixels
 const FIT_ZOOM = 32;  // the closest a round is shown when picked, for a guess right on the answer
 const GRID_STEPS = [30, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05];
@@ -574,6 +577,46 @@ function drawLand(edges) {
     }
   }
   paint.fill();
+  drawBorders(paint, edges);
+}
+
+// The land borders: lines of points, kept as shares of the chart's width to save working them out for
+// every frame, with the box each fits in to skip those out of view.
+function borderLines(lines) {
+  return lines.map((line) => {
+    const points = new Float64Array(line.length);
+    for (let i = 0; i < line.length; i += 2) {
+      points[i] = (line[i] + 180) / 360;
+      points[i + 1] = (NORTH - mercator(line[i + 1])) / (2 * Math.PI);
+    }
+    const along = (start) => points.filter((_, i) => i % 2 === start);
+    const [xs, ys] = [along(0), along(1)];
+    return { points, west: Math.min(...xs), east: Math.max(...xs), north: Math.min(...ys), south: Math.max(...ys) };
+  });
+}
+
+const borders = { fine: borderLines(CHART.borders.fine), coarse: borderLines(CHART.borders.coarse) };
+
+function drawBorders(paint, edges) {
+  const close = shown.world / 360 >= BORDERS_FINE_FROM;
+  paint.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--border");
+  paint.lineWidth = close ? 1 : 0.75;
+  paint.lineJoin = "round";
+  paint.beginPath();
+  for (const line of close ? borders.fine : borders.coarse) {
+    if (
+      shown.left + line.east * shown.world < edges.left ||
+      shown.left + line.west * shown.world > edges.right ||
+      shown.top + line.south * shown.world < edges.top ||
+      shown.top + line.north * shown.world > edges.bottom
+    ) continue;
+    const { points } = line;
+    paint.moveTo(shown.left + points[0] * shown.world, shown.top + points[1] * shown.world);
+    for (let i = 2; i < points.length; i += 2) {
+      paint.lineTo(shown.left + points[i] * shown.world, shown.top + points[i + 1] * shown.world);
+    }
+  }
+  paint.stroke();
 }
 
 // The rows and columns of dots the view takes at ``level``.

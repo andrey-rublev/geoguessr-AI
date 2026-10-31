@@ -2,7 +2,8 @@
 
 Rasterises Natural Earth's 1:10m admin-0 countries (public domain) onto a 0.05 degree
 latitude/longitude grid. Sea pixels take the nearest country, so coastal Street View spots
-and pins dropped just offshore still belong to a country. Only rerun it to update borders:
+and pins dropped just offshore still belong to a country. Only rerun it to update borders, and
+then ``scripts/build_borders.py``, for the app's chart:
 
     python scripts/build_countries.py [ne_10m_admin_0_countries.geojson]
 """

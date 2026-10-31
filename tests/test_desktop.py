@@ -12,6 +12,7 @@ import pytest
 from geoguessr_ai import botrun, desktop
 from geoguessr_ai.desktop import App, handler_for, land_rows
 from geoguessr_ai.geo import mercator_xy
+from geoguessr_ai.knowledge.countries import country_index
 
 PLAYS_UNTIL_STDIN_CLOSES = """
 import sys
@@ -110,6 +111,30 @@ def test_the_chart_shows_land_where_there_is_land():
     assert dot(-30.0, -120.0) == "0"  # the South Pacific
 
 
+def test_the_chart_draws_the_borders_a_guess_is_judged_by():
+    borders = json.loads(desktop.BORDERS.read_text(encoding="utf-8"))
+    assert len(borders["fine"]) == len(borders["coarse"])
+    points = np.array([value for line in borders["fine"] for value in line]).reshape(-1, 2)
+    lon, lat = points.T
+    steps = (-0.15, 0.15)
+    around = [country_index(lat + down, lon + across) for down in steps for across in steps]
+    assert (np.ptp(around, axis=0) > 0).mean() > 0.97  # nearly every point has two countries by it
+
+    def near(lat, lon):
+        return np.hypot(points[:, 0] - lon, points[:, 1] - lat).min() < 0.2
+
+    assert near(48.6, 7.8)  # France and Germany, on the Rhine
+    assert near(29.2, -103.0)  # Mexico and the United States, on the Rio Grande
+    assert not near(47.0, 2.0)  # the middle of France
+    assert not near(50.0, -5.5)  # the tip of Cornwall: a coast isn't a border
+    assert any(  # a ring round Lesotho, which touches only South Africa
+        line[:2] == line[-2:]
+        and 26 < min(line[::2]) < max(line[::2]) < 30
+        and -31 < min(line[1::2]) < max(line[1::2]) < -28
+        for line in borders["fine"]
+    )
+
+
 def test_part_of_the_land_is_the_same_dots_as_all_of_it():
     whole = land_rows(columns=360)
     part = land_rows(360, first_row=40, first_column=100, rows=10, across=20)
@@ -145,6 +170,7 @@ def test_serves_the_page_with_the_chart_in_it(served):
     with served.get("/") as answer:
         page = answer.read().decode()
     assert "__CHART__" not in page and '"land": ["' in page
+    assert '"borders": {"fine": [[' in page
     assert "default-src 'none'" in answer.headers["Content-Security-Policy"]
 
 

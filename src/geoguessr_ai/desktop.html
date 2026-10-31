@@ -210,7 +210,7 @@ h1 { margin: 0; font: 600 44px/1.02 var(--display); font-stretch: 75%; letter-sp
 table { width: 100%; border-collapse: collapse; }
 th { position: sticky; top: 0; background: var(--paper); text-align: left; padding: 6px 10px 5px 0; font: 600 12px/1.2 var(--display); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
 td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--sea); font: 400 13px/1.4 var(--data); white-space: nowrap; }
-.number { text-align: right; padding-right: 0; padding-left: 10px; }
+.number { text-align: right; padding-right: 8px; padding-left: 10px; }
 tbody tr { cursor: pointer; }
 tbody tr:hover, tbody tr.hot { background: var(--sea); }
 tbody tr[aria-current] td:first-child { box-shadow: inset 3px 0 0 var(--plot); padding-left: 8px; }
@@ -354,7 +354,7 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
   </div>
 
   <section class="tab" id="chart-tab" role="tabpanel" aria-labelledby="tab-chart">
-    <div class="chart-holder" id="chart-holder" tabindex="0" aria-label="A map of the world, with each round's guess and answer plotted on it, and a line between them. The list below it has the same rounds. Arrow keys move the map, plus and minus zoom it, and 0 shows the whole world.">
+    <div class="chart-holder" id="chart-holder" tabindex="0" role="application" aria-roledescription="map" aria-label="A map of the world, with each round's guess and answer plotted on it, and a line between them. The list below it has the same rounds. Arrow keys move the map, plus and minus zoom it, and 0 shows the whole world.">
       <canvas id="land" aria-hidden="true"></canvas>
       <svg id="chart" aria-hidden="true"></svg>
       <div class="chart-tools" role="group" aria-label="Zoom the map">
@@ -798,6 +798,7 @@ function placePlots(edges) {
 let pickedRound = null;
 let pointedRound = null;
 let hotShown = null;
+let markedRound = null;
 
 function pointAt(number) {
   pointedRound = number;
@@ -821,8 +822,10 @@ function drawHot() {
     }
     hotShown = number;
   }
-  for (const [at, row] of rows) {
-    row.toggleAttribute("aria-current", at === pickedRound);
+  if (markedRound !== pickedRound) {
+    rows.get(markedRound)?.removeAttribute("aria-current");
+    rows.get(pickedRound)?.setAttribute("aria-current", "true");
+    markedRound = pickedRound;
   }
   drawCard(number);
 }
@@ -949,7 +952,7 @@ holder.addEventListener("wheel", (event) => {
 
 let dragging = null;
 holder.addEventListener("pointerdown", (event) => {
-  if (event.button !== 0 || event.target.closest("button")) return;
+  if (event.button !== 0 || event.target.closest("button, .round-card")) return;
   holder.setPointerCapture(event.pointerId);
   dragging = { x: event.clientX, y: event.clientY, moved: 0, on: event.target.closest(".plot") };
   holder.classList.add("dragging");
@@ -975,7 +978,7 @@ const endDrag = (event) => {
 holder.addEventListener("pointerup", endDrag);
 holder.addEventListener("pointercancel", endDrag);
 holder.addEventListener("dblclick", (event) => {
-  if (event.target.closest("button, .plot")) return;
+  if (event.target.closest("button, .plot, .round-card")) return;
   const box = holder.getBoundingClientRect();
   zoomAt(2, event.clientX - box.left, event.clientY - box.top, true);
 });

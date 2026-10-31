@@ -239,7 +239,7 @@ def cmd_train(args: argparse.Namespace) -> None:
             ) from None
         print(
             f"No rounds saved with their answers in {args.runs} yet, so only the photos to learn"
-            " from:\n`play --learn` and `friends` save them."
+            " from:\n`play` and `friends` save them."
         )
         rounds_path = None
     if not photos:
@@ -602,7 +602,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument(
             "--browser",
             action="store_true",
-            help="play in a Chrome window of the bot's own, leaving your mouse and screen free",
+            help="play in a browser window of the bot's own, leaving your mouse and screen free",
         )
         p.add_argument(
             "--window",
@@ -754,7 +754,7 @@ def build_parser() -> argparse.ArgumentParser:
     add(
         "fetch-model",
         cmd_fetch_model,
-        "Setup: download the model, ready to play with (about 2.2 GB).",
+        "Setup: download the model, ready to play with (about 2.2 GB in all).",
         "It's what `train --shards 0` builds, and better: it learned from thousands of rounds.",
     )
 

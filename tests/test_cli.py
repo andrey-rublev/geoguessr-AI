@@ -22,7 +22,7 @@ from test_game import (
 )
 from test_mapcal import render_map
 
-from geoguessr_ai import botrun, calibrate, cli, controls, desktop, join, screen, windows
+from geoguessr_ai import botrun, calibrate, cli, config, controls, desktop, join, screen, windows
 from geoguessr_ai import game as game_module
 from geoguessr_ai.buttons import HALF_HEIGHT, HALF_WIDTH
 from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
@@ -168,6 +168,7 @@ def test_hidden_plays_on_a_screen_of_its_own_in_wsl(monkeypatch):
             return 130  # stopped with Ctrl+C
 
     monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(config, "_distro", "Ubuntu")
     monkeypatch.setattr(cli.subprocess, "Popen", Bot)
     monkeypatch.setattr(cli, "_run_bot", lambda *a: pytest.fail("played here, not in WSL"))
 

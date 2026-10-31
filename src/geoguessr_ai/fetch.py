@@ -21,8 +21,8 @@ from .files import write_safely
 PACK_URL = (
     "https://github.com/andrey-rublev/geoguessr-AI/releases/download/model-1/geoguessr-model-1.zip"
 )
-PACK_SHA256 = "__PACK_SHA256__"
-PACK_BYTES = 0
+PACK_SHA256 = "353a89f334033dd200b2b44b935ce04ecf0fdb1dbef2793320ca7495526aaf0d"
+PACK_BYTES = 440787323
 PACK_PLACES = ("models", "data/embeddings")
 """The only folders a pack may put files in."""
 IMAGE_MODEL = "geolocal/StreetCLIP"

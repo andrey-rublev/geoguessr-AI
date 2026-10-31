@@ -1,6 +1,6 @@
 """OpenGuessr rounds the bot has played, reused as training and test data.
 
-``geoguessr-ai play --learn`` and ``geoguessr-ai friends`` save every round under
+``geoguessr-ai play`` and ``geoguessr-ai friends`` save every round under
 ``runs/<session>/round_NN/``: the views the bot looked at and the real location, read off the
 result screen. Unlike the Mapillary photos in
 OSV-5M, these are exactly the Google Street View images the bot faces in the game.
@@ -153,7 +153,7 @@ def embed_rounds(
     if not rounds:
         raise FileNotFoundError(
             f"No rounds with a recorded answer under {root}. "
-            "Play some with `geoguessr-ai play --learn`."
+            "Play some with `geoguessr-ai play`."
         )
     out_path = Path(out_path)
     kept = None

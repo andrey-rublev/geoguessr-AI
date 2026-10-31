@@ -271,7 +271,10 @@ class OpenGuessrBot:
         self.reader = None
         if settings.record_answers:
             page = layout.page if settings.party else None
-            self.reader = ResultReader(screen, controls, result_region(layout), page=page)
+            read_words = None if self.signs is None else self.signs.words
+            self.reader = ResultReader(
+                screen, controls, result_region(layout), page=page, read_words=read_words
+            )
         self.clock: RoundClock | None = None
         """In a multiplayer room, the round's timer."""
         self.watch: GuessWatch | None = None

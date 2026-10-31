@@ -5,14 +5,17 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from geoguessr_ai import result as result_module
 from geoguessr_ai.config import Layout, Point, Region
 from geoguessr_ai.geo import haversine_km, mercator_xy
 from geoguessr_ai.mapcal import MapProjection, world_mask
+from geoguessr_ai.ocr import Word
 from geoguessr_ai.result import (
     MARKERS,
     ResultReader,
     find_marker,
     find_scale,
+    map_by_towns,
     marker_shades,
     result_region,
 )
@@ -302,6 +305,93 @@ def test_in_a_room_says_when_the_map_never_shows():
 
     assert reading.answer is None and "never showed" in reading.problem
     assert screen.controls.notches == 0
+
+
+SPAIN = {
+    "toledo": ((39.86, -4.02),),
+    "valladolid": ((41.65, -4.72),),
+    "porto": ((41.15, -8.61),),
+    "sevilla": ((37.39, -5.98),),
+    "salamanca": ((40.97, -5.66),),
+    "zaragoza": ((41.65, -0.88),),
+}
+
+
+def named_on(projection, names=tuple(SPAIN), width=REGION.width):
+    """The words a map at ``projection`` shows for these towns, each just right of its dot."""
+    words = []
+    for name in names:
+        x, y = projection.to_pixel(*SPAIN[name][0], width)
+        words.append(Word(name.title(), Region(round(x) + 8, round(y) - 10, 80, 20)))
+    return words
+
+
+def whole_zoom_view():
+    """A view of Madrid and Lisbon at a whole zoom level, at the markers' 1.5 scale."""
+    return fitted(256 * 1.5 * 2**7)
+
+
+def reader_by_towns(monkeypatch, words, others=()):
+    """A reader in a room whose map goes before the world can be recognised on it."""
+    monkeypatch.setattr(result_module, "towns", lambda: SPAIN)
+    screen = GoingResultScreen(whole_zoom_view(), notches=1, others=others)
+    screen.controls = FakeControls(screen)
+    reader = ResultReader(screen, screen.controls, REGION, read_words=lambda image: words)
+    reader.scale = 1.5  # as the guess map measured it
+    reader._locate = lambda rgb: None
+    return reader
+
+
+def test_towns_agree_on_where_a_map_is_and_its_zoom(monkeypatch):
+    monkeypatch.setattr(result_module, "towns", lambda: SPAIN)
+    view = whole_zoom_view()
+
+    found = map_by_towns(named_on(view), 1.5)
+
+    assert found.world_px == view.world_px
+    assert abs(found.origin_x - view.origin_x) < 60 and abs(found.origin_y - view.origin_y) < 20
+
+
+def test_towns_too_few_or_too_close_say_nothing(monkeypatch):
+    monkeypatch.setattr(result_module, "towns", lambda: SPAIN)
+    view = whole_zoom_view()
+
+    assert map_by_towns(named_on(view, ("toledo", "valladolid")), 1.5) is None
+    assert map_by_towns([], 1.5) is None
+    close = [Word(w.text, Region(500 + i, 300 + i, 80, 20)) for i, w in enumerate(named_on(view))]
+    assert map_by_towns(close, 1.5) is None
+
+
+def test_in_a_room_the_towns_a_map_names_give_the_answer_without_the_world(monkeypatch):
+    reader = reader_by_towns(monkeypatch, named_on(whole_zoom_view()))
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
+
+
+def test_towns_are_asked_before_the_world_is_recognised(monkeypatch):
+    reader = reader_by_towns(monkeypatch, named_on(whole_zoom_view()))
+    reader._locate = lambda rgb: pytest.fail("the towns had already said")
+
+    assert reader.read(*MADRID, crowded=True).answer is not None
+
+
+def test_our_pin_is_the_one_the_towns_put_where_we_clicked(monkeypatch):
+    badajoz = (38.88, -6.97)  # another player's guess, between ours and the flag
+    reader = reader_by_towns(monkeypatch, named_on(whole_zoom_view()), others=(badajoz,))
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
+
+
+def test_towns_that_dont_put_our_pin_where_we_clicked_are_not_believed(monkeypatch):
+    reader = reader_by_towns(monkeypatch, named_on(whole_zoom_view()))
+
+    assert reader.read(35.68, 139.69, crowded=True).answer is None  # we clicked on Tokyo
 
 
 def test_in_a_room_a_flag_in_the_advert_is_no_flag():

@@ -14,7 +14,10 @@ In a multiplayer room the result map shows every player's pin, all alike, so the
 takes ours to be the one the recognised map puts where we clicked, and measures the flag on
 that map alone. And it shows for only a few seconds, before the standings, whatever the host
 does: so there the reader first takes all the views it can, as fast as the map zooms, and works
-them out afterwards.
+them out afterwards. It asks the towns the first views name before anything else (see
+:func:`map_by_towns`): they tell the map's zoom level without any zooming out, which is all it
+takes, since we know where our pin is and the flag's offset from it then gives the answer. Zoomed
+out, a miscounted notch can double the answer's distance from our pin and still pass the checks.
 
 An answer is only returned after checks: the recognised map must put our pin where we
 clicked, at a whole zoom level if it is the first view, and measurements from more zoomed-in
@@ -26,7 +29,7 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 import cv2
@@ -35,7 +38,10 @@ from PIL import Image
 
 from .config import Layout, Region
 from .geo import EARTH_RADIUS_KM, haversine_km, inverse_mercator, mercator_xy
+from .knowledge.places import place_key
+from .knowledge.towns import towns
 from .mapcal import MapNotFound, MapProjection, locate_world
+from .ocr import Word
 
 # The game's two markers at 100% browser scale, traced from real result screens: how red each
 # pixel of the pin is, and how dark each pixel of the flag is, from "." (not at all) to "#".
@@ -143,6 +149,24 @@ TILE = 256
 """The world's width in pixels at zoom level 0 and 100% scale. The first result view is at a
 whole zoom level, so its world is this, at the markers' scale, times a power of two: 96% of
 the 2,474 answers read by 24 September put it within 0.005 of a halving of one."""
+MIN_TOWN_LETTERS = 4
+"""Town names shorter than this, like Ede, match too much by chance."""
+MIN_TOWNS = 3
+"""How many towns must agree on where a map is for its zoom level to count."""
+MIN_TOWN_SPAN = 250
+"""How far apart, in pixels at 100% scale, they must be named: ones close together would agree
+at several zoom levels."""
+TOWN_REACH = 12
+"""How far past its name's box, in pixels at 100% scale, the map may have a town's dot."""
+TOWN_SPREAD = 0.02
+"""How far, in degrees, a town's dot may be from the middle of its photos."""
+TOWN_PIN_REACH = 60
+"""How far, in pixels at 100% scale, the towns may put where we clicked from our pin, as well as
+how far off our record of it may be: they say where the map is only to about a name's width."""
+TOWN_ZOOMS = range(3, 18)
+"""The zoom levels a first view may be at: wider ones are recognised as the world."""
+TOWN_LEVELS = 2
+"""How many of the first views to read towns off, should the advert hide the flag on the first."""
 AD_PANEL = (730, 100, 236)
 """The advert over a multiplayer result map, at 100% scale: its width, its height, and how far
 its top is above the page's bottom. It is centred on the page, as measured at 100% and 125%."""
@@ -273,6 +297,51 @@ def find_scale(red: np.ndarray) -> float | None:
     return scale if score >= MIN_SCORES["pin"] else None
 
 
+def map_by_towns(words: Sequence[Word], scale: float) -> MapProjection | None:
+    """Where a map is, from the towns named in ``words`` alone: at each whole zoom level, the
+    position of the map that the most of them agree on. None unless enough do, spread far enough
+    apart to tell the zoom by, and nearly as many do at no other level. On 95 saved first views
+    this answered 56, and differed from the zoomed-out reader's answer on one of 39, where it
+    was right and that reader wrong: our record of where our pin is, which that reader starts
+    from, can be 20 km off, so it isn't used here. Each town counts as within its name's box,
+    since the map may write a name on any side of its dot."""
+    rows = []
+    for i, word in enumerate(words):
+        key = place_key(word.text)
+        if len(key) >= MIN_TOWN_LETTERS:
+            box, centre = word.box, word.box.center
+            for town in towns().get(key, ()):
+                x, y = mercator_xy(*town)
+                rows.append((i, x, y, centre.x, centre.y, box.width / 2, box.height / 2))
+    if not rows:
+        return None
+    named = np.array(rows, dtype=np.float64)
+    which, mx, my, cx, cy, half_w, half_h = named.T
+    best: dict[int, tuple[int, float, float, float]] = {}
+    for zoom in TOWN_ZOOMS:
+        world = TILE * scale * 2.0**zoom
+        tx, ty = cx - mx * world, cy - my * world
+        reach = TOWN_REACH * scale + world * TOWN_SPREAD / 360.0
+        most = (0, 0.0, 0.0, 0.0)
+        for j in range(len(named)):
+            dx = (tx - tx[j] + world / 2) % world - world / 2
+            agree = (np.abs(dx) <= half_w + half_w[j] + 2 * reach) & (
+                np.abs(ty - ty[j]) <= half_h + half_h[j] + 2 * reach
+            )
+            count = len(set(which[agree].tolist()))
+            if count > most[0]:
+                span = max(float(np.ptp(cx[agree])), float(np.ptp(cy[agree])))
+                # Half the towns' names lie each side of their dots, so the middle is about right.
+                most = (count, span, float(np.median(tx[agree])), float(np.median(ty[agree])))
+        best[zoom] = most
+    zoom = max(best, key=lambda z: best[z][0])
+    count, span, origin_x, origin_y = best[zoom]
+    others = max(best[z][0] for z in best if z != zoom)
+    if count < MIN_TOWNS or span < MIN_TOWN_SPAN * scale or others * 2 > count:
+        return None
+    return MapProjection(TILE * scale * 2.0**zoom, origin_x, origin_y, True, float(count))
+
+
 def _km_per_px(world_px: float, lat: float) -> float:
     return 2 * math.pi * EARTH_RADIUS_KM * math.cos(math.radians(lat)) / world_px
 
@@ -317,12 +386,15 @@ class ResultReader:
         max_zoom_outs: int = 15,
         settle_checks: int = 12,
         page: Region | None = None,
+        read_words: Callable[[Image.Image], list[Word]] | None = None,
     ) -> None:
-        """``page``: where the game's page is, in a room, where an advert covers part of the map."""
+        """``page``: where the game's page is, in a room, where an advert covers part of the map.
+        ``read_words``: reads the towns a map names, to tell its zoom by them."""
         self.screen = screen
         self.controls = controls
         self.region = region
         self.page = page
+        self.read_words = read_words
         self.max_zoom_outs = max_zoom_outs
         self.settle_checks = settle_checks
         self.scale: float | None = None
@@ -359,6 +431,11 @@ class ResultReader:
                     step = measured
                 halvings = levels[-1].halvings + (step if measured is None else measured)
             levels.append(_Level(rgb, pin, flag, halvings, pins))
+            if crowded and self.read_words is not None and len(levels) <= TOWN_LEVELS:
+                answer = self._answer_by_towns(levels[-1], placed_lat, placed_lon)
+                if answer is not None:
+                    reading.answer, reading.problem = answer, ""
+                    break
             projection = self._locate(rgb)
             # The first view is at a whole zoom level, so a world recognised on it at another
             # size is a wrong fit that only happened to put our pin where it is: look further out.
@@ -376,6 +453,26 @@ class ResultReader:
         if reading.answer is None:
             reading.zoomed_out = [Image.fromarray(level.rgb) for level in levels[1:]]
         return reading
+
+    def _answer_by_towns(self, level: _Level, lat: float, lon: float) -> Answer | None:
+        """The flag's offset from our pin, on a map placed by the towns it names: our pin being
+        the one they put about where we clicked, which also checks them."""
+        if level.flag is None or not level.pins:
+            return None
+        projection = map_by_towns(self.read_words(Image.fromarray(level.rgb)), self.scale)
+        if projection is None:
+            return None
+        width = level.rgb.shape[1]
+        reach = TOWN_PIN_REACH * self.scale + 25.0 / _km_per_px(projection.world_px, lat)
+        offs = [(self._off(projection, pin, lat, lon, width), pin) for pin in level.pins]
+        off, pin = min(offs, key=lambda found: found[0])
+        if off > reach:
+            return None
+        mx, my = mercator_xy(lat, lon)
+        x = mx + (level.flag.x - pin.x) / projection.world_px
+        y = min(max(my + (level.flag.y - pin.y) / projection.world_px, 0.0), 1.0)
+        a_lat, a_lon = inverse_mercator(x, y)
+        return Answer(a_lat, _wrap_lon(a_lon), 0)
 
     def _settled_views(self, reading: Reading, abort: Callable[[], bool] | None):
         """Each view of the map, zooming out a notch at a time as each is worked out."""

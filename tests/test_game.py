@@ -194,7 +194,7 @@ class FakeSignReader:
 class FakeReader:
     """Stands in for the result-screen reader, which has its own tests."""
 
-    def __init__(self, screen, controls, region):
+    def __init__(self, screen, controls, region, **settings):
         self.region, self.placed, self.scale = region, [], None
 
     def read(self, lat, lon):

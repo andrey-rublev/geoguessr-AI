@@ -18,13 +18,13 @@ Round 1
   pin down early, at 17.6, -91.8
   guess 17.631, -91.799 (MX 69%, CO 11%; driving on the right 94%) (model expects ~3,088 points)
   locked in with 12 s to spare; waiting for the round to end
-  answer 15.500, -90.250 in GT: our pin was 290 km away, guessed MX
+  answer 15.500, -90.250 in GT: our pin at 17.631, -91.799 was 290 km away, guessed MX
 
 Waiting for the host to start a round...
 
 Round 2
   guess 6.450, 3.390 (model expects ~3,000 points)
-  answer 6.520, 3.380 in NG: our pin was 8 km away, the right country
+  answer 6.520, 3.380 in NG: our pin at 6.450, 3.390 was 8 km away, the right country
 """
 
 
@@ -113,6 +113,28 @@ def test_follows_a_game_from_what_the_bot_prints():
     assert second.km == 8 and second.right is True and second.points == 4960
     assert progress.phase == "playing" and progress.headline == "Round 2"
     assert progress.detail == "8 km off, the right country"
+
+
+def test_plots_where_the_pin_went_when_that_isnt_the_guess():
+    progress = played(
+        "Round 1\n"
+        "  guess 17.631, -91.799 (MX 69%, CO 11%; driving on the right 94%) "
+        "(model expects ~3,088 points)\n"
+        "  answer 15.500, -90.250 in GT: our pin at 14.800, -90.900 was 100 km away, "
+        "the right country\n"
+    )
+    done = progress.rounds[0]
+    assert done.guess == (14.8, -90.9) and done.guess_country == "GT" and done.sure is None
+    assert done.right is True
+
+    progress = played(
+        "Round 1\n"
+        "  guess 17.631, -91.799 (MX 69%, CO 11%; driving on the right 94%) "
+        "(model expects ~3,088 points)\n"
+        "  answer 15.500, -90.250 in GT: our pin at 17.000, -91.000 was 200 km away, guessed MX\n"
+    )
+    done = progress.rounds[0]
+    assert done.guess_country == "MX" and done.sure == 69 and done.right is False
 
 
 def test_says_how_the_last_round_went_while_waiting_for_the_host():

@@ -1053,8 +1053,8 @@ class OpenGuessrBot:
         self.results.append((km, guessed == really))
         country = "the right country" if guessed == really else f"guessed {guessed}"
         print(
-            f"  answer {answer.lat:.3f}, {answer.lon:.3f} in {really}: our pin was {km:,.0f} km "
-            f"away, {country}"
+            f"  answer {answer.lat:.3f}, {answer.lon:.3f} in {really}: our pin at {placed[0]:.3f}, "
+            f"{placed[1]:.3f} was {km:,.0f} km away, {country}"
         )
 
     def _sum_up(self) -> None:

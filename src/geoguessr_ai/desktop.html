@@ -991,7 +991,7 @@ function fillRow(row, round) {
     return made;
   };
   cell(round.number);
-  const place = round.guess_country ? `${round.guess_country} ${round.sure}%` : "";
+  const place = round.guess_country + (round.sure ? ` ${round.sure}%` : "");
   cell(round.guess ? place || "pin down" : round.missed ? "no pin" : "looking…", round.guess ? "" : "soft");
   if (round.answer) {
     const answer = cell(round.answer_country || "?", round.right ? "right-country" : "wrong-country");

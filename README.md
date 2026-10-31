@@ -36,7 +36,7 @@ The bot finds the game by itself, on any screen, and switches to its tab if anot
 
 ### Commands
 
-**`geoguessr-ai play`** plays a Singleplayer game on its own: 5 rounds, or `--rounds 10`. After each round it reads the answer and says how far off its pin was and whether it got the country right, like `our pin was 111 km away, guessed NG`. When it stops, it gives the average distance and how often the country was right. Each round is saved to `runs/` with its answer, for `train`.
+**`geoguessr-ai play`** plays a Singleplayer game on its own: 5 rounds, or `--rounds 10`. After each round it reads the answer and says how far off its pin was and whether it got the country right, like `our pin at 6.452, 3.391 was 111 km away, guessed NG`. When it stops, it gives the average distance and how often the country was right. Each round is saved to `runs/` with its answer, for `train`.
 
 **`geoguessr-ai friends`** plays in a multiplayer room until you stop it. It plays each round the host starts, keeps to the round's timer, and waits for the host to press Continue. It needs a browser of its own, with a friend hosting the room on their device: `friends --join EW2-78U` opens one and joins the room with that code, or `friends --browser` opens one for you to join in yourself. OpenGuessr's bot check may stop the bot's own browser, though; if it does, use `--hidden` (below). It puts a rough pin down right after its first look, since the game counts a pin that's down when the round ends, so a player guessing early and cutting the clock doesn't cost it the round. Its rounds are saved like `play`'s.
 

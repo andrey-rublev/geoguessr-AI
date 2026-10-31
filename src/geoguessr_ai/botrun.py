@@ -240,9 +240,14 @@ class Progress:
         current = self.rounds[-1]
         current.answer = (float(found[1]), float(found[2]))
         current.answer_country = found[3]
-        current.km = _whole(found[4])
+        # Where the pin really went, which isn't the guess when an early pin had to stand.
+        current.guess = (float(found[4]), float(found[5]))
+        pin_country = found[7] if found[7] is not None else found[3]
+        if pin_country != current.guess_country:
+            current.guess_country, current.sure = pin_country, None
+        current.km = _whole(found[6])
         current.points = round(openguessr_score(current.km))
-        current.right = found[5] is None
+        current.right = found[7] is None
         self.detail = _result(current)
 
     def _missed(self, _: re.Match) -> None:
@@ -334,8 +339,8 @@ _LINES: Sequence[tuple[re.Pattern, Callable[[Progress, re.Match], None]]] = [
             Progress._guess,
         ),
         (
-            rf"^answer {_NUMBER}, {_NUMBER} in (\S*): our pin was ([\d,]+) km away, "
-            r"(?:the right country|guessed (\S*))$",
+            rf"^answer {_NUMBER}, {_NUMBER} in (\S*): our pin at {_NUMBER}, {_NUMBER} was "
+            r"([\d,]+) km away, (?:the right country|guessed (\S*))$",
             Progress._answer,
         ),
         (r"^(\d+) s on the clock$", _saying("Looking around: {} s on the clock")),

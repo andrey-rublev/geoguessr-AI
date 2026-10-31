@@ -119,3 +119,16 @@ def test_fetches_unpacks_and_clears_away_the_pack(tmp_path, monkeypatch):
 
     assert (tmp_path / "models" / "geoguessr.pt").exists()
     assert not (tmp_path / "data" / "geoguessr-model.zip").exists()
+
+
+def test_says_a_big_downloads_progress_in_lines_for_the_app(capsys, monkeypatch):
+    monkeypatch.setattr(fetch, "SAY_EVERY_S", 0.0)
+    lines = fetch._progress_as_lines("the image model")
+
+    with lines(total=3) as counting_files:  # the files of a download, counted one by one
+        counting_files.update(1)
+    assert capsys.readouterr().out == ""
+
+    with lines(total=10 * fetch.CHUNK, unit="B") as bytes_of_a_file:
+        bytes_of_a_file.update(5 * fetch.CHUNK)
+    assert "Fetching the image model: 50%" in capsys.readouterr().out

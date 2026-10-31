@@ -167,3 +167,53 @@ def test_other_browser_errors_still_show():
     threading.Thread(target=browser_thread, daemon=True).start()
     with pytest.raises(ValueError):
         session.call(lambda page: page.screenshot())
+
+
+class FakePlaywright:
+    """Playwright on a computer with only some browsers on it."""
+
+    def __init__(self, browsers):
+        self.browsers, self.tried = browsers, []
+        self.chromium = self
+
+    def start(self):
+        return self
+
+    def stop(self):
+        pass
+
+    def launch_persistent_context(self, profile, channel=None, **options):
+        self.tried.append(channel)
+        if channel not in self.browsers:
+            raise RuntimeError(f"Chromium distribution '{channel}' is not found at C:/somewhere")
+        return self
+
+    @property
+    def pages(self):
+        return [self]
+
+    def goto(self, url):
+        pass
+
+    def close(self):
+        pass
+
+
+@pytest.mark.parametrize(
+    "browsers,tried", [(("chrome", "msedge"), ["chrome"]), (("msedge",), ["chrome", "msedge"])]
+)
+def test_uses_edge_where_theres_no_chrome(monkeypatch, tmp_path, browsers, tried):
+    fake = FakePlaywright(browsers)
+    monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: fake)
+
+    session = BrowserSession(profile=tmp_path)
+    session.close()
+
+    assert fake.tried == tried
+
+
+def test_says_so_when_theres_no_browser_at_all(monkeypatch, tmp_path):
+    monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: FakePlaywright(()))
+
+    with pytest.raises(RuntimeError, match="msedge"):
+        BrowserSession(profile=tmp_path)

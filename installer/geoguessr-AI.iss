@@ -44,6 +44,7 @@ Type: filesandordirs; Name: "{app}\scripts"
 Source: "..\src\*"; DestDir: "{app}\src"; Excludes: "__pycache__,*.pyc,*.egg-info"; Flags: recursesubdirs ignoreversion
 Source: "..\scripts\wsl_setup.sh"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "..\scripts\wsl_screen.sh"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "..\scripts\wsl-constraints.txt"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "..\pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\uv.lock"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion

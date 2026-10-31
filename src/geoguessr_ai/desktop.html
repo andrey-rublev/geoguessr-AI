@@ -1006,11 +1006,14 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", requestDra
 // line the bot prints would lose your place and your keyboard's.
 const rows = new Map();
 let rowInTabOrder = null;
+let rowChosen = false;
 
-// The list is one stop on the way round with Tab, not hundreds: arrow keys go from row to row.
-function tabToRow(row) {
+// The list is one stop on the way round with Tab, not hundreds: arrow keys go from row to row. It's
+// at the latest round until you've chosen another.
+function tabToRow(row, chosen = false) {
   if (rowInTabOrder) rowInTabOrder.tabIndex = -1;
   rowInTabOrder = row;
+  rowChosen = chosen;
   if (row) row.tabIndex = 0;
 }
 
@@ -1064,7 +1067,7 @@ function drawRounds(rounds) {
       row.addEventListener("mouseenter", () => pointAt(round.number));
       row.addEventListener("mouseleave", () => pointAt(null));
       row.addEventListener("click", () => {
-        tabToRow(row);
+        tabToRow(row, true);
         pick(round.number);
       });
       row.addEventListener("keydown", (event) => {
@@ -1075,7 +1078,7 @@ function drawRounds(rounds) {
           event.preventDefault();
           const next = event.key === "ArrowDown" ? row.nextElementSibling : row.previousElementSibling;
           if (next) {
-            tabToRow(next);
+            tabToRow(next, true);
             next.focus();
           }
         }
@@ -1111,7 +1114,7 @@ function drawRounds(rounds) {
     foot.append(row);
   }
   if (atEnd) list.scrollTop = list.scrollHeight;
-  if (!body.contains(rowInTabOrder)) tabToRow(body.lastElementChild);
+  if (!rowChosen || !body.contains(rowInTabOrder)) tabToRow(body.lastElementChild);
   drawHot();
 }
 

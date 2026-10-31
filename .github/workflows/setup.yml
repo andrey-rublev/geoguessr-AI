@@ -55,6 +55,18 @@ jobs:
         with:
           name: geoguessr-AI-Setup
           path: installer/Output/geoguessr-AI-Setup.exe
+      # Here, on a computer that has never seen the project: a release goes out only if this works.
+      - name: Try it
+        shell: pwsh
+        run: |
+          $setup = Start-Process installer/Output/geoguessr-AI-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=setup.log' -Wait -PassThru
+          if ($setup.ExitCode) { Get-Content setup.log -Tail 30; throw "Setup exited with $($setup.ExitCode)" }
+          $app = "$env:LOCALAPPDATA\Programs\geoguessr-AI"
+          & "$app\.venv\Scripts\python.exe" installer/try_it.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          for ($i = 0; $i -lt 60 -and (Test-Path "$app\.venv"); $i++) { Start-Sleep 2 }
+          if (Test-Path "$app\.venv") { throw "The uninstaller left the libraries behind" }
       - name: Release it
         if: github.ref_type == 'tag'
         env:

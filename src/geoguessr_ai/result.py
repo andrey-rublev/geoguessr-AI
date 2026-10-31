@@ -143,6 +143,9 @@ TILE = 256
 """The world's width in pixels at zoom level 0 and 100% scale. The first result view is at a
 whole zoom level, so its world is this, at the markers' scale, times a power of two: 96% of
 the 2,474 answers read by 24 September put it within 0.005 of a halving of one."""
+AD_PANEL = (730, 100, 236)
+"""The advert over a multiplayer result map, at 100% scale: its width, its height, and how far
+its top is above the page's bottom. It is centred on the page, as measured at 100% and 125%."""
 RESULT_SHOWS_S = 8.0
 """How long a multiplayer result map may take to show once the round has ended."""
 LOOK_S = 0.1
@@ -306,11 +309,20 @@ class ResultReader:
     """Reads answers off result screens, remembering the markers' size between rounds."""
 
     def __init__(
-        self, screen, controls, region: Region, *, max_zoom_outs: int = 15, settle_checks: int = 12
+        self,
+        screen,
+        controls,
+        region: Region,
+        *,
+        max_zoom_outs: int = 15,
+        settle_checks: int = 12,
+        page: Region | None = None,
     ) -> None:
+        """``page``: where the game's page is, in a room, where an advert covers part of the map."""
         self.screen = screen
         self.controls = controls
         self.region = region
+        self.page = page
         self.max_zoom_outs = max_zoom_outs
         self.settle_checks = settle_checks
         self.scale: float | None = None
@@ -457,8 +469,21 @@ class ResultReader:
             previous = current
         return previous
 
-    def _markers(self, rgb: np.ndarray) -> tuple[Marker | None, Marker | None]:
+    def _shades(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """What the markers are made of (see :func:`marker_shades`), but for under the advert,
+        whose pictures can look like one and which can hide one."""
         red, dark = marker_shades(rgb)
+        if self.page is not None:
+            s = self.scale or 1.0
+            width, height, above = (round(size * s) for size in AD_PANEL)
+            left = self.page.left + (self.page.width - width) // 2 - self.region.left
+            top = self.page.bottom - above - self.region.top
+            for shade in (red, dark):
+                shade[max(top, 0) : max(top + height, 0), max(left, 0) : max(left + width, 0)] = 0
+        return red, dark
+
+    def _markers(self, rgb: np.ndarray) -> tuple[Marker | None, Marker | None]:
+        red, dark = self._shades(rgb)
         if self.scale is None:
             self.scale = find_scale(red)
             if self.scale is None:
@@ -474,7 +499,7 @@ class ResultReader:
         """Every pin on a result map, as on a multiplayer one, where all players' show."""
         if self.scale is None:
             return []
-        red, _ = marker_shades(rgb)
+        red, _ = self._shades(rgb)
         return find_markers(red, "pin", self.scale, MIN_SCORES["pin"])
 
     def _halvings_between(

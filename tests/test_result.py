@@ -304,6 +304,21 @@ def test_in_a_room_says_when_the_map_never_shows():
     assert screen.controls.notches == 0
 
 
+def test_in_a_room_a_flag_in_the_advert_is_no_flag():
+    page = Region(0, 0, 1400, 1000)  # so the advert is from x = 335 to 1065, y = 764 to 864
+    seen = ResultReader(None, None, Region(100, 200, 1200, 700))
+    seen.scale = 1.5
+    blanked = ResultReader(None, None, Region(100, 200, 1200, 700), page=page)
+    blanked.scale = 1.0
+    rgb = np.full((700, 1200, 3), LAND, np.float32)
+    paint(rgb, "flag", 600 - 100, 830 - 200, FLAG_BLACK, scale=1.5)
+    rgb = rgb.astype(np.uint8)
+
+    assert seen._markers(rgb)[1] is not None
+    assert blanked._shades(rgb)[1][830 - 200 - 5, 600 - 100].max() == 0
+    assert blanked._shades(rgb)[1][100, 100] == seen._shades(rgb)[1][100, 100]
+
+
 def test_stops_reading_once_the_result_map_goes():
     screen = FakeResultScreen(fitted(24_576))
     controls = FakeControls(screen)

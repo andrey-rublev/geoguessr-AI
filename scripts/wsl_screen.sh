@@ -72,8 +72,10 @@ if [ -e /dev/dxg ] && [ -e /usr/lib/x86_64-linux-gnu/dri/d3d12_dri.so ]; then
     graphics+=(--ignore-gpu-blocklist --use-gl=angle --use-angle=gl --disable-gpu-rasterization)
     graphics+=(--disable-gpu-compositing)
 fi
+url=https://openguessr.com/multiplayer
+[ "${1:-}" = play ] && url=https://openguessr.com/
 google-chrome --user-data-dir="$PROFILE" --no-first-run --no-default-browser-check \
-    --start-maximized "${graphics[@]}" https://openguessr.com/multiplayer >/dev/null 2>&1 &
+    --start-maximized "${graphics[@]}" "$url" >/dev/null 2>&1 &
 pids+=($!)
 unset GALLIUM_DRIVER
 

@@ -1005,6 +1005,14 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", requestDra
 // The list of rounds. Only rows that changed are touched: in a long game, redrawing them all at each
 // line the bot prints would lose your place and your keyboard's.
 const rows = new Map();
+let rowInTabOrder = null;
+
+// The list is one stop on the way round with Tab, not hundreds: arrow keys go from row to row.
+function tabToRow(row) {
+  if (rowInTabOrder) rowInTabOrder.tabIndex = -1;
+  rowInTabOrder = row;
+  if (row) row.tabIndex = 0;
+}
 
 function fillRow(row, round) {
   row.replaceChildren();
@@ -1052,17 +1060,24 @@ function drawRounds(rounds) {
     if (!row) {
       row = document.createElement("tr");
       row.dataset.round = round.number;
-      row.tabIndex = 0;
+      row.tabIndex = -1;
       row.addEventListener("mouseenter", () => pointAt(round.number));
       row.addEventListener("mouseleave", () => pointAt(null));
-      row.addEventListener("click", () => pick(round.number));
+      row.addEventListener("click", () => {
+        tabToRow(row);
+        pick(round.number);
+      });
       row.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           pick(round.number);
         } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault();
-          (event.key === "ArrowDown" ? row.nextElementSibling : row.previousElementSibling)?.focus();
+          const next = event.key === "ArrowDown" ? row.nextElementSibling : row.previousElementSibling;
+          if (next) {
+            tabToRow(next);
+            next.focus();
+          }
         }
       });
       rows.set(round.number, row);
@@ -1096,6 +1111,7 @@ function drawRounds(rounds) {
     foot.append(row);
   }
   if (atEnd) list.scrollTop = list.scrollHeight;
+  if (!body.contains(rowInTabOrder)) tabToRow(body.lastElementChild);
   drawHot();
 }
 

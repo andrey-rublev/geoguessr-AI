@@ -146,7 +146,11 @@ def _intel_gpu(name: str, size: int):
         if not xml.exists():
             print(f"Converting {name} to run on the GPU (once, a minute or two)...")
             _convert(ov, name, size, xml)
-        return core.compile_model(core.read_model(xml), "GPU", {"INFERENCE_PRECISION_HINT": "f16"})
+        gpu = core.compile_model(core.read_model(xml), "GPU", {"INFERENCE_PRECISION_HINT": "f16"})
+        # A first go now, while the CPU can still take over, and as the first is the slowest.
+        blank = np.zeros((OPENVINO_BATCH, 3, size, size), np.float32)
+        gpu.create_infer_request().infer({0: blank})
+        return gpu
     except Exception as error:  # an old driver, or too little memory: the CPU can do it instead
         print(f"The image model will run on the CPU, as the GPU couldn't take it: {error}")
         return None

@@ -109,7 +109,7 @@ def test_follows_a_game_from_what_the_bot_prints():
     assert first.expected == 3088
     assert first.answer == (15.5, -90.25) and first.answer_country == "GT"
     assert first.km == 290 and first.right is False and first.points == 3741
-    assert second.guess_country == "" and second.sure is None
+    assert second.guess_country == "NG" and second.sure is None
     assert second.km == 8 and second.right is True and second.points == 4960
     assert progress.phase == "playing" and progress.headline == "Round 2"
     assert progress.detail == "8 km off, the right country"

@@ -199,7 +199,8 @@ class App:
     def set_up(self, what: str) -> None:
         """Set up ``what``, in a window of its own, and see how that went once it's closed."""
         console = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-        process = subprocess.Popen(_staying_open(SETUP_COMMANDS[what]), cwd=REPO, creationflags=console)
+        command = _staying_open(SETUP_COMMANDS[what])
+        process = subprocess.Popen(command, cwd=REPO, creationflags=console)
 
         def wait() -> None:
             process.wait()

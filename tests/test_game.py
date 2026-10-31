@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import replace
 
 import cv2
@@ -247,8 +248,8 @@ def test_says_how_far_off_each_guess_was_and_how_they_went_all_told(monkeypatch,
     OpenGuessrBot(LAYOUT, FakePredictor(), settings, FakeScreen(), FakeControls()).play()
 
     out = capsys.readouterr().out
-    assert "in NG: our pin at 6.5" in out and "was 7 km away, the right country" in out
-    assert "in BJ: our pin at 6.5" in out and "was 111 km away, guessed NG" in out
+    assert re.search(r"in NG: our pin at [d.]+, [d.]+ was 7 km away, the right country", out)
+    assert re.search(r"in BJ: our pin at [d.]+, [d.]+ was 111 km away, guessed NG", out)
     assert "2 rounds with the answer read: on average 59 km off" in out
     assert "the right country in 50% (1 of 2)" in out
 

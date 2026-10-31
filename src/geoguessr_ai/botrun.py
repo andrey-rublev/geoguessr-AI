@@ -23,7 +23,7 @@ MODES = ("friends", "play")
 PLACES = ("hidden", "browser", "screen")
 PLACE_NAMES = {
     "hidden": "on the bot's screen",
-    "browser": "in the bot's Chrome window",
+    "browser": "in the bot's browser window",
     "screen": "in your browser",
 }
 STOP_TRIES, STOP_WAIT_S = 4, 5.0

@@ -76,19 +76,25 @@ class BrowserSession:
             return
         try:
             playwright = sync_playwright().start()
-            context = playwright.chromium.launch_persistent_context(
-                str(profile),
-                channel=channel,
-                headless=headless,
-                viewport={"width": size[0], "height": size[1]},
-                device_scale_factor=1,
+            options = {
+                "headless": headless,
+                "viewport": {"width": size[0], "height": size[1]},
+                "device_scale_factor": 1,
                 # Street View draws with the GPU, and stops drawing in a window it thinks hidden.
-                args=[
+                "args": [
                     "--disable-backgrounding-occluded-windows",
                     "--disable-renderer-backgrounding",
                     "--mute-audio",  # its game's sounds and music would only get in the way
                 ],
-            )
+            }
+            launch = playwright.chromium.launch_persistent_context
+            try:
+                context = launch(str(profile), channel=channel, **options)
+            except Exception as missing:  # noqa: BLE001 - Playwright's Error, for what's missing
+                if channel != "chrome" or "chrome" not in str(missing).lower():
+                    raise
+                print("No Google Chrome here: using Microsoft Edge, as Windows comes with it.")
+                context = launch(str(profile), channel="msedge", **options)
             page = context.pages[0] if context.pages else context.new_page()
             page.goto(url)
         except Exception as error:  # noqa: BLE001 - handed to whoever started the session

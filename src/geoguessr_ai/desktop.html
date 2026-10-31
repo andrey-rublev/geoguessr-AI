@@ -284,7 +284,7 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
         <button type="button" class="set-up" id="set-up-ubuntu" hidden>Set it up</button>
         <label class="place">
           <input type="radio" name="where" value="browser">
-          <span class="place-name">In its own Chrome window</span>
+          <span class="place-name">In its own browser window</span>
           <span class="place-says" id="browser-says">OpenGuessr's person check may stop it there.</span>
         </label>
         <label class="place">
@@ -1093,7 +1093,7 @@ function drawRounds(rounds) {
 }
 
 // The choices.
-const WHERE_NAMES = { hidden: "Hidden screen", browser: "Its own Chrome window", screen: "This screen" };
+const WHERE_NAMES = { hidden: "Hidden screen", browser: "Its own browser window", screen: "This screen" };
 const formatCode = (text) => {
   const code = text.replace(/[^0-9a-z]/gi, "").toUpperCase().slice(0, 6);
   return code.length > 3 ? `${code.slice(0, 3)}-${code.slice(3)}` : code;
@@ -1158,7 +1158,7 @@ function drawChoices() {
     $("#fetch-done").style.width = `${known ? fetching.percent : 100}%`;
   }
   $("#browser-says").textContent = setup.chrome === false
-    ? "Needs Playwright: pip install playwright."
+    ? "This install doesn't include it: run pip install playwright."
     : "OpenGuessr's person check may stop it there.";
 
   const go = $("#go");
@@ -1171,7 +1171,7 @@ function drawChoices() {
     else if (setup.fetch_failed) blocked = setup.fetch_failed;
     else if (setup.model === false) blocked = "It has no model to play with yet.";
     else if (picks.where === "hidden" && setup.ubuntu === false) blocked = "Set up the hidden screen, or choose another place.";
-    else if (picks.where === "browser" && setup.chrome === false) blocked = "Its Chrome window needs Playwright.";
+    else if (picks.where === "browser" && setup.chrome === false) blocked = "Its own window needs Playwright.";
   }
   go.disabled = stopping || Boolean(blocked);
   $("#go-note").textContent = blocked;

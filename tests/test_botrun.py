@@ -171,6 +171,13 @@ def test_sums_up_a_game_it_was_asked_to_stop():
     assert progress.detail == "2 rounds, on average 149 km off, 1 in the right country"
 
 
+def test_a_game_played_to_its_end_is_finished_not_stopped():
+    progress = played()
+    progress.finish(0, asked_to=False)
+    assert progress.phase == "stopped" and progress.headline == "Finished"
+    assert progress.detail.startswith("2 rounds")
+
+
 def test_stays_stopping_whatever_the_bot_prints_on_its_way_out():
     progress = played(GAME.split("Round 2")[0])
     progress.stopping()

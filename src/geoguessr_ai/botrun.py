@@ -188,7 +188,8 @@ class Progress:
         self.attention, self.screen = None, ""
         if asked_to or code in (0, 130):  # 130: stopped by Ctrl+C
             self.phase = "failed" if self.reason else "stopped"
-            self.headline = "The bot stopped" if self.reason else "Stopped"
+            ended = "Stopped" if asked_to or code else "Finished"
+            self.headline = "The bot stopped" if self.reason else ended
             self.detail = self.reason or self._summary()
         else:
             self.phase, self.headline = "failed", "The bot stopped"

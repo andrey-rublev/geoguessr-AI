@@ -1,0 +1,45 @@
+# Builds geoguessr-AI-Setup.exe. A tag like v1.0.0 makes a release with it; run by hand, it only
+# keeps it as this run's artifact, to try before releasing.
+name: Setup
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  UV_VERSION: "0.11.23"
+
+jobs:
+  setup:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get uv
+        shell: pwsh
+        run: |
+          $url = "https://github.com/astral-sh/uv/releases/download/$env:UV_VERSION/uv-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest $url -OutFile uv.zip
+          Expand-Archive uv.zip installer/uv
+      - name: Get Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build it
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.0.0" }
+          $iscc = (Get-ChildItem "C:\Program Files*\Inno Setup *\ISCC.exe" | Select-Object -First 1).FullName
+          & $iscc "/DVersion=$version" installer/geoguessr-AI.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geoguessr-AI-Setup
+          path: installer/Output/geoguessr-AI-Setup.exe
+      - name: Release it
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$env:GITHUB_REF_NAME" installer/Output/geoguessr-AI-Setup.exe --title "geoguessr-AI $env:GITHUB_REF_NAME" --notes-file installer/release-notes.md

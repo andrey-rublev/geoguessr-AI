@@ -81,11 +81,24 @@ def test_a_code_means_nothing_where_the_bot_cant_join_with_one():
         {"mode": "play", "where": "the moon"},
         {"mode": "play", "where": "hidden", "rounds": 0},
         {"mode": "play", "where": "hidden", "rounds": "5; rm"},
+        {"mode": "play", "where": "hidden", "rounds": 1.5},
+        {"mode": "play", "where": "hidden", "rounds": None},
     ],
 )
 def test_choices_that_make_no_sense_are_refused(wrong):
     with pytest.raises(ValueError):
         Choices.read(wrong)
+
+
+def test_a_solo_game_can_be_as_long_as_you_like():
+    choices = Choices.read({"mode": "play", "where": "hidden", "rounds": 500})
+    assert choices.arguments()[:3] == ["play", "--rounds", "500"]
+
+
+def test_a_box_a_room_doesnt_use_cant_stop_it_starting():
+    choices = Choices.read({"mode": "friends", "where": "hidden", "rounds": 0})
+    assert choices.rounds == Choices.rounds
+    assert "--rounds" not in choices.arguments()
 
 
 def test_follows_a_game_from_what_the_bot_prints():

@@ -21,7 +21,6 @@ from .geo import openguessr_score
 
 MODES = ("friends", "play")
 PLACES = ("hidden", "browser", "screen")
-MAX_ROUNDS = 100
 PLACE_NAMES = {
     "hidden": "on the bot's screen",
     "browser": "in the bot's Chrome window",
@@ -88,8 +87,9 @@ class Choices:
         if mode not in MODES or where not in PLACES:
             raise ValueError("Choose what to play, and where the bot plays it.")
         rounds = data.get("rounds", cls.rounds)
-        if not isinstance(rounds, int) or not 1 <= rounds <= MAX_ROUNDS:
-            raise ValueError(f"Choose from 1 to {MAX_ROUNDS} rounds.")
+        sensible = isinstance(rounds, int) and rounds >= 1
+        if mode == "play" and not sensible:  # a room plays as many as its host starts
+            raise ValueError("Enter how many rounds to play: a whole number, 1 or more.")
         room = str(data.get("room") or "")
         if mode != "friends" or where == "screen":  # there, you've joined it already
             room = ""
@@ -97,7 +97,7 @@ class Choices:
             mode,
             room_code(room) if room else "",
             where,
-            rounds,
+            rounds if sensible else cls.rounds,
             bool(data.get("nmpz")),
             bool(data.get("signs", True)),
             bool(data.get("walk", True)),

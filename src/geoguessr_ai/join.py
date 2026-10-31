@@ -46,8 +46,9 @@ _SINGLE = re.compile(r"single\s*player", re.I)
 _WORLD = re.compile(r"^[\W_]*world[\W_]*$", re.I)
 _SKIP = re.compile(r"\bskip\b", re.I)
 """The welcome's "No, skip to menu", which a browser new to the game may be shown first."""
-_CHECK = re.compile(r"verify you are human|security verification", re.I)
-"""What the site's check that a person is there says, in place of the page asked for."""
+_CHECK = re.compile(r"verify you are human|security verification|ray\s*id|cloudflare", re.I)
+"""What the site's check that a person is there says, in place of the page asked for. It comes in
+the browser's language, but under it, Ray ID and the name of who's checking are in any."""
 STILL_THERE = 1.0
 """How far, in heights of its word, the code page's Join may have moved and be the same one."""
 

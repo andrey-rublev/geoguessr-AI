@@ -22,11 +22,12 @@ class OpenGuessr:
         self.asks_name, self.first_box, self.room_open = asks_name, first_box, room_open
         self.focused, self.typed, self.clicks = False, "", []
         self.checks_for = 0  # looks the site's check that a person is there has yet to last
+        self.check_says = ["Performing security verification"]
 
     def words(self, image):
         if self.checks_for:
             self.checks_for -= 1
-            return [word("Performing security verification", 800, 300)]
+            return [word(line, 800, 300 + 40 * i) for i, line in enumerate(self.check_says)]
         return {
             "welcome": [word("No, skip to menu", 800, 600)],
             "menu": [word("Modes", 306, 144), word("Join", 376, 509), word("Host", 560, 509)],
@@ -149,6 +150,22 @@ def test_says_once_when_the_site_checks_for_a_person_and_waits_past_its_time(cap
     assert join_room(game, game, game.words, "EW278U", wait=5)
 
     assert game.page == "lobby"
+    assert capsys.readouterr().out.count("checking that a person is there") == 1
+
+
+@pytest.mark.parametrize(
+    "says",
+    [
+        ["Sicherheitsüberprüfung", "wird durchgeführt", "Ray ID: a5341508f9bed2e5"],
+        ["Web、、Web", "CLOUDFLARE", "Cloudflare=74"],  # Japanese, as the reader reads it
+    ],
+)
+def test_knows_the_sites_check_in_any_language(says, capsys):
+    game = OpenGuessr()
+    game.checks_for, game.check_says = 30, says
+
+    assert join_room(game, game, game.words, "EW278U", wait=5)
+
     assert capsys.readouterr().out.count("checking that a person is there") == 1
 
 

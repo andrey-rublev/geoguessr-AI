@@ -4,13 +4,19 @@ went down with fatal hardware errors when training ran beside other work. Read f
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import sys
+from collections.abc import Iterator
 
 COUNTER = r"\Thermal Zone Information(*)\Temperature"
 """Each thermal zone's temperature, in kelvin."""
 PDH_FMT_DOUBLE = 0x00000200
 PDH_MORE_DATA = 0x800007D2
+PROCESS_POWER_THROTTLING = 4
+"""What ``SetProcessInformation`` is to set, of all it can."""
+THROTTLE_EXECUTION_SPEED = 1
+"""What Windows calls efficiency mode."""
 
 
 class _Item(ctypes.Structure):
@@ -43,6 +49,43 @@ def cpu_temperature() -> float | None:
     items = ctypes.cast(buffer, ctypes.POINTER(_Item))
     kelvins = [items[i].value for i in range(count.value) if items[i].status == 0]
     return max(kelvins) - 273.15 if kelvins else None
+
+
+class _Throttling(ctypes.Structure):
+    """``PROCESS_POWER_THROTTLING_STATE``."""
+
+    _fields_ = [("version", ctypes.c_ulong), ("control", ctypes.c_ulong), ("state", ctypes.c_ulong)]
+
+
+def _efficiency_mode(on: bool) -> None:
+    if sys.platform != "win32":
+        return
+    kernel32 = ctypes.WinDLL("kernel32")
+    kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+    kernel32.SetProcessInformation.argtypes = (
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong,
+    )  # fmt: skip
+    asked = THROTTLE_EXECUTION_SPEED if on else 0
+    state = _Throttling(1, asked, asked)
+    kernel32.SetProcessInformation(
+        kernel32.GetCurrentProcess(),
+        PROCESS_POWER_THROTTLING,
+        ctypes.byref(state),
+        ctypes.sizeof(state),
+    )
+
+
+@contextlib.contextmanager
+def running_cool() -> Iterator[None]:
+    """What's inside runs in Windows' efficiency mode, which holds the CPU's boost down, where fewer
+    threads only let the ones left boost harder. Getting the image model ready for the GPU took one
+    laptop's CPU to 90 C within seconds on a quarter of its threads, and to 57 C at most like this.
+    """
+    _efficiency_mode(True)
+    try:
+        yield
+    finally:
+        _efficiency_mode(False)
 
 
 def _open():

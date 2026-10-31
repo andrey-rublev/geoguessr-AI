@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import threading
+import warnings
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -15,6 +16,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
+
+from ..thermal import running_cool
 
 # Or a model on Hugging Face in the old format, like StreetCLIP, gets downloaded again in the new.
 os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
@@ -69,6 +72,7 @@ class ImageEncoder:
 
         # Loading only the vision tower of a full CLIP checkpoint lists every unused text weight.
         hf_logging.set_verbosity_error()
+        hf_logging.disable_progress_bar()
         self.name = name
         self.processor = AutoImageProcessor.from_pretrained(name)
         size = self.processor.crop_size["height"]
@@ -153,13 +157,22 @@ def _convert(ov, name: str, size: int, xml: Path) -> None:
         def forward(self, pixels: torch.Tensor) -> torch.Tensor:
             return self.tower(pixel_values=pixels).image_embeds
 
-    shape = (OPENVINO_BATCH, 3, size, size)
-    model = ov.convert_model(
-        Embed(_clip_vision(name)), example_input=torch.zeros(shape), input=[shape]
-    )
     xml.parent.mkdir(parents=True, exist_ok=True)
     partial = xml.with_name(f"{xml.stem}.partial.xml")
-    ov.save_model(model, partial)  # weights saved as 16-bit floats
+    threads = torch.get_num_threads()
+    torch.set_num_threads(max(1, threads // 4))
+    try:
+        with running_cool(), warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # what tracing warns of is for those changing the model
+            # Traced on one image, not a whole batch: it comes out the same, for far less work.
+            model = ov.convert_model(
+                Embed(_clip_vision(name)),
+                example_input=torch.zeros((1, 3, size, size)),
+                input=[(OPENVINO_BATCH, 3, size, size)],
+            )
+            ov.save_model(model, partial)  # weights saved as 16-bit floats
+    finally:
+        torch.set_num_threads(threads)
     # The weights beside it, then the model itself: a model file only ever has its weights.
     os.replace(partial.with_suffix(".bin"), xml.with_suffix(".bin"))
     os.replace(partial, xml)

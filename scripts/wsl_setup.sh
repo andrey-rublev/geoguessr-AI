@@ -39,6 +39,7 @@ intel_gpu_driver() {
         wget -q -P "$dir" "$url" || return 1
     done
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ocl-icd-libopencl1 libze1 "$dir"/*.deb
+    rm -rf "$dir"
 }
 if [ -e /dev/dxg ] && ! dpkg -s intel-opencl-icd >/dev/null 2>&1; then
     echo "Getting Intel's GPU driver, which only helps on an Intel GPU..."

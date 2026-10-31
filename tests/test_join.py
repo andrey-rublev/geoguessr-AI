@@ -157,7 +157,7 @@ def test_says_once_when_the_site_checks_for_a_person_and_waits_past_its_time(cap
     "says",
     [
         ["Sicherheitsüberprüfung", "wird durchgeführt", "Ray ID: a5341508f9bed2e5"],
-        ["Web、、Web", "CLOUDFLARE", "Cloudflare=74"],  # Japanese, as the reader reads it
+        ["Web、、Web", "CLOUDFLARE", "Ray ID: a534158a3b678243"],  # Japanese, as it's read
     ],
 )
 def test_knows_the_sites_check_in_any_language(says, capsys):
@@ -167,6 +167,15 @@ def test_knows_the_sites_check_in_any_language(says, capsys):
     assert join_room(game, game, game.words, "EW278U", wait=5)
 
     assert capsys.readouterr().out.count("checking that a person is there") == 1
+
+
+def test_a_little_box_of_cloudflares_on_a_page_isnt_the_check(capsys):
+    game = OpenGuessr()
+    game.checks_for, game.check_says = 30, ["Success!", "CLOUDFLARE"]
+
+    assert not join_room(game, game, game.words, "EW278U", wait=5)  # no waiting for a person
+
+    assert "checking that a person is there" not in capsys.readouterr().out
 
 
 def test_never_presses_join_without_the_code_in_its_boxes(capsys):

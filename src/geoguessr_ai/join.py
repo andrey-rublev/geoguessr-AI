@@ -46,9 +46,10 @@ _SINGLE = re.compile(r"single\s*player", re.I)
 _WORLD = re.compile(r"^[\W_]*world[\W_]*$", re.I)
 _SKIP = re.compile(r"\bskip\b", re.I)
 """The welcome's "No, skip to menu", which a browser new to the game may be shown first."""
-_CHECK = re.compile(r"verify you are human|security verification|ray\s*id|cloudflare", re.I)
+_CHECK = re.compile(r"verify you are human|security verification|ray\s*id", re.I)
 """What the site's check that a person is there says, in place of the page asked for. It comes in
-the browser's language, but under it, Ray ID and the name of who's checking are in any."""
+the browser's language, but Ray ID, at its foot, is the same in any. The name Cloudflare isn't to
+go by: the site's own pages can show its little box, and the bot would wait for a person forever."""
 STILL_THERE = 1.0
 """How far, in heights of its word, the code page's Join may have moved and be the same one."""
 

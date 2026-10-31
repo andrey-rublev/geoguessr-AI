@@ -141,6 +141,11 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .go-note { margin: 7px 0 0; font-size: 12.5px; color: var(--ink-soft); text-align: center; }
 .go .wrong { margin-top: 7px; text-align: center; }
 #set-up-model { display: block; margin: 6px auto 0; }
+.fetching { margin-top: 8px; font-size: 12.5px; color: var(--ink-soft); }
+.fetching p { margin: 0 0 4px; }
+.fetch-bar { height: 6px; background: var(--sea-deep); border-radius: 3px; overflow: hidden; }
+.fetch-bar div { height: 100%; width: 100%; background: var(--plot); transition: width .3s; }
+.fetch-bar.unknown div { opacity: .35; }
 fieldset:disabled .place, fieldset:disabled .switch, fieldset:disabled .modes label { opacity: .55; cursor: default; }
 
 /* The chart, and how the game is going. */
@@ -316,7 +321,11 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
     <button class="go-button" id="go" type="submit">Start the bot</button>
     <p class="wrong" id="start-wrong" role="alert" hidden></p>
     <p class="go-note" id="go-note" hidden></p>
-    <button type="button" class="set-up" id="set-up-model" hidden>Build it (downloads about 5.4 GB)</button>
+    <div class="fetching" id="fetching" hidden>
+      <p id="fetching-what" role="status"></p>
+      <div class="fetch-bar" id="fetch-bar"><div id="fetch-done"></div></div>
+    </div>
+    <button type="button" class="set-up" id="set-up-model" hidden>Download it (about 2.2 GB)</button>
   </div>
 </form>
 
@@ -1136,7 +1145,16 @@ function drawChoices() {
   else if (setup.ubuntu) hiddenSays.textContent = "Your mouse and screen stay yours.";
   else hiddenSays.textContent = "Not set up yet. Setting it up downloads about 1.5 GB.";
   $("#set-up-ubuntu").hidden = setup.ubuntu !== false;
-  $("#set-up-model").hidden = setup.model !== false;
+  const fetching = setup.fetching;
+  $("#set-up-model").hidden = setup.model !== false || Boolean(fetching);
+  $("#set-up-model").textContent = setup.fetch_failed ? "Try again" : "Download it (about 2.2 GB)";
+  $("#fetching").hidden = !fetching;
+  if (fetching) {
+    const known = fetching.percent !== null;
+    $("#fetching-what").textContent = `Getting ${fetching.what}${known ? `: ${fetching.percent}%` : "…"}`;
+    $("#fetch-bar").classList.toggle("unknown", !known);
+    $("#fetch-done").style.width = `${known ? fetching.percent : 100}%`;
+  }
   $("#browser-says").textContent = setup.chrome === false
     ? "Needs Playwright: pip install playwright."
     : "OpenGuessr's person check may stop it there.";
@@ -1147,7 +1165,9 @@ function drawChoices() {
   go.textContent = stopping ? "Stopping…" : running ? "Stop the bot" : "Start the bot";
   let blocked = "";
   if (!running) {
-    if (setup.model === false) blocked = "It has no model to play with yet.";
+    if (fetching) blocked = "It's getting what it plays with: it only takes this once.";
+    else if (setup.fetch_failed) blocked = setup.fetch_failed;
+    else if (setup.model === false) blocked = "It has no model to play with yet.";
     else if (picks.where === "hidden" && setup.ubuntu === false) blocked = "Set up the hidden screen, or choose another place.";
     else if (picks.where === "browser" && setup.chrome === false) blocked = "Its Chrome window needs Playwright.";
   }

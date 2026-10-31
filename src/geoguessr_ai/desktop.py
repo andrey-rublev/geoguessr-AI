@@ -16,6 +16,7 @@ import ctypes
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -34,7 +35,7 @@ from urllib.parse import parse_qs, urlsplit
 import numpy as np
 from global_land_mask import globe
 
-from .botrun import NO_WINDOW, BotRun, Choices, _bot_program
+from .botrun import NO_WINDOW, BotRun, Choices, _bot_program, _end_process_tree
 from .config import REPO, wsl_command
 from .geo import inverse_mercator, mercator_xy
 
@@ -64,11 +65,7 @@ LAND_MOST = 800
 CHART_NORTH, CHART_SOUTH = 78.0, -58.0
 """The chart runs from here to here: Street View goes no further, bar a few rounds in the Arctic.
 On Mercator's projection, like OpenGuessr's map and sailors' charts."""
-SETUP_COMMANDS = {
-    "ubuntu": wsl_command("bash", "scripts/wsl_setup.sh"),
-    "model": [*_bot_program(), "train", "--shards", "0"],
-}
-"""What sets up what the app needs: in a window of their own, as one asks for a password."""
+FETCHING = re.compile(r"^Fetching (.+?)(?:: (\d+)%|\.\.\.)$")
 
 
 def land_rows(
@@ -127,13 +124,17 @@ class App:
     def __init__(self, program: list[str] | None = None) -> None:
         self.token = secrets.token_urlsafe(24)
         self.program = program
+        self.fetcher_program = program or _bot_program()
         self.run: BotRun | None = None
         self.game = 0
         self.setup = {
             "model": MODEL.exists(),
             "ubuntu": None,  # not known yet: finding out can take a while, if WSL has to start
             "chrome": util.find_spec("playwright") is not None,
+            "fetching": None,  # how getting the model is going
+            "fetch_failed": "",
         }
+        self.fetcher: subprocess.Popen | None = None
         self.saved = _last_choices()
         self.updates = threading.Condition()
         self.version = 0
@@ -196,10 +197,20 @@ class App:
         if self.run is not None:
             self.run.stop()
 
+    def close(self) -> None:
+        """Stop whatever's going on, as the app ends."""
+        self.stop()
+        if self.fetcher is not None:
+            _end_process_tree(self.fetcher)
+
     def set_up(self, what: str) -> None:
-        """Set up ``what``, in a window of its own, and see how that went once it's closed."""
+        """Set up ``what``: the model here, the screen in a window of its own, as it asks for a
+        password, seeing how that went once it's closed."""
+        if what == "model":
+            self.fetch_model()
+            return
         console = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-        command = _staying_open(SETUP_COMMANDS[what])
+        command = _staying_open(wsl_command("bash", "scripts/wsl_setup.sh"))
         process = subprocess.Popen(command, cwd=REPO, creationflags=console)
 
         def wait() -> None:
@@ -207,6 +218,45 @@ class App:
             self.check_setup()
 
         threading.Thread(target=wait, daemon=True).start()
+
+    def fetch_model(self) -> None:
+        """Download the model, following how it goes from what the download says."""
+        if self.setup["fetching"] is not None:
+            return
+        self.setup["fetching"], self.setup["fetch_failed"] = {"what": "the model", "percent": 0}, ""
+        self.changed()
+        threading.Thread(target=self._fetch_model, daemon=True).start()
+
+    def _fetch_model(self) -> None:
+        try:
+            self.fetcher = subprocess.Popen(
+                [*self.fetcher_program, "fetch-model"],
+                cwd=REPO,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=dict(os.environ, PYTHONUNBUFFERED="1", PYTHONUTF8="1"),
+                creationflags=NO_WINDOW,
+            )
+        except OSError as error:
+            self.setup["fetching"], self.setup["fetch_failed"] = None, str(error)
+            self.changed()
+            return
+        last = ""
+        for raw in self.fetcher.stdout:
+            line = raw.decode("utf-8", "replace").strip()
+            if not line:
+                continue
+            last = line
+            if found := FETCHING.match(line):
+                percent = None if found[2] is None else int(found[2])
+                self.setup["fetching"] = {"what": found[1], "percent": percent}
+                self.changed()
+        code = self.fetcher.wait()
+        self.fetcher = None
+        self.setup["fetching"] = None
+        self.setup["fetch_failed"] = "" if code == 0 else last or f"It exited with code {code}."
+        self.check_setup()
 
     def window_opened(self) -> None:
         with self.updates:
@@ -338,7 +388,7 @@ def handler_for(app: App, port_host: str) -> type[BaseHTTPRequestHandler]:
                 run = app.run
                 if run is not None and run.progress.screen:
                     webbrowser.open(run.progress.screen)
-            elif route == "/setup" and data.get("what") in SETUP_COMMANDS:
+            elif route == "/setup" and data.get("what") in ("ubuntu", "model"):
                 app.set_up(data["what"])
             else:
                 raise ValueError("Nothing here does that.")
@@ -478,7 +528,7 @@ def _run() -> None:
     try:
         open_window(url)
         app.wait_for_windows_to_close()
-        app.stop()
+        app.close()
     finally:
         RUNNING.unlink(missing_ok=True)
         server.shutdown()

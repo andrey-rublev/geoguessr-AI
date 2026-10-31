@@ -151,14 +151,15 @@ def test_a_wrong_room_code_comes_back_to_say_so(served):
 def test_starts_the_bot_and_follows_it_until_stopped(served):
     served.post("/start", {"mode": "friends", "where": "browser", "room": "ew2-78u", "nmpz": True})
 
-    guessed = None
+    guessed, lines = None, []
     for message in served.events():
+        lines += message["lines"]
         rounds = message["progress"]["rounds"] if message["progress"] else []
         if rounds and rounds[0]["guess"]:
             guessed = message
             break
     assert guessed["running"] and guessed["choices"]["room"] == "EW278U"
-    assert guessed["choices"]["nmpz"] is True and guessed["lines"][0] == "Round 1"
+    assert guessed["choices"]["nmpz"] is True and lines[0] == "Round 1"
 
     served.post("/stop")
     for message in served.events():
@@ -206,7 +207,7 @@ def test_sets_up_only_what_it_knows_how_to(served):
     assert unknown.value.code == 400
 
 
-def test_sets_up_in_a_console_that_can_be_read(served, monkeypatch):
+def test_sets_up_the_screen_in_a_console_that_can_be_read(served, monkeypatch):
     started = []
 
     class Finished:
@@ -219,11 +220,58 @@ def test_sets_up_in_a_console_that_can_be_read(served, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", Finished)
     monkeypatch.setattr(desktop, "ubuntu_is_set_up", lambda: True)
 
-    served.app.set_up("model")
+    served.app.set_up("ubuntu")
 
-    assert "train" in str(started[0]) and "pythonw" not in str(started[0])
+    assert "wsl_setup.sh" in str(started[0])
     if sys.platform == "win32":
         assert started[0].endswith('& echo. & pause"')
+
+
+FETCHES = """
+print("Fetching the model: 42%", flush=True)
+print("Unpacking the model...", flush=True)
+print("Fetching the sign reader...", flush=True)
+"""
+
+
+def until_fetched(app):
+    for _ in range(400):
+        if app.setup["fetching"] is None:
+            return
+        threading.Event().wait(0.05)
+    pytest.fail("it never finished")
+
+
+def test_follows_the_model_as_it_downloads_with_no_window(served, monkeypatch):
+    monkeypatch.setattr(desktop, "ubuntu_is_set_up", lambda: True)
+    seen = []
+    app = served.app
+    app.fetcher_program = [sys.executable, "-c", FETCHES + "import sys; sys.argv"]
+    changed = app.changed
+
+    def recording():
+        seen.append(app.setup["fetching"])
+        changed()
+
+    app.changed = recording
+
+    served.post("/setup", {"what": "model"})
+    until_fetched(app)
+
+    assert {"what": "the model", "percent": 42} in seen
+    assert {"what": "the sign reader", "percent": None} in seen
+    assert app.setup["fetching"] is None and app.setup["fetch_failed"] == ""
+
+
+def test_says_what_went_wrong_with_the_models_download(served, monkeypatch):
+    monkeypatch.setattr(desktop, "ubuntu_is_set_up", lambda: True)
+    app = served.app
+    app.fetcher_program = [sys.executable, "-c", "raise SystemExit('Check the connection')"]
+
+    served.post("/setup", {"what": "model"})
+    until_fetched(app)
+
+    assert "Check the connection" in app.setup["fetch_failed"]
 
 
 def test_ends_a_while_after_the_last_window_closes(served, monkeypatch):

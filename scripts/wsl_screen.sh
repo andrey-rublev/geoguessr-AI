@@ -26,7 +26,7 @@ stop() {
     wait 2>/dev/null
 }
 trap stop EXIT
-trap 'exit 130' INT TERM
+trap 'exit 130' INT TERM HUP
 
 if [ ! -x "$VENV/bin/geoguessr-ai" ]; then
     echo "No geoguessr-ai in $VENV: set it up first, with"
@@ -42,8 +42,17 @@ if [ ! -e "$HOME/.cache/geoguessr-ai" ] && [ -d "$WINDOWS_HOME/.cache/geoguessr-
 fi
 
 if timeout 1 xdpyinfo -display "$SCREEN" >/dev/null 2>&1; then
-    echo "The bot's screen $SCREEN is in use already: is the bot running in another window?"
-    exit 1
+    if pgrep -f "$VENV/bin/geoguessr-ai" >/dev/null; then
+        echo "The bot is already running on its screen, in another window."
+        exit 1
+    fi
+    # Left behind by a run that was cut off.
+    pkill -f "Xvfb $SCREEN"
+    pkill -f "rfbport $VNC_PORT"
+    pkill -f "websockify .*$VIEW_PORT"
+    pkill -f "user-data-dir=$PROFILE"
+    pkill openbox
+    sleep 1
 fi
 Xvfb "$SCREEN" -screen 0 "$SIZE" -nolisten tcp >/dev/null 2>&1 &
 pids+=($!)

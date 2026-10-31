@@ -17,12 +17,16 @@ class OpenGuessr:
     """OpenGuessr's way into a room, as the bot's browser showed it at 1600x900: the multiplayer
     page, maybe a welcome first, the code page, and maybe the guest's name to confirm."""
 
-    def __init__(self, welcome=False, asks_name=True, first_box=Point(670, 463)):
+    def __init__(self, welcome=False, asks_name=True, first_box=Point(670, 463), room_open=True):
         self.page = "welcome" if welcome else "menu"
-        self.asks_name, self.first_box = asks_name, first_box
+        self.asks_name, self.first_box, self.room_open = asks_name, first_box, room_open
         self.focused, self.typed, self.clicks = False, "", []
+        self.checks_for = 0  # looks the site's check that a person is there has yet to last
 
     def words(self, image):
+        if self.checks_for:
+            self.checks_for -= 1
+            return [word("Performing security verification", 800, 300)]
         return {
             "welcome": [word("No, skip to menu", 800, 600)],
             "menu": [word("Modes", 306, 144), word("Join", 376, 509), word("Host", 560, 509)],
@@ -46,7 +50,7 @@ class OpenGuessr:
             self.page = "code"
         elif self.page == "code":
             self.focused = near(self.first_box.x, self.first_box.y)
-            if near(800, 549) and len(self.typed) == 6:
+            if near(800, 549) and len(self.typed) == 6 and self.room_open:
                 self.page = "name" if self.asks_name else "lobby"
         elif self.page == "name" and near(800, 600):
             self.page = "lobby"
@@ -73,6 +77,33 @@ def test_passes_by_a_welcome_and_joins_without_a_name_to_confirm():
     assert join_room(game, game, game.words, "EW278U", wait=5)
 
     assert game.page == "lobby"
+
+
+def test_says_when_the_room_doesnt_let_it_in(capsys):
+    game = OpenGuessr(room_open=False)
+
+    assert not join_room(game, game, game.words, "EW278U", wait=5)
+
+    out = capsys.readouterr().out
+    assert "Couldn't join room EW278U" in out and "In room" not in out
+
+
+def test_says_when_it_got_in(capsys):
+    game = OpenGuessr()
+
+    assert join_room(game, game, game.words, "EW278U", wait=5)
+
+    assert "In room EW278U" in capsys.readouterr().out
+
+
+def test_says_once_when_the_site_checks_for_a_person_and_waits_past_its_time(capsys):
+    game = OpenGuessr()
+    game.checks_for = 30  # longer than it would wait for the page
+
+    assert join_room(game, game, game.words, "EW278U", wait=5)
+
+    assert game.page == "lobby"
+    assert capsys.readouterr().out.count("checking that a person is there") == 1
 
 
 def test_never_presses_join_without_the_code_in_its_boxes(capsys):

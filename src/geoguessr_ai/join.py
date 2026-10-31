@@ -4,8 +4,9 @@ would: by the words on screen, read with OCR, never by the page's code.
 OpenGuessr's multiplayer page (:data:`ROOMS_URL`) shows Join beside Host. Join opens six boxes
 for the code, like EW2-78U, which take it typed once the first is clicked, over a Join button
 that lights up once all six are filled. After it, the game may ask to confirm the name it picked
-for a guest. Whether the room is there the bot can't tell from here: if it isn't, the bot waits
-for a round as it does in a room joined by hand.
+for a guest. If the code page still shows after that, the room didn't let the bot in. And
+OpenGuessr's site may stop to check that a person is there, which only a person can answer: the
+bot says so and waits.
 """
 
 from __future__ import annotations
@@ -41,6 +42,10 @@ _HOST = re.compile(r"^[\W_]*host[\W_]*$", re.I)
 _CONFIRM = re.compile(r"^[\W_]*confirm[\W_]*$", re.I)
 _SKIP = re.compile(r"\bskip\b", re.I)
 """The welcome's "No, skip to menu", which a browser new to the game may be shown first."""
+_CHECK = re.compile(r"verify you are human|security verification", re.I)
+"""What the site's check that a person is there says, in place of the page asked for."""
+STILL_THERE = 1.0
+"""How far, in heights of its word, the code page's Join may have moved and be the same one."""
 
 ReadWords = Callable[[Image.Image], list[Word]]
 
@@ -99,6 +104,12 @@ def join_room(screen, controls, read_words: ReadWords, code: str, wait: float = 
 
     if confirm := _wait_for(screen, controls, read_words, page, asks_name, CONFIRM_WAIT_S):
         controls.click(_find(confirm, _CONFIRM).box.center)
+        controls.sleep(LOOK_S)
+    again = _find(_words(screen, read_words, page), _JOIN)
+    if again is not None and _near(again.box.center, join.center, STILL_THERE * unit):
+        print(f"Couldn't join room {code}: check its code, and that the room is still open")
+        return False
+    print(f"In room {code}")
     return True
 
 
@@ -113,6 +124,18 @@ def _find(words: Sequence[Word], pattern: re.Pattern) -> Word | None:
     return next((word for word in words if pattern.search(word.text)), None)
 
 
+def _near(a: Point, b: Point, within: float) -> bool:
+    return abs(a.x - b.x) <= within and abs(a.y - b.y) <= within
+
+
+def _words(screen, read_words: ReadWords, page: Region) -> list[Word]:
+    """The words on ``page``, placed on the screen."""
+    return [
+        Word(w.text, replace(w.box, left=w.box.left + page.left, top=w.box.top + page.top))
+        for w in read_words(screen.grab(page))
+    ]
+
+
 def _wait_for(
     screen,
     controls,
@@ -122,14 +145,22 @@ def _wait_for(
     wait: float,
 ) -> list[Word] | None:
     """The words on ``page`` once ``ready`` says they are what was waited for, looking every
-    :data:`LOOK_S` seconds for up to ``wait`` seconds; None if they never are."""
-    for look in range(int(wait / LOOK_S) + 1):
-        if look:
-            controls.sleep(LOOK_S)
-        words = [
-            Word(w.text, replace(w.box, left=w.box.left + page.left, top=w.box.top + page.top))
-            for w in read_words(screen.grab(page))
-        ]
+    :data:`LOOK_S` seconds for up to ``wait`` seconds; None if they never are. The site's check
+    that a person is there takes none of that time: it says so once, and waits for them."""
+    looks, said = 0, False
+    while True:
+        words = _words(screen, read_words, page)
         if ready(words):
             return words
-    return None
+        if _find(words, _CHECK) is not None:
+            if not said:
+                print(
+                    "OpenGuessr is checking that a person is there: tick its box in the bot's "
+                    "browser (with --hidden, at http://localhost:6080/vnc.html). The bot waits."
+                )
+            said = True
+        else:
+            looks += 1
+            if looks > int(wait / LOOK_S):
+                return None
+        controls.sleep(LOOK_S)

@@ -409,7 +409,8 @@ class OpenGuessrBot:
                 ):
                     print(f"  locked in with {spare:.0f} s to spare; waiting for the round to end")
                 self._wait_for(lambda: not self._round_on())
-            self.controls.sleep(s.result_wait)
+            if not s.party:  # in a room, the result map goes in a few seconds
+                self.controls.sleep(s.result_wait)
             if self.reader is not None:
                 if self.reader.scale is None:  # the result screen draws the same pin
                     self.reader.scale = self.guess_map.scale

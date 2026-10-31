@@ -12,7 +12,9 @@ counted wrongly.
 
 In a multiplayer room the result map shows every player's pin, all alike, so there the reader
 takes ours to be the one the recognised map puts where we clicked, and measures the flag on
-that map alone.
+that map alone. And it shows for only a few seconds, before the standings, whatever the host
+does: so there the reader first takes all the views it can, as fast as the map zooms, and works
+them out afterwards.
 
 An answer is only returned after checks: the recognised map must put our pin where we
 clicked, at a whole zoom level if it is the first view, and measurements from more zoomed-in
@@ -141,6 +143,17 @@ TILE = 256
 """The world's width in pixels at zoom level 0 and 100% scale. The first result view is at a
 whole zoom level, so its world is this, at the markers' scale, times a power of two: 96% of
 the 2,474 answers read by 24 September put it within 0.005 of a halving of one."""
+RESULT_SHOWS_S = 8.0
+"""How long a multiplayer result map may take to show once the round has ended."""
+LOOK_S = 0.1
+"""Seconds between looks while waiting for a multiplayer result map to show, or to stop moving."""
+ZOOM_SETTLE_S = 1.0
+"""How long a notch's zoom may take on a multiplayer result map, whose tiles aren't waited for."""
+PIN_RED, PIN_PIXELS = 0.8, 150
+"""A pin on the map is at least this many pixels (at 100% scale) at least this red: a quick look
+for whether the map still shows, which finding the markers takes too long for between notches."""
+RED_STILL = 0.002
+"""How little the map's redness may change between looks for its pins to have stopped moving."""
 WHOLE_ZOOM_SLACK = 0.1
 """Halvings a first view may be off a whole zoom level before it is put on one. The markers'
 scale that the levels are reckoned from is measured to about 1% (1.243 for 1.25), or 0.01.
@@ -311,20 +324,14 @@ class ResultReader:
         abort: Callable[[], bool] | None = None,
     ) -> Reading:
         """Find the answer; ``placed_lat``/``placed_lon`` is where our pin was dropped. With
-        ``crowded``, other players' pins show too. ``abort`` says when to stop zooming out,
-        as when the result map has gone and the next round begun."""
-        centre = self.region.center
-        self.controls.move(centre)
+        ``crowded``, other players' pins show too, and the map is about to go. ``abort`` says
+        when to stop zooming out, as when it has gone and the next round begun."""
+        self.controls.move(self.region.center)
         reading = Reading(None, "the result map never lined up with the world map")
         levels: list[_Level] = []
         step = 1.0  # scale halvings per whole notch, re-measured whenever the markers allow
-        for zoom_outs in range(self.max_zoom_outs + 1):
-            if abort is not None and abort():
-                reading.problem = "the result map went before the answer was read"
-                break
-            if zoom_outs:
-                self.controls.scroll(centre, -1)
-            rgb = self._settled_grab()
+        views = self._hurried_views if crowded else self._settled_views
+        for rgb in views(reading, abort):
             if not levels:
                 reading.screenshot = Image.fromarray(rgb)
             elif np.abs(rgb.astype(np.int16) - levels[-1].rgb).mean() < 0.5:
@@ -357,6 +364,86 @@ class ResultReader:
         if reading.answer is None:
             reading.zoomed_out = [Image.fromarray(level.rgb) for level in levels[1:]]
         return reading
+
+    def _settled_views(self, reading: Reading, abort: Callable[[], bool] | None):
+        """Each view of the map, zooming out a notch at a time as each is worked out."""
+        for zoom_outs in range(self.max_zoom_outs + 1):
+            if abort is not None and abort():
+                reading.problem = "the result map went before the answer was read"
+                return
+            if zoom_outs:
+                self.controls.scroll(self.region.center, -1)
+            yield self._settled_grab()
+
+    def _hurried_views(
+        self, reading: Reading, abort: Callable[[], bool] | None
+    ) -> list[np.ndarray]:
+        """All the views of the map there is time for before it goes, with no working out on
+        the way: as soon as it shows, then a notch further out each, without waiting for tiles
+        until the last, at the map's widest, which is the one to recognise."""
+        first = self._first_view(abort)
+        if first is None:
+            reading.problem = "the result map never showed"
+            return []
+        views = [first]
+        for _ in range(self.max_zoom_outs):
+            if abort is not None and abort():
+                reading.problem = "the result map went before the answer was read"
+                return views
+            self.controls.scroll(self.region.center, -1)
+            rgb, red = self._zoomed_grab()
+            quick = (red > PIN_RED).sum() >= PIN_PIXELS * (self.scale or 1.0) ** 2
+            if not quick and not self._shows_markers(rgb):  # only then is it worth the time
+                reading.problem = "the result map went before the answer was read"
+                return views
+            if np.abs(rgb.astype(np.int16) - views[-1]).mean() < 0.5:
+                break  # the map won't zoom out any further
+            views.append(rgb)
+        rgb = self._settled_grab()
+        if self._shows_markers(rgb):
+            views[-1] = rgb
+        return views
+
+    def _first_view(self, abort: Callable[[], bool] | None) -> np.ndarray | None:
+        """The result map as soon as it shows, once its tiles are in or about to go; None if it
+        doesn't show, as when the round goes straight to the standings."""
+        start = self.controls.now()
+        while self.controls.now() - start < RESULT_SHOWS_S:
+            if abort is not None and abort():
+                return None
+            rgb = np.asarray(self.screen.grab(self.region).convert("RGB"))
+            if self._shows_markers(rgb):
+                return self._tiles_in(rgb)
+            self.controls.sleep(LOOK_S)
+        return None
+
+    def _tiles_in(self, rgb: np.ndarray) -> np.ndarray:
+        """The map once it stops changing, for at most a few looks: the markers won't move."""
+        for _ in range(self.settle_checks // 2):
+            self.controls.sleep(0.25)
+            current = np.asarray(self.screen.grab(self.region).convert("RGB"))
+            if np.abs(current.astype(np.int16) - rgb).mean() < 1.0:
+                return current
+            rgb = current
+        return rgb
+
+    def _zoomed_grab(self) -> tuple[np.ndarray, np.ndarray]:
+        """The map once its pins stop moving after a notch of the wheel, and its redness."""
+        rgb = np.asarray(self.screen.grab(self.region).convert("RGB"))
+        red = marker_shades(rgb)[0]
+        start = self.controls.now()
+        while self.controls.now() - start < ZOOM_SETTLE_S:
+            self.controls.sleep(LOOK_S)
+            rgb = np.asarray(self.screen.grab(self.region).convert("RGB"))
+            before, red = red, marker_shades(rgb)[0]
+            if np.abs(red - before).mean() < RED_STILL:
+                break
+        return rgb, red
+
+    def _shows_markers(self, rgb: np.ndarray) -> bool:
+        """Whether a pin or the flag shows, as they do while the result map does."""
+        pin, flag = self._markers(rgb)
+        return pin is not None or flag is not None
 
     def _settled_grab(self) -> np.ndarray:
         """Grab the result map once tiles have loaded and animations have finished."""

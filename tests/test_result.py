@@ -74,10 +74,13 @@ class FakeControls:
     world is ``widest`` pixels across: the notch that gets there goes only part of the way."""
 
     def __init__(self, screen, widest=0.0):
-        self.screen, self.notches, self.widest = screen, 0, widest
+        self.screen, self.notches, self.widest, self.t = screen, 0, widest, 0.0
+
+    def now(self):
+        return self.t
 
     def sleep(self, seconds):
-        pass
+        self.t += seconds
 
     def move(self, p):
         pass
@@ -211,14 +214,94 @@ def test_reads_the_answer_among_other_players_pins():
 
 
 def test_among_other_players_waits_for_a_pin_to_show_before_telling_ours():
-    tokyo = (35.68, 139.69)  # our pin off the map at first: no marker to measure their size by
+    tokyo = (35.68, 139.69)  # our pin off the map at first
     screen = FakeResultScreen(fitted(3_072), pin=tokyo)
     reader = ResultReader(screen, FakeControls(screen), REGION, max_zoom_outs=2)
+    reader.scale = 1.5  # as the guess map measured it
 
     reading = reader.read(*tokyo, crowded=True)  # zoomed out, Tokyo comes into view
 
     assert reading.answer is not None, reading.problem
     assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 50
+
+
+class GoingResultScreen(FakeResultScreen):
+    """A multiplayer result map that goes to the standings after ``notches`` of the wheel."""
+
+    def __init__(self, *args, controls=None, notches=3, shows_after=0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.controls, self.notches, self.shows_after = controls, notches, shows_after
+        self.looks = 0
+
+    def grab(self, region):
+        self.looks += 1
+        gone = self.controls.notches >= self.notches
+        if gone or self.looks <= self.shows_after:
+            return Image.new("RGB", (region.width, region.height), (40, 40, 50))
+        return super().grab(region)
+
+
+def going_reader(world=24_576, **kwargs):
+    screen = GoingResultScreen(fitted(world), **kwargs)
+    screen.controls = FakeControls(screen)
+    reader = ResultReader(screen, screen.controls, REGION)
+    reader.scale = 1.5  # as the guess map measured it
+    return screen, reader
+
+
+def test_in_a_room_takes_all_the_views_it_can_before_working_any_out():
+    screen, reader = going_reader(notches=99)
+    locate, located_at = reader._locate, []
+
+    def locating(rgb):
+        located_at.append(screen.controls.notches)
+        return locate(rgb)
+
+    reader._locate = locating
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
+    assert screen.controls.notches == reader.max_zoom_outs or len(set(located_at)) == 1
+    assert len(set(located_at)) == 1  # only once it had finished zooming
+
+
+def test_in_a_room_the_map_going_ends_the_views_but_not_the_working_out():
+    world = 3_072  # recognisable as it first shows
+    screen, reader = going_reader(world=world, notches=1)
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 20
+    assert reading.screenshot is not None
+
+
+def test_in_a_room_says_when_the_map_went_before_it_could_be_read():
+    screen, reader = going_reader(notches=2)
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is None and "went" in reading.problem
+    assert reading.screenshot is not None and reading.zoomed_out
+
+
+def test_in_a_room_waits_for_the_map_to_show():
+    screen, reader = going_reader(notches=99, shows_after=5)
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is not None, reading.problem
+
+
+def test_in_a_room_says_when_the_map_never_shows():
+    screen, reader = going_reader(notches=99, shows_after=10_000)
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is None and "never showed" in reading.problem
+    assert screen.controls.notches == 0
 
 
 def test_stops_reading_once_the_result_map_goes():

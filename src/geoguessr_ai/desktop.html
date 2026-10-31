@@ -409,6 +409,7 @@ const SVG = "http://www.w3.org/2000/svg";
 let state = null;
 let game = null;
 let tab = "chart";
+let placeChosen = false;
 
 const OUT_OF_TOUCH = "This window has lost touch with the app. Close it and open the app again.";
 
@@ -1209,8 +1210,12 @@ function showProblem(problem) {
 }
 
 function drawChoices() {
-  const picks = chosen();
   const setup = state ? state.setup : {};
+  // It starts out on what needs nothing more set up, till you've said where it plays.
+  if (setup.ubuntu === false && setup.chrome && !placeChosen && !state.saved.where) {
+    document.querySelector("[name=where][value=browser]").checked = true;
+  }
+  const picks = chosen();
   const running = Boolean(state && state.running);
   $("#room-section").hidden = picks.mode !== "friends" || picks.where === "screen";
   $("#rounds-section").hidden = picks.mode !== "play";
@@ -1219,7 +1224,8 @@ function drawChoices() {
   $("#all-choices").disabled = running;
 
   const hiddenSays = $("#hidden-says");
-  if (setup.ubuntu === null || setup.ubuntu === undefined) hiddenSays.textContent = "Checking it's set up…";
+  const checking = setup.ubuntu === null || setup.ubuntu === undefined;
+  if (checking) hiddenSays.textContent = "Checking it's set up…";
   else if (setup.ubuntu) hiddenSays.textContent = "Your mouse and screen stay yours.";
   else if (setup.wsl === false) hiddenSays.textContent = "Needs WSL, Windows' own Linux. Installing it takes a few minutes and may ask you to restart.";
   else hiddenSays.textContent = "Not set up yet. Setting it up downloads about 1.5 GB.";
@@ -1247,6 +1253,7 @@ function drawChoices() {
   if (!running) {
     if (fetching) blocked = "It's getting what it plays with: it only takes this once.";
     else if (setup.model === false) blocked = setup.fetch_failed || "It has no model to play with yet.";
+    else if (picks.where === "hidden" && checking) blocked = "Checking the hidden screen is set up…";
     else if (picks.where === "hidden" && setup.ubuntu === false) blocked = "Set up the hidden screen, or choose another place.";
     else if (picks.where === "browser" && setup.chrome === false) blocked = "Its own window needs Playwright.";
   }
@@ -1391,9 +1398,15 @@ $("#room").addEventListener("input", (event) => {
   drawChoices();
 });
 $("#form").addEventListener("input", () => showProblem(""));
-$("#form").addEventListener("change", drawChoices);
+$("#form").addEventListener("change", (event) => {
+  if (event.target.name === "where") placeChosen = true;
+  drawChoices();
+});
 $("#set-up-ubuntu").addEventListener("click", (event) => {
   event.preventDefault();
+  document.querySelector("[name=where][value=hidden]").checked = true;
+  placeChosen = true;
+  drawChoices();
   post("/setup", { what: state.setup.wsl === false ? "wsl" : "ubuntu" });
 });
 $("#set-up-model").addEventListener("click", () => post("/setup", { what: "model" }));

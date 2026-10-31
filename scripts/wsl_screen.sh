@@ -63,11 +63,19 @@ for _ in $(seq 50); do timeout 1 xdpyinfo >/dev/null 2>&1 && break; sleep 0.1; d
 openbox >/dev/null 2>&1 &
 pids+=($!)
 
-# A plain Chrome, as you'd run it. Street View needs WebGL, drawn here without a GPU.
+# A plain Chrome, as you'd run it. Street View needs WebGL: on the GPU, through Windows' Direct3D,
+# where WSL can reach one, or else on the CPU, more slowly.
+graphics=(--enable-unsafe-swiftshader)
+if [ -e /dev/dxg ] && [ -e /usr/lib/x86_64-linux-gnu/dri/d3d12_dri.so ]; then
+    export GALLIUM_DRIVER=d3d12
+    # Only Street View on it: there, the rest of the page came out with stray triangles.
+    graphics+=(--ignore-gpu-blocklist --use-gl=angle --use-angle=gl --disable-gpu-rasterization)
+    graphics+=(--disable-gpu-compositing)
+fi
 google-chrome --user-data-dir="$PROFILE" --no-first-run --no-default-browser-check \
-    --start-maximized --enable-unsafe-swiftshader https://openguessr.com/multiplayer \
-    >/dev/null 2>&1 &
+    --start-maximized "${graphics[@]}" https://openguessr.com/multiplayer >/dev/null 2>&1 &
 pids+=($!)
+unset GALLIUM_DRIVER
 
 # Only this computer can see the screen: both listen on localhost alone.
 x11vnc -display "$SCREEN" -localhost -rfbport "$VNC_PORT" -forever -shared -nopw -quiet \

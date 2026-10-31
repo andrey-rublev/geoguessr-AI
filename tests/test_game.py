@@ -158,9 +158,13 @@ class FakeGuessMap:
 
     def __init__(self, screen, controls, region, hover, **settings):
         self.controls, self.region, self.guesses, self.scale = controls, region, [], 1.5
+        self.early = []
 
-    def place(self, lat, lon):
-        self.guesses.append((lat, lon))
+    def place(self, lat, lon, tries=2, quick=False):
+        if quick:
+            self.early.append((lat, lon))
+        else:
+            self.guesses.append((lat, lon))
         click = self.region.to_screen(400, 300)
         self.controls.click(click)
         image = Image.new("RGB", (self.region.width, self.region.height))
@@ -590,6 +594,7 @@ class MultiplayerRoom(TurningStreetView):
         self.locked = []  # seconds into each round we locked in, or None
         self.idle_clicks = []  # clicks while no round was on
         self.hides_after_pin, self.pinned = False, False  # the compass and the timer
+        self.counted = []  # for each round, whether the game had a pin of ours when it ended
         self.red_for = 0.0  # the round's last seconds, when the game tints the screen red
 
     def now(self):
@@ -620,6 +625,7 @@ class MultiplayerRoom(TurningStreetView):
             return True
         if self.t >= self.deadline or (self.others_in and self.locked_at is not None):
             self.locked.append(self.locked_at)
+            self.counted.append(self.pinned)
             self.phase, self.phase_ends = "results", self.t + self.results
             return True
         return False
@@ -689,6 +695,11 @@ def party(monkeypatch):
             def read_line(self, image, whole=True):
                 return room.notice_text() if image.width == NOTICE_WIDTH else room.timer_text()
 
+            def words(self, image):
+                if room.phase == "round":
+                    return [Word("Guess", Region(240, 50, 60, 20))]
+                return super().words(image)
+
         monkeypatch.setattr(game_module, "SignReader", TimerReadingSigns)
         monkeypatch.setattr(game_module, "ResultReader", PartyReader)
         rounds = room.rounds_left  # all the host will start
@@ -721,7 +732,8 @@ def test_hurries_when_little_time_is_left(party):
     bot.play()
 
     assert room.locked[0] is not None  # in time
-    assert predictor.view_counts == [1] and bot.signs.scenes == [] and room.keys == []
+    assert predictor.view_counts == [1, 1]  # for the pin down early, and with what else it saw
+    assert bot.signs.scenes == [] and room.keys == []
 
 
 def test_the_timer_shows_a_cut_whose_notice_was_missed(party, capsys):
@@ -766,7 +778,7 @@ def test_stops_reading_signs_once_the_timer_is_cut(party, capsys):
     assert room.locked[0] is not None  # in time
 
 
-def test_gives_up_a_round_that_ended_while_it_read_signs(party, capsys):
+def test_a_pin_down_early_counts_if_the_round_ends_while_it_reads_signs(party, capsys):
     room = MultiplayerRoom(rounds=1, length=120.0, others_guess=1000.0, duel=True)
     bot = party(room)
     reading_slowly(bot, room, seconds=20.0)  # longer than the 15 s the round is cut to
@@ -774,8 +786,64 @@ def test_gives_up_a_round_that_ended_while_it_read_signs(party, capsys):
     bot.play()
 
     assert room.locked == [None] and room.idle_clicks == []  # nothing clicked on the result
-    assert "the round ended before the bot could guess" in capsys.readouterr().out
+    assert room.counted == [True]
+    out = capsys.readouterr().out
+    assert "pin down early" in out and "the round ended with the pin down, which counts" in out
     assert len(bot.signs.scenes) == 1
+    assert bot.guess_map.early and bot.guess_map.guesses == []  # no time for a better one
+    assert bot.reader.placed == [(bot.guess_map.early[0][0] + 0.01, bot.guess_map.early[0][1])]
+
+
+def test_without_an_early_pin_a_round_that_ended_is_given_up(party, capsys):
+    room = MultiplayerRoom(rounds=1, length=120.0, others_guess=1000.0, duel=True)
+    bot = party(room)
+    bot._early_pin = lambda look: None
+    reading_slowly(bot, room, seconds=20.0)
+
+    bot.play()
+
+    assert room.locked == [None] and room.idle_clicks == [] and room.counted == [False]
+    assert "the round ended before the bot could guess" in capsys.readouterr().out
+
+
+def test_leaves_the_early_pin_when_too_short_of_time_to_place_it_with_care(party, capsys):
+    room = MultiplayerRoom(rounds=1, length=120.0, others_guess=1000.0, duel=True)
+    bot = party(room)
+    bot.took["guess"] = 1000.0  # placing it with care would take longer than is left
+
+    bot.play()
+
+    assert "leaving the pin where it is" in capsys.readouterr().out
+    assert bot.guess_map.early and bot.guess_map.guesses == []
+    assert room.locked[0] is not None  # and locked in
+
+
+def test_places_the_pin_with_care_after_the_early_one_given_time(party, capsys):
+    room = MultiplayerRoom(rounds=1, length=120.0, others_guess=1000.0)
+    bot = party(room)
+
+    bot.play()
+
+    assert "pin down early" in capsys.readouterr().out
+    assert len(bot.guess_map.early) == 1 and len(bot.guess_map.guesses) == 1
+    assert room.locked[0] is not None
+
+
+def test_a_pin_it_cant_see_leaves_the_early_one_standing(party, capsys):
+    room = MultiplayerRoom(rounds=1, length=120.0, others_guess=1000.0)
+    bot = party(room)
+    place = bot.guess_map.place
+
+    def lost_with_care(lat, lon, tries=2, quick=False):
+        placement = place(lat, lon, tries, quick)
+        return placement if quick else replace(placement, confirmed=False)
+
+    bot.guess_map.place = lost_with_care
+
+    bot.play()
+
+    assert "leaving it where it was" in capsys.readouterr().out
+    assert bot.reader.placed == [(bot.guess_map.early[0][0] + 0.01, bot.guess_map.early[0][1])]
 
 
 def test_stops_looking_round_as_soon_as_another_player_guesses(party, capsys):
@@ -793,13 +861,13 @@ def test_stops_looking_round_as_soon_as_another_player_guesses(party, capsys):
 
 def test_keeps_the_signs_it_read_when_walking_on_leaves_no_time_to_read_again(party, tmp_path):
     room = MultiplayerRoom(rounds=1, length=120.0, others_guess=200.0)
-    predictor = FakePredictor(expected=(1000.0, 3000.0))  # unsure: walks on once
+    predictor = FakePredictor(expected=(1000.0, 1000.0, 3000.0))  # unsure: walks on once
     bot = party(room, predictor, debug_dir=tmp_path, record_answers=False)
     time_for, asked = bot._time_for, []
 
     def no_time_to_read_again(*steps):
         asked.append(steps)
-        return time_for(*steps) and asked.count(("read",)) < 2
+        return time_for(*steps) and (steps != ("read",) or asked.count(("read",)) < 2)
 
     bot._time_for = no_time_to_read_again
     bot.play()
@@ -844,11 +912,11 @@ def test_skips_a_round_whose_map_cant_be_read_and_plays_the_next(party, capsys):
     bot = party(room)
     place, tries = bot.guess_map.place, []
 
-    def unreadable_at_first(lat, lon):
+    def unreadable_at_first(lat, lon, tries_=2, quick=False, **kwargs):
         tries.append((lat, lon))
-        if len(tries) == 1:  # something covered the map
+        if len(tries) <= 2:  # something covered the map, for the early pin and the one after
             raise MapNotFound("Couldn't read the map: match score 0.31 is too low")
-        return place(lat, lon)
+        return place(lat, lon, quick=quick)
 
     bot.guess_map.place = unreadable_at_first
     bot.play()
@@ -898,7 +966,7 @@ def test_guesses_when_the_compass_hides_but_the_clock_leaves_time(party, capsys)
     party(room).play()
 
     assert room.locked_at is not None  # locked in, not given up
-    assert "can't see the compass, but the clock leaves" in capsys.readouterr().out
+    assert "can't see the compass or the timer, but Guess shows" in capsys.readouterr().out
 
 
 def test_waits_out_a_rounds_red_last_seconds_before_reading_the_answer(party):

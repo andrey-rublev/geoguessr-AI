@@ -74,19 +74,20 @@ class GuessMap:
         self.scale: float | None = None
         """How big markers are drawn relative to 100% browser scale, once a pin has been seen."""
 
-    def place(self, lat: float, lon: float, tries: int = 2) -> Placement:
+    def place(self, lat: float, lon: float, tries: int = 2, quick: bool = False) -> Placement:
         """Place the pin, starting over from the map's opening if it never shows where it was
         clicked: in a live round in the bot's own browser, two clicks in a row were lost, so
-        nothing was guessed and the round was wasted."""
-        placement = self._place(lat, lon)
+        nothing was guessed and the round was wasted. ``quick``: without zooming in, on the
+        map as it opens, which puts it within about 40 km, for a pin to stand in for now."""
+        placement = self._place(lat, lon, 0 if quick else self.zoom_levels)
         for _ in range(tries - 1):
             if placement.confirmed is not False:
                 break
             print("  couldn't see the pin where it was clicked; opening the map to place it again")
-            placement = self._place(lat, lon)
+            placement = self._place(lat, lon, 0 if quick else self.zoom_levels)
         return placement
 
-    def _place(self, lat: float, lon: float) -> Placement:
+    def _place(self, lat: float, lon: float, zoom_levels: int) -> Placement:
         image, projection = self.recognise()
         image, projection = self._bring_into_view(image, projection, lat, lon)
         w, h = self.region.width, self.region.height
@@ -96,8 +97,8 @@ class GuessMap:
         cursor = self.region.to_screen(float(np.clip(x, 3, w - 4)), float(np.clip(y, 3, h - 4)))
         local = (cursor.x - self.region.left, cursor.y - self.region.top)
 
-        self._zoom(cursor, self.zoom_levels)
-        zoomed = projection.zoomed(*local, 2**self.zoom_levels)
+        self._zoom(cursor, zoom_levels)
+        zoomed = projection.zoomed(*local, 2**zoom_levels)
         zx, zy = zoomed.to_pixel(lat, lon, w)
         click = self.region.to_screen(float(np.clip(zx, 3, w - 4)), float(np.clip(zy, 3, h - 4)))
         self.controls.click(click)
@@ -108,7 +109,7 @@ class GuessMap:
                 self.controls.click(click)
                 confirmed = self._pin_at(click)
         placed = zoomed.to_latlon(click.x - self.region.left, click.y - self.region.top)
-        self._zoom(cursor, -self.zoom_levels)
+        self._zoom(cursor, -zoom_levels)
         return Placement(*placed, click, image, projection, (x, y), confirmed)
 
     def recognise(self) -> tuple[Image.Image, MapProjection]:

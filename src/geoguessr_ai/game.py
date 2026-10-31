@@ -22,6 +22,7 @@ import numpy as np
 from PIL import Image
 
 from .buttons import HALF_HEIGHT, MIN_SIMILARITY, button_region, similarity
+from .calibrate import still_there
 from .camera import Camera, default_camera, ground_view, measure
 from .clock import GuessWatch, RoundClock, notice_region, timer_region
 from .compass import Compass, CompassReader, compass_region
@@ -332,6 +333,7 @@ class OpenGuessrBot:
 
         look = self.look_around()
         self._read_clock()  # it may have been cut short while looking
+        early = self._early_pin(look)
         read = self._time_for("read")
         if not read:
             self._short_of_time("read", "short of time: not reading the signs")
@@ -367,33 +369,44 @@ class OpenGuessrBot:
             f"(model expects ~{guess.expected_score:,.0f} points)"
         )
 
-        self._check_round()
-        with self._timing("guess"):
-            try:
-                placement = self.guess_map.place(guess.lat, guess.lon)
-            except MapNotFound as lost:  # in a room, the next round may go better
-                if not s.party:
-                    raise
-                raise RoundOver(f"no guess this round: {lost}") from lost
-            if placement.confirmed is False:
-                print("  couldn't see the pin where it was clicked; guessing anyway")
-            placed = (placement.lat, placement.lon)
-            folder = None
-            if run_dir is not None:
-                folder = run_dir / f"round_{number:02d}"
-                self._save_round(
-                    folder, look, lines, evidence, guess, placement, sure, self.camera, self._how()
-                )
+        placement, locked_in = early, False
+        folder = None if run_dir is None else run_dir / f"round_{number:02d}"
+        saved = False
 
-            self.controls.sleep(0.4)
-            self._check_round(pinned=True)  # Guess sits near Continue, which a result shows
-            self.controls.click(self.layout.guess_button)
+        def save(placement: Placement) -> None:
+            nonlocal saved
+            if folder is not None and not saved:
+                how = self._how() | {"early_pin_stood": placement is early}
+                self._save_round(
+                    folder, look, lines, evidence, guess, placement, sure, self.camera, how
+                )
+            saved = True
+
+        try:
+            self._check_round()
+            with self._timing("guess"):
+                placement = self._final_pin(guess, early)
+                save(placement)
+                self.controls.sleep(0.4)
+                self._check_round(pinned=True)  # Guess sits near Continue, which a result shows
+                self.controls.click(self.layout.guess_button)
+                locked_in = True
+        except RoundOver:
+            if placement is None:
+                raise
+            print("  the round ended with the pin down, which counts")
+            save(placement)
+        placed = (placement.lat, placement.lon)
         if self.watch is not None:
             self.watch.end_round()  # nothing to hurry for now
         if not s.dry_run:
             if s.party:
                 self.controls.leave(self.layout.view.center)  # closes the map, to see it end
-                if self.clock is not None and math.isfinite(spare := self.clock.left()):
+                if (
+                    locked_in
+                    and self.clock is not None
+                    and math.isfinite(spare := self.clock.left())
+                ):
                     print(f"  locked in with {spare:.0f} s to spare; waiting for the round to end")
                 self._wait_for(lambda: not self._round_on())
             self.controls.sleep(s.result_wait)
@@ -409,6 +422,49 @@ class OpenGuessrBot:
                     self._save_reading(folder, reading)
             if not s.party:
                 self._press_continue(folder)
+        return placement
+
+    def _early_pin(self, look: Look) -> Placement | None:
+        """In a room, a pin from what the first look shows, placed quickly and without zooming
+        in. The game counts a pin that is down when the round ends, locked in or not: in a live
+        room one never locked in scored all the same. So should the round be cut short, as when
+        another player guesses, it isn't lost while the bot reads signs and thinks."""
+        if not self.settings.party or self.settings.dry_run:
+            return None
+        self._check_round()
+        guess = self.predictor.predict(look.seen())
+        try:
+            placement = self.guess_map.place(guess.lat, guess.lon, tries=1, quick=True)
+        except MapNotFound as lost:
+            print(f"  no pin yet: {lost}")
+            return None
+        self.controls.leave(self.layout.view.center)  # closes the map, to go on looking
+        if placement.confirmed is False:
+            return None
+        print(f"  pin down early, at {placement.lat:.1f}, {placement.lon:.1f}")
+        return placement
+
+    def _final_pin(self, guess: Guess, early: Placement | None) -> Placement:
+        """Where the pin ends up for ``guess``: placed with care, unless time has run too short
+        for that and the pin ``early`` can stand. In a room, the map not reading ends the round
+        for the bot, unless ``early`` is down."""
+        if early is not None and not self._time_for():
+            self._short_of_time("guess", "short of time: leaving the pin where it is")
+            return early
+        try:
+            placement = self.guess_map.place(guess.lat, guess.lon)
+        except MapNotFound as lost:  # in a room, the next round may go better
+            if not self.settings.party:
+                raise
+            if early is not None:
+                print(f"  leaving the pin where it is: {lost}")
+                return early
+            raise RoundOver(f"no guess this round: {lost}") from lost
+        if placement.confirmed is False:
+            if early is not None:  # it's still there, then
+                print("  couldn't see the pin where it was clicked; leaving it where it was")
+                return early
+            print("  couldn't see the pin where it was clicked; guessing anyway")
         return placement
 
     def _play_party(self, run_dir: Path | None) -> None:
@@ -474,7 +530,8 @@ class OpenGuessrBot:
         and 8 s on the clock, and the round was given up. So the clock has its say too: once
         ``pinned``, as last read, since then the timer can hide as well; before, as read
         afresh, since the round may have been cut short and ended while the bot was busy, as
-        when another player guessed while it read signs."""
+        when another player guessed while it read signs. Failing both, the Guess button shows
+        all through a round, and not on what follows."""
         if not self.settings.party or self.settings.dry_run:
             return
         for _ in range(3):
@@ -490,7 +547,14 @@ class OpenGuessrBot:
         if math.isfinite(left) and left > CLOCK_TRUSTED_ABOVE:
             print(f"  can't see the compass, but the clock leaves {left:.0f} s: carrying on")
             return
+        if self._guess_shows():
+            print("  can't see the compass or the timer, but Guess shows: carrying on")
+            return
         raise RoundOver
+
+    def _guess_shows(self) -> bool:
+        """Whether the Guess button is where the layout has it, if the bot can read it."""
+        return self.signs is not None and still_there(self.screen, self.signs.words, self.layout)
 
     def _round_clock(self) -> RoundClock:
         """The multiplayer round's timer, read with the sign reader's recogniser, if the layout
@@ -595,7 +659,7 @@ class OpenGuessrBot:
         expected = self.clock.left()
         left = self._read_clock(opening=False)
         if left is None:  # no time showing: is the round still on?
-            return not self._round_on()
+            return not (self._round_on() or self._guess_shows())
         return math.isfinite(expected) and left < expected - TIMER_DROP
 
     def _time_for(self, *steps: str) -> bool:

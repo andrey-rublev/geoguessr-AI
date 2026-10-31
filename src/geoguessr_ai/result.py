@@ -10,14 +10,16 @@ The notch that reaches the map's widest view goes only part of the way, which th
 measure too, and the first view is always at a whole zoom level, which puts right a step
 counted wrongly.
 
-In a multiplayer room the result map shows every player's pin, all alike, so there the reader
-takes ours to be the one the recognised map puts where we clicked, and measures the flag on
-that map alone. And it shows for only a few seconds, before the standings, whatever the host
-does: so there the reader first takes all the views it can, as fast as the map zooms, and works
-them out afterwards. It asks the towns the first views name before anything else (see
-:func:`map_by_towns`): they tell the map's zoom level without any zooming out, which is all it
-takes, since we know where our pin is and the flag's offset from it then gives the answer. Zoomed
-out, a miscounted notch can double the answer's distance from our pin and still pass the checks.
+In a multiplayer room the result map shows every player's pin, each with a name beside it, ours
+saying You. And it shows for only a few seconds, before the standings, whatever the host does: too
+few to zoom out to the world, which went wrong on 43 of 50 live rounds. But one view is enough. We
+know where our pin is, so the map's zoom level is all that's missing for the flag's offset from it
+to give the answer, and the towns it names tell that (see :func:`map_by_towns`), or else its coasts
+(see :func:`map_by_coasts`). On the saved rounds whose first view showed the markers, that answered
+27 of 30 in rooms, and on 26 of 29 solo rounds it came within a median of 4 km of the answer read
+by zooming out. Only if it can't does the reader take all the views it can, as fast as the map
+zooms, and work them out afterwards. Zoomed out, a miscounted notch can double the answer's
+distance from our pin and still pass the checks.
 
 An answer is only returned after checks: the recognised map must put our pin where we
 clicked, at a whole zoom level if it is the first view, and measurements from more zoomed-in
@@ -29,6 +31,7 @@ from __future__ import annotations
 
 import functools
 import math
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
@@ -40,7 +43,7 @@ from .config import Layout, Region
 from .geo import EARTH_RADIUS_KM, haversine_km, inverse_mercator, mercator_xy
 from .knowledge.places import place_key
 from .knowledge.towns import towns
-from .mapcal import MapNotFound, MapProjection, locate_world
+from .mapcal import MapNotFound, MapProjection, locate_world, water_mask
 from .ocr import Word
 
 # The game's two markers at 100% browser scale, traced from real result screens: how red each
@@ -124,10 +127,14 @@ def _template(art: str) -> np.ndarray:
 MARKERS = {
     "pin": (_template(PIN_ART), (13.5, 33.5)),  # anchored at the pin's tip
     "flag": (_template(FLAG_ART), (4.5, 29.5)),  # anchored at the foot of the flagpole
+    "banner": (_template(FLAG_ART)[:20], (4.5, 29.5)),  # the flag without its pole's foot
 }
 MIN_SCORES = {"pin": 0.65, "flag": 0.72}
 """Template-match scores that count as seeing a marker. Real markers score 0.8-1.0; the
 closest look-alikes on real result screens (labels, borders, buttons) scored up to 0.6."""
+ROOM_FLAG, ROOM_BANNER = 0.66, 0.75
+"""What counts as the flag in a room, where a player's name can lie across its foot: one so
+covered scored 0.70 as a flag and 0.78 by its banner, a map with no flag at most 0.59 and 0.60."""
 BLUR = 0.7
 """Screenshot and templates are both blurred this much (in 100%-scale pixels), which makes
 matching forgiving of how the browser resamples the icons."""
@@ -167,6 +174,22 @@ TOWN_ZOOMS = range(3, 18)
 """The zoom levels a first view may be at: wider ones are recognised as the world."""
 TOWN_LEVELS = 2
 """How many of the first views to read towns off, should the advert hide the flag on the first."""
+COAST_STEP = 8
+"""Every how many pixels to look whether the map shows water, to tell its zoom by its coasts."""
+COAST_MATCH, COAST_MARGIN = 0.8, 0.1
+"""How much of the map must agree with where the world has water, at one zoom level, and how much
+more than at any other, to tell the map's zoom by that. Of 29 saved views, the two it answered for
+scored 0.93 and 0.97, by 0.26 and 0.14 over the next. A view of all land agrees at every level."""
+YOU = re.compile(r"^[\W_]*you[\W_]*$", re.I)
+"""What the label beside our own pin says."""
+YOU_FROM_PIN = (36, -15)
+YOU_REACH = 30
+"""Where that label's middle is from the pin's tip, and how far from there it may be, in pixels at
+100% scale."""
+ROUGH_KM = 20.0
+"""An answer that may be further off than this isn't one to learn from (see Answer.rough)."""
+ROUGH_PIXELS = 15
+"""How many pixels, at 100% scale, a flag placed by the towns or hidden under our pin may be off."""
 AD_PANEL = (730, 100, 236)
 """The advert over a multiplayer result map, at 100% scale: its width, its height, and how far
 its top is above the page's bottom. It is centred on the page, as measured at 100% and 125%."""
@@ -201,6 +224,8 @@ class Answer:
     lon: float
     zoom_outs: int
     """Wheel notches the map had been zoomed out by when the flag was measured."""
+    rough: bool = False
+    """Good enough to show, not to learn from: our pin couldn't be seen to measure from."""
 
 
 @dataclass
@@ -342,6 +367,60 @@ def map_by_towns(words: Sequence[Word], scale: float) -> MapProjection | None:
     return MapProjection(TILE * scale * 2.0**zoom, origin_x, origin_y, True, float(count))
 
 
+def map_by_coasts(
+    rgb: np.ndarray,
+    pin: Marker,
+    lat: float,
+    lon: float,
+    scale: float,
+    hidden: tuple[int, int, int, int] | None = None,
+) -> float | None:
+    """The width of the world on a map at a whole zoom level, from its coasts: ``pin`` being at
+    (``lat``, ``lon``), each zoom level says where on the map the world has water, and at the right
+    one that's where the map shows it. None unless one level fits, and fits better than the rest.
+    ``hidden``: the left, top, right and bottom of a part of the map that can't be seen."""
+    from global_land_mask import globe
+
+    h, w = rgb.shape[:2]
+    ys, xs = np.mgrid[COAST_STEP // 2 : h : COAST_STEP, COAST_STEP // 2 : w : COAST_STEP]
+    shows = water_mask(rgb)[ys, xs] > 0
+    keep = np.ones(xs.shape, dtype=bool)
+    if hidden is not None:
+        left, top, right, bottom = hidden
+        keep[(xs >= left) & (xs < right) & (ys >= top) & (ys < bottom)] = False
+    mx, my = mercator_xy(lat, lon)
+    fits = {}
+    for zoom in TOWN_ZOOMS:
+        world = TILE * scale * 2.0**zoom
+        x, y = mx + (xs - pin.x) / world, my + (ys - pin.y) / world
+        on_it = keep & (y > 0.02) & (y < 0.98)
+        if on_it.sum() >= keep.sum() / 2:
+            a_lat, a_lon = inverse_mercator(x[on_it] % 1.0, y[on_it])
+            ocean = globe.is_ocean(np.clip(a_lat, -89.9, 89.9), np.clip(a_lon, -179.9, 179.9))
+            fits[zoom] = float((ocean == shows[on_it]).mean())
+    if len(fits) < 2:
+        return None
+    best, next_best = sorted(fits, key=fits.get, reverse=True)[:2]
+    if fits[best] < COAST_MATCH or fits[best] - fits[next_best] < COAST_MARGIN:
+        return None
+    return TILE * scale * 2.0**best
+
+
+def our_labelled_pin(words: Sequence[Word], pins: Sequence[Marker], scale: float) -> Marker | None:
+    """The pin that the label You stands beside."""
+    you = next((word for word in words if YOU.search(word.text)), None)
+    if you is None or not pins:
+        return None
+    centre = you.box.center
+    dx, dy = YOU_FROM_PIN[0] * scale, YOU_FROM_PIN[1] * scale
+
+    def away(pin: Marker) -> float:
+        return math.dist((pin.x + dx, pin.y + dy), (centre.x, centre.y))
+
+    near = min(pins, key=away)
+    return near if away(near) <= YOU_REACH * scale else None
+
+
 def _km_per_px(world_px: float, lat: float) -> float:
     return 2 * math.pi * EARTH_RADIUS_KM * math.cos(math.radians(lat)) / world_px
 
@@ -412,15 +491,27 @@ class ResultReader:
         when to stop zooming out, as when it has gone and the next round begun."""
         self.controls.move(self.region.center)
         reading = Reading(None, "the result map never lined up with the world map")
+        if crowded:
+            first = self._first_view(abort)
+            if first is None:
+                reading.problem = "the result map never showed"
+                return reading
+            reading.screenshot = Image.fromarray(first)
+            answer = self._answer_on_view(first, placed_lat, placed_lon)
+            if answer is not None:
+                reading.answer, reading.problem = answer, ""
+                return reading
+            views = self._hurried_views(first, reading, abort)
+        else:
+            views = self._settled_views(reading, abort)
         levels: list[_Level] = []
         step = 1.0  # scale halvings per whole notch, re-measured whenever the markers allow
-        views = self._hurried_views if crowded else self._settled_views
-        for rgb in views(reading, abort):
+        for rgb in views:
             if not levels:
                 reading.screenshot = Image.fromarray(rgb)
             elif np.abs(rgb.astype(np.int16) - levels[-1].rgb).mean() < 0.5:
                 break  # the map won't zoom out any further
-            pin, flag = self._markers(rgb)
+            pin, flag = self._markers(rgb, crowded)
             pins = []
             if crowded:  # which pin is ours only the recognised map can say
                 pins, pin = self._pins(rgb), None
@@ -431,8 +522,8 @@ class ResultReader:
                     step = measured
                 halvings = levels[-1].halvings + (step if measured is None else measured)
             levels.append(_Level(rgb, pin, flag, halvings, pins))
-            if crowded and self.read_words is not None and len(levels) <= TOWN_LEVELS:
-                answer = self._answer_by_towns(levels[-1], placed_lat, placed_lon)
+            if crowded and 1 < len(levels) <= TOWN_LEVELS:  # the first has been tried already
+                answer = self._answer_on_view(rgb, placed_lat, placed_lon, len(levels) - 1)
                 if answer is not None:
                     reading.answer, reading.problem = answer, ""
                     break
@@ -454,25 +545,73 @@ class ResultReader:
             reading.zoomed_out = [Image.fromarray(level.rgb) for level in levels[1:]]
         return reading
 
-    def _answer_by_towns(self, level: _Level, lat: float, lon: float) -> Answer | None:
-        """The flag's offset from our pin, on a map placed by the towns it names: our pin being
-        the one they put about where we clicked, which also checks them."""
-        if level.flag is None or not level.pins:
+    def _answer_on_view(self, rgb: np.ndarray, lat: float, lon: float, zoom_outs: int = 0):
+        """The answer from one view of a multiplayer result map, if it says enough: the flag's
+        offset from our pin, once the towns it names, or else its coasts, tell its zoom."""
+        _, flag = self._markers(rgb, crowded=True)
+        pins = self._pins(rgb)
+        if flag is None or self.scale is None:
             return None
-        projection = map_by_towns(self.read_words(Image.fromarray(level.rgb)), self.scale)
+        words = [] if self.read_words is None else self.read_words(Image.fromarray(rgb))
+        ours = our_labelled_pin(words, pins, self.scale)
+        projection = map_by_towns(words, self.scale)
         if projection is None:
+            pin = ours or (pins[0] if len(pins) == 1 else None)
+            if pin is None:
+                return None
+            world = map_by_coasts(rgb, pin, lat, lon, self.scale, self._advert())
+            if world is None:
+                return None
+            return self._offset_answer(flag, pin, world, lat, lon, zoom_outs)
+        return self._answer_by_towns(rgb, projection, flag, ours, pins, lat, lon, zoom_outs)
+
+    def _answer_by_towns(
+        self,
+        rgb: np.ndarray,
+        projection: MapProjection,
+        flag: Marker,
+        ours: Marker | None,
+        pins: Sequence[Marker],
+        lat: float,
+        lon: float,
+        zoom_outs: int,
+    ) -> Answer | None:
+        """The answer on a map placed by the towns it names, which must put where we clicked
+        about where our pin is. With no pin there, it must be where the game has hidden it: under
+        the flag, then, or the advert, and the answer is only as good as the towns or the flag."""
+        width, world = rgb.shape[1], projection.world_px
+        reach = TOWN_PIN_REACH * self.scale + 25.0 / _km_per_px(world, lat)
+        if ours is None and pins:
+            nearest = min(pins, key=lambda pin: self._off(projection, pin, lat, lon, width))
+            ours = nearest if self._off(projection, nearest, lat, lon, width) <= reach else None
+        if ours is not None:
+            if self._off(projection, ours, lat, lon, width) > reach:
+                return None
+            return self._offset_answer(flag, ours, world, lat, lon, zoom_outs)
+        off = ROUGH_PIXELS * self.scale * _km_per_px(world, lat)
+        clicked = projection.to_pixel(lat, lon, width)
+        if math.dist(clicked, (flag.x, flag.y)) <= reach:
+            return Answer(lat, lon, zoom_outs, off > ROUGH_KM)
+        advert = self._advert()
+        if advert is None:
             return None
-        width = level.rgb.shape[1]
-        reach = TOWN_PIN_REACH * self.scale + 25.0 / _km_per_px(projection.world_px, lat)
-        offs = [(self._off(projection, pin, lat, lon, width), pin) for pin in level.pins]
-        off, pin = min(offs, key=lambda found: found[0])
-        if off > reach:
+        left, top, right, bottom = advert
+        x, y = clicked
+        if not (left - reach <= x <= right + reach and top - reach <= y <= bottom):
             return None
+        a_lat, a_lon = projection.to_latlon(flag.x, flag.y)
+        return Answer(float(a_lat), _wrap_lon(float(a_lon)), zoom_outs, off > ROUGH_KM)
+
+    @staticmethod
+    def _offset_answer(
+        flag: Marker, pin: Marker, world: float, lat: float, lon: float, zoom_outs: int
+    ) -> Answer:
+        """Where the flag is, ``world`` pixels being the width of the world, from where we know
+        ``pin`` to be."""
         mx, my = mercator_xy(lat, lon)
-        x = mx + (level.flag.x - pin.x) / projection.world_px
-        y = min(max(my + (level.flag.y - pin.y) / projection.world_px, 0.0), 1.0)
-        a_lat, a_lon = inverse_mercator(x, y)
-        return Answer(a_lat, _wrap_lon(a_lon), 0)
+        y = min(max(my + (flag.y - pin.y) / world, 0.0), 1.0)
+        a_lat, a_lon = inverse_mercator(mx + (flag.x - pin.x) / world, y)
+        return Answer(a_lat, _wrap_lon(a_lon), zoom_outs)
 
     def _settled_views(self, reading: Reading, abort: Callable[[], bool] | None):
         """Each view of the map, zooming out a notch at a time as each is worked out."""
@@ -485,15 +624,11 @@ class ResultReader:
             yield self._settled_grab()
 
     def _hurried_views(
-        self, reading: Reading, abort: Callable[[], bool] | None
+        self, first: np.ndarray, reading: Reading, abort: Callable[[], bool] | None
     ) -> list[np.ndarray]:
         """All the views of the map there is time for before it goes, with no working out on
-        the way: as soon as it shows, then a notch further out each, without waiting for tiles
-        until the last, at the map's widest, which is the one to recognise."""
-        first = self._first_view(abort)
-        if first is None:
-            reading.problem = "the result map never showed"
-            return []
+        the way: the ``first``, then a notch further out each, without waiting for tiles until
+        the last, at the map's widest, which is the one to recognise."""
         views = [first]
         for _ in range(self.max_zoom_outs):
             if abort is not None and abort():
@@ -515,16 +650,22 @@ class ResultReader:
 
     def _first_view(self, abort: Callable[[], bool] | None) -> np.ndarray | None:
         """The result map as soon as it shows, once its tiles are in or about to go; None if it
-        doesn't show, as when the round goes straight to the standings."""
-        start = self.controls.now()
+        doesn't show, as when the round goes straight to the standings. It's the flag that says
+        so: a pin alone can be ours on the map we've just left, and on 12 of 44 live rounds, the
+        view taken on seeing one was the map on its way to the result, with no markers yet at all.
+        A view with a pin alone will do if no flag ever shows, as when the advert hides it."""
+        start, pin_alone = self.controls.now(), None
         while self.controls.now() - start < RESULT_SHOWS_S:
             if abort is not None and abort():
-                return None
+                return pin_alone
             rgb = np.asarray(self.screen.grab(self.region).convert("RGB"))
-            if self._shows_markers(rgb):
+            pin, flag = self._markers(rgb, crowded=True)
+            if flag is not None:
                 return self._tiles_in(rgb)
+            if pin is not None:
+                pin_alone = rgb
             self.controls.sleep(LOOK_S)
-        return None
+        return pin_alone
 
     def _tiles_in(self, rgb: np.ndarray) -> np.ndarray:
         """The map once it stops changing, for at most a few looks: the markers won't move."""
@@ -551,7 +692,7 @@ class ResultReader:
 
     def _shows_markers(self, rgb: np.ndarray) -> bool:
         """Whether a pin or the flag shows, as they do while the result map does."""
-        pin, flag = self._markers(rgb)
+        pin, flag = self._markers(rgb, crowded=True)
         return pin is not None or flag is not None
 
     def _settled_grab(self) -> np.ndarray:
@@ -566,31 +707,48 @@ class ResultReader:
             previous = current
         return previous
 
+    def _advert(self) -> tuple[int, int, int, int] | None:
+        """The left, top, right and bottom of the advert over a multiplayer result map, in the
+        region's pixels."""
+        if self.page is None:
+            return None
+        s = self.scale or 1.0
+        width, height, above = (round(size * s) for size in AD_PANEL)
+        left = self.page.left + (self.page.width - width) // 2 - self.region.left
+        top = self.page.bottom - above - self.region.top
+        return left, top, left + width, top + height
+
     def _shades(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """What the markers are made of (see :func:`marker_shades`), but for under the advert,
         whose pictures can look like one and which can hide one."""
         red, dark = marker_shades(rgb)
-        if self.page is not None:
-            s = self.scale or 1.0
-            width, height, above = (round(size * s) for size in AD_PANEL)
-            left = self.page.left + (self.page.width - width) // 2 - self.region.left
-            top = self.page.bottom - above - self.region.top
+        advert = self._advert()
+        if advert is not None:
+            left, top, right, bottom = advert
             for shade in (red, dark):
-                shade[max(top, 0) : max(top + height, 0), max(left, 0) : max(left + width, 0)] = 0
+                shade[max(top, 0) : max(bottom, 0), max(left, 0) : max(right, 0)] = 0
         return red, dark
 
-    def _markers(self, rgb: np.ndarray) -> tuple[Marker | None, Marker | None]:
+    def _markers(
+        self, rgb: np.ndarray, crowded: bool = False
+    ) -> tuple[Marker | None, Marker | None]:
+        """Our pin and the flag, if they show. With ``crowded``, as in a room, a player's name
+        may lie across the flag's foot."""
         red, dark = self._shades(rgb)
         if self.scale is None:
             self.scale = find_scale(red)
             if self.scale is None:
                 return None, None
-        found = {
-            name: find_marker(shade, name, self.scale)
-            for name, shade in (("pin", red), ("flag", dark))
-        }
-        pin, flag = (m if m.score >= MIN_SCORES[name] else None for name, m in found.items())
-        return pin, flag
+        pin = find_marker(red, "pin", self.scale)
+        flag = find_marker(dark, "flag", self.scale)
+        found_flag = flag if flag.score >= MIN_SCORES["flag"] else None
+        if crowded and found_flag is None:
+            banner = find_marker(dark, "banner", self.scale)
+            if flag.score >= ROOM_FLAG:
+                found_flag = flag
+            elif banner.score >= ROOM_BANNER:
+                found_flag = banner
+        return (pin if pin.score >= MIN_SCORES["pin"] else None), found_flag
 
     def _pins(self, rgb: np.ndarray) -> list[Marker]:
         """Every pin on a result map, as on a multiplayer one, where all players' show."""

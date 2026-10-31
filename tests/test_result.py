@@ -12,11 +12,14 @@ from geoguessr_ai.mapcal import MapProjection, world_mask
 from geoguessr_ai.ocr import Word
 from geoguessr_ai.result import (
     MARKERS,
+    Marker,
     ResultReader,
     find_marker,
     find_scale,
+    map_by_coasts,
     map_by_towns,
     marker_shades,
+    our_labelled_pin,
     result_region,
 )
 
@@ -249,7 +252,77 @@ def going_reader(world=24_576, **kwargs):
     screen.controls = FakeControls(screen)
     reader = ResultReader(screen, screen.controls, REGION)
     reader.scale = 1.5  # as the guess map measured it
+    reader._answer_on_view = lambda *args: None  # as when one view doesn't say enough
     return screen, reader
+
+
+def test_in_a_room_one_view_is_enough_by_its_coasts():
+    screen = GoingResultScreen(fitted(256 * 1.5 * 2**6), notches=99)
+    screen.controls = FakeControls(screen)
+    reader = ResultReader(screen, screen.controls, REGION)
+    reader.scale = 1.5
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 10
+    assert screen.controls.notches == 0  # no need to zoom out at all
+
+
+def test_coasts_tell_a_maps_zoom_only_if_one_level_fits_best():
+    view = fitted(256 * 1.5 * 2**6)
+    rgb = np.asarray(FakeResultScreen(view, show_flag=False).grab(REGION))
+    x, y = view.to_pixel(*MADRID, REGION.width)
+    pin = Marker(x, y, 1.0)
+
+    assert map_by_coasts(rgb, pin, *MADRID, 1.5) == view.world_px
+    assert map_by_coasts(rgb, pin, 35.68, 139.69, 1.5) is None  # we clicked on Tokyo
+    all_land = np.full_like(rgb, LAND)
+    assert map_by_coasts(all_land, pin, 48.0, 90.0, 1.5) is None  # Mongolia: land at any zoom
+
+
+def test_tells_our_pin_by_its_label():
+    ours, theirs = Marker(400, 300, 1.0), Marker(900, 500, 1.0)
+    label = Word("You", Region(400 + 54 - 20, 300 - 22 - 10, 40, 20))
+
+    other_word = Word("Madrid", Region(1, 1, 50, 20))
+    assert our_labelled_pin([other_word, label], [theirs, ours], 1.5) == ours
+    assert our_labelled_pin([label], [theirs], 1.5) is None  # it stands beside no pin
+    assert our_labelled_pin([Word("Younde", Region(400, 300, 50, 20))], [ours], 1.5) is None
+
+
+def test_in_a_room_a_players_name_across_the_flags_foot_doesnt_hide_it():
+    rgb = np.full((500, 1200, 3), LAND, np.float32)
+    paint(rgb, "flag", 600, 200, FLAG_BLACK)
+    rgb[200 - 18 : 200 + 5, 560:680] = (255, 255, 255)  # a name's label, over the pole
+    reader = ResultReader(None, None, REGION)
+    reader.scale = 1.5
+    pixels = rgb.astype(np.uint8)
+
+    assert reader._markers(pixels)[1] is None
+    flag = reader._markers(pixels, crowded=True)[1]
+    assert flag is not None and abs(flag.x - 600) <= 2 and abs(flag.y - 200) <= 2
+
+
+def test_the_map_on_its_way_to_the_result_isnt_the_first_view():
+    """A pin alone may be the one we just placed: the view to read is the one with the flag."""
+    screen = FakeResultScreen(fitted(256 * 1.5 * 2**6), show_flag=False)
+    controls = FakeControls(screen)
+    grabbed = {"looks": 0}
+    plain = screen.grab
+
+    def grab(region):
+        grabbed["looks"] += 1
+        screen.show_flag = grabbed["looks"] > 3
+        return plain(region)
+
+    screen.grab = grab
+    reader = ResultReader(screen, controls, REGION)
+    reader.scale = 1.5
+
+    first = reader._first_view(None)
+
+    assert reader._markers(first, crowded=True)[1] is not None and grabbed["looks"] > 3
 
 
 def test_in_a_room_takes_all_the_views_it_can_before_working_any_out():
@@ -392,6 +465,49 @@ def test_towns_that_dont_put_our_pin_where_we_clicked_are_not_believed(monkeypat
     reader = reader_by_towns(monkeypatch, named_on(whole_zoom_view()))
 
     assert reader.read(35.68, 139.69, crowded=True).answer is None  # we clicked on Tokyo
+
+
+def test_with_our_pin_under_the_advert_the_towns_place_the_flag_roughly(monkeypatch):
+    view = whole_zoom_view()
+    reader = reader_by_towns(monkeypatch, named_on(view))
+    # An advert over where we clicked, so that our pin can't show.
+    x, y = view.to_pixel(*MADRID, REGION.width)
+    reader._advert = lambda: (round(x) - 100, round(y) - 40, round(x) + 100, round(y) + 40)
+
+    reading = reader.read(*MADRID, crowded=True)
+
+    assert reading.answer is not None, reading.problem
+    assert haversine_km(reading.answer.lat, reading.answer.lon, *LISBON) < 60
+
+
+def test_an_answer_the_towns_place_on_a_wide_map_isnt_to_learn_from():
+    world = 256 * 1.5 * 2**4  # a town's name is many kilometres across, this far out
+    view = MapProjection(world, 0.0, 0.0, True)
+    flag = Marker(*view.to_pixel(*LISBON, REGION.width), 1.0)
+    reader = ResultReader(None, None, REGION)
+    reader.scale = 1.5
+    x, y = view.to_pixel(*MADRID, REGION.width)
+    reader._advert = lambda: (round(x) - 100, round(y) - 40, round(x) + 100, round(y) + 40)
+    rgb = np.zeros((REGION.height, REGION.width, 3), np.uint8)
+
+    answer = reader._answer_by_towns(rgb, view, flag, None, [], *MADRID, 0)
+
+    assert answer is not None and answer.rough
+
+
+def test_with_the_flag_over_our_pin_the_answer_is_where_we_clicked(monkeypatch):
+    view = whole_zoom_view()
+    near = (39.0, -9.0)
+    monkeypatch.setattr(result_module, "towns", lambda: SPAIN)
+    screen = FakeResultScreen(view, pin=near, flag=near)
+    screen.controls = FakeControls(screen)
+    reader = ResultReader(screen, screen.controls, REGION, read_words=lambda image: named_on(view))
+    reader.scale = 1.5
+    reader._pins = lambda rgb: []  # the flag hides it
+
+    reading = reader.read(*near, crowded=True)
+
+    assert reading.answer is not None and (reading.answer.lat, reading.answer.lon) == near
 
 
 def test_in_a_room_a_flag_in_the_advert_is_no_flag():

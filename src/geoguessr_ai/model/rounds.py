@@ -56,7 +56,7 @@ def find_rounds(root: Path) -> list[Round]:
         views = tuple(
             view for view in sorted(info_path.parent.glob("view_*.jpg")) if view.stem not in undrawn
         )
-        if answer and views:
+        if answer and views and not answer.get("rough"):
             folder = info_path.parent
             round_id = f"{folder.parent.name}/{folder.name}"
             rounds.append(Round(round_id, views, float(answer["lat"]), float(answer["lon"])))

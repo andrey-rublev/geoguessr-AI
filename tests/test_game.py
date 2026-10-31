@@ -147,7 +147,7 @@ class FakePredictor:
     def __init__(self, expected=(3000.0,)):
         self.view_counts, self.evidence, self.expected = [], [], list(expected)
 
-    def predict(self, images, evidence=None):
+    def predict(self, images, evidence=None, quick=False):
         self.view_counts.append(len(images))
         self.evidence.append(evidence)
         expected = self.expected.pop(0) if len(self.expected) > 1 else self.expected[0]
@@ -1033,12 +1033,12 @@ class FailingPredictor(FakePredictor):
         super().__init__()
         self.failing, self.rounds = failing, 0
 
-    def predict(self, images, evidence=None):
+    def predict(self, images, evidence=None, quick=False):
         if len(images) == 4:  # a new round's first look
             self.rounds += 1
         if self.rounds in self.failing:
             raise RuntimeError("something unforeseen")
-        return super().predict(images, evidence)
+        return super().predict(images, evidence, quick)
 
 
 def test_a_round_that_goes_wrong_is_passed_over_for_the_next(party, capsys):

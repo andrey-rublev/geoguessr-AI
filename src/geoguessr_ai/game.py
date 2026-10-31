@@ -107,7 +107,12 @@ class RoundOver(Exception):
 
 
 class Predictor(Protocol):
-    def predict(self, images: Sequence[Image.Image], evidence: Evidence | None = None) -> Guess: ...
+    def predict(
+        self,
+        images: Sequence[Image.Image],
+        evidence: Evidence | None = None,
+        quick: bool = False,
+    ) -> Guess: ...
 
 
 @dataclass
@@ -456,7 +461,7 @@ class OpenGuessrBot:
         if not self.settings.party or self.settings.dry_run:
             return None
         self._check_round()
-        guess = self.predictor.predict(look.seen())
+        guess = self.predictor.predict(look.seen(), quick=True)
         try:
             placement = self.guess_map.place(guess.lat, guess.lon, tries=1, quick=True)
         except MapNotFound as lost:

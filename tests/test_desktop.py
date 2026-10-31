@@ -381,3 +381,196 @@ def test_makes_shortcuts_on_the_desktop_and_in_start_that_run_with_no_terminal(m
 def test_land_is_what_the_mask_says():
     rows = np.array([[int(dot) for dot in row] for row in land_rows(columns=60)])
     assert 0.2 < rows.mean() < 0.45  # about as much of this part of the world as is land
+
+
+# The window itself, in a real browser, where there's one to be had: guess, what it guessed, answer,
+# where that really was, and how far off it was.
+A_GAME = [
+    ((48.1, 11.5), "DE", (48.3, 11.9), "DE", 35),  # close together
+    ((55.0, -5.0), "GB", (39.5, 21.0), "GR", 2400),  # from the top left to the bottom right
+    ((35.0, 135.0), "JP", (22.0, 114.0), "HK", 2500),  # from the top right to the bottom left
+    ((45.5, -103.0), "US", (34.0, -102.0), "US", 1300),  # straight down
+    ((-24.0, 120.0), "AU", (-24.0, 150.0), "AU", 3000),  # straight across
+    ((-37.8, 145.0), "AU", (-37.0, 146.0), "AU", 120),  # where the card goes
+    ((-41.0, 175.0), "NZ", (-43.0, 172.0), "NZ", 330),
+    ((-34.0, -58.0), "AR", (-12.0, -77.0), "PE", 3100),
+    ((69.0, 18.0), "NO", (64.0, 26.0), "FI", 650),
+    ((35.0, 139.0), "JP", (37.0, -122.0), "US", 8300),  # round the world
+]
+AROUND_THE_WORLD = len(A_GAME)
+PLAYS_A_GAME = f"""
+for number, (guess, guessed, answer, really, km) in enumerate({A_GAME!r}, 1):
+    print(f"Round {{number}}", flush=True)
+    pin = f"{{guess[0]}}, {{guess[1]}}"
+    print(f"  guess {{pin}} ({{guessed}} 60%) (model expects ~3,000 points)", flush=True)
+    said = "the right country" if guessed == really else f"guessed {{guessed}}"
+    print(f"  answer {{answer[0]}}, {{answer[1]}} in {{really}}: our pin at {{pin}} "
+          f"was {{km}} km away, {{said}}", flush=True)
+"""
+
+
+@pytest.fixture(scope="module")
+def browser():
+    sync_api = pytest.importorskip("playwright.sync_api")
+    with sync_api.sync_playwright() as playwright:
+        for channel in ("msedge", "chrome"):
+            try:
+                found = playwright.chromium.launch(channel=channel)
+                break
+            except sync_api.Error:
+                continue
+        else:
+            pytest.skip("No browser here to show the window in.")
+        yield found
+        found.close()
+
+
+def wait_until(window, condition: str) -> None:
+    """Ask the page till ``condition`` holds. Playwright's own waiting evals what it's given where
+    the page's policy refuses that, and rightly."""
+    for _ in range(400):
+        if window.evaluate(condition):
+            return
+        window.wait_for_timeout(25)
+    raise AssertionError(f"Never came true: {condition}")
+
+
+@pytest.fixture
+def window(browser, served):
+    """The window, on an app with all it needs set up, which must never report a fault."""
+    served.app.program = [sys.executable, "-c", PLAYS_A_GAME]
+    served.app.setup.update(model=True, wsl=True, ubuntu=True, chrome=True)
+    context = browser.new_context(viewport={"width": 1280, "height": 860}, reduced_motion="reduce")
+    page = context.new_page()
+    faults = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on("console", lambda said: faults.append(said.text) if said.type == "error" else None)
+    page.goto(served.url("/"))
+    wait_until(page, "state !== null")
+    yield page
+    context.close()
+    assert not faults
+
+
+def play(window) -> None:
+    window.check("[name=mode][value=play]", force=True)
+    window.fill("#rounds", str(len(A_GAME)))
+    window.click("#go")
+    wait_until(
+        window,
+        f"document.querySelectorAll('#plots .plot-line').length === {len(A_GAME)}"
+        " && document.querySelector('#go').textContent === 'Start the bot'",
+    )
+
+
+def settled(window) -> None:
+    window.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+
+
+def test_the_window_lists_each_round_and_plots_a_line_for_it(window):
+    play(window)
+    assert window.locator("#rounds-body tr").count() == len(A_GAME)
+    assert "5 of 10 right" in window.inner_text("#rounds-foot")
+
+
+@pytest.mark.parametrize("size", [(1280, 860), (1100, 640), (700, 800), (1920, 1040)])
+def test_a_picked_round_isnt_hidden_by_its_card(window, size):
+    play(window)
+    window.set_viewport_size({"width": size[0], "height": size[1]})
+    settled(window)
+    for number in range(1, AROUND_THE_WORLD):
+        window.click(f"#rounds-body tr[data-round='{number}']")
+        settled(window)
+        assert window.is_visible("#round-card")
+        assert window.evaluate(
+            """(number) => {
+              const card = document.querySelector("#round-card").getBoundingClientRect();
+              const marks = document.querySelectorAll(
+                `.plot[data-round="${number}"] :is(.guess-mark, .fix-ring)`);
+              const clear = (mark) => mark.right < card.left || mark.left > card.right ||
+                mark.bottom < card.top || mark.top > card.bottom;
+              return marks.length === 2 &&
+                [...marks].map((mark) => mark.getBoundingClientRect()).every(clear);
+            }""",
+            number,
+        ), f"round {number}"
+
+
+def test_pointing_at_a_round_where_its_card_goes_moves_the_card(window):
+    play(window)
+    window.hover(".plot[data-round='6'] .fix-dot")  # were the card in the way, this couldn't
+    settled(window)
+    assert "west" in window.get_attribute("#round-card", "class")
+    assert window.inner_text("#card-round") == "Round 6"
+    window.mouse.move(5, 5)
+    settled(window)
+    assert not window.is_visible("#round-card")
+
+
+def test_the_map_moves_and_zooms_and_stays_on_the_chart(window):
+    play(window)
+    box = window.locator("#chart-holder").bounding_box()
+    middle = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    window.mouse.move(*middle)
+    for _ in range(40):
+        window.mouse.wheel(0, -300)
+    wait_until(window, "view.zoom === 128")
+    window.mouse.down()
+    window.mouse.move(middle[0] + 200, middle[1] + 100, steps=4)
+    window.mouse.up()
+    window.focus("#chart-holder")
+    for key in ("ArrowLeft", "ArrowDown", "-", "+"):
+        window.keyboard.press(key)
+    for _ in range(40):
+        window.mouse.wheel(0, 300)
+    wait_until(window, "view.zoom === 1")
+    window.click("#zoom-in")
+    wait_until(window, "view.zoom === 2")
+    window.click("#zoom-world")
+    wait_until(window, "view.zoom === 1")
+    settled(window)
+    assert "NaN" not in window.inner_html("#chart")
+
+
+def test_the_list_is_one_stop_on_the_way_round_with_arrow_keys_inside_it(window):
+    play(window)
+
+    def stops():
+        return window.evaluate(
+            "() => [...document.querySelectorAll('#rounds-body tr')]"
+            ".filter((row) => row.tabIndex === 0).map((row) => row.dataset.round)"
+        )
+
+    def focused():
+        return window.evaluate("() => document.activeElement.dataset.round")
+
+    assert stops() == [str(AROUND_THE_WORLD)]
+    window.focus("#rounds-body tr[tabindex='0']")
+    window.keyboard.press("Home")
+    assert focused() == "1" and stops() == ["1"]
+    window.keyboard.press("ArrowDown")
+    assert focused() == "2" and stops() == ["2"]
+    window.keyboard.press("Enter")
+    assert window.get_attribute("#rounds-body tr[data-round='2']", "aria-current") == "true"
+    assert window.inner_text("#card-round") == "Round 2"
+    window.keyboard.press("Escape")
+    assert window.get_attribute("#rounds-body tr[data-round='2']", "aria-current") is None
+    assert not window.is_visible("#round-card")
+    window.keyboard.press("End")
+    assert focused() == str(AROUND_THE_WORLD)
+
+
+def test_without_a_hidden_screen_it_starts_out_on_its_own_browser_window(window, served):
+    assert window.is_checked("[name=where][value=hidden]")
+    served.app.setup.update(wsl=False, ubuntu=False)
+    window.reload()
+    wait_until(window, "state !== null")
+    assert window.is_checked("[name=where][value=browser]")
+    assert window.inner_text("#set-up-ubuntu") == "Install WSL"
+
+    # As long as nobody's said where it should play.
+    served.app.saved = {"where": "hidden"}
+    window.reload()
+    wait_until(window, "state !== null")
+    assert window.is_checked("[name=where][value=hidden]")
+    assert window.inner_text("#go-note").startswith("Set up the hidden screen")

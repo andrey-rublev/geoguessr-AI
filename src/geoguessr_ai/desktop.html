@@ -1143,8 +1143,10 @@ function drawChoices() {
   const hiddenSays = $("#hidden-says");
   if (setup.ubuntu === null || setup.ubuntu === undefined) hiddenSays.textContent = "Checking it's set up…";
   else if (setup.ubuntu) hiddenSays.textContent = "Your mouse and screen stay yours.";
+  else if (setup.wsl === false) hiddenSays.textContent = "Needs WSL, Windows' own Linux. Installing it takes a few minutes and may ask you to restart.";
   else hiddenSays.textContent = "Not set up yet. Setting it up downloads about 1.5 GB.";
   $("#set-up-ubuntu").hidden = setup.ubuntu !== false;
+  $("#set-up-ubuntu").textContent = setup.wsl === false ? "Install WSL" : "Set it up";
   const fetching = setup.fetching;
   $("#set-up-model").hidden = setup.model !== false || Boolean(fetching);
   $("#set-up-model").textContent = setup.fetch_failed ? "Try again" : "Download it (about 2.2 GB)";
@@ -1315,7 +1317,7 @@ $("#form").addEventListener("input", () => showProblem(""));
 $("#form").addEventListener("change", drawChoices);
 $("#set-up-ubuntu").addEventListener("click", (event) => {
   event.preventDefault();
-  post("/setup", { what: "ubuntu" });
+  post("/setup", { what: state.setup.wsl === false ? "wsl" : "ubuntu" });
 });
 $("#set-up-model").addEventListener("click", () => post("/setup", { what: "model" }));
 $("#open-screen").addEventListener("click", () => post("/open-screen"));

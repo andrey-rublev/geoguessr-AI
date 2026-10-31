@@ -8,6 +8,8 @@ capturing or moving the mouse, so these match what mss and pyautogui see).
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -19,9 +21,42 @@ PARTY_LAYOUT_PATH = Path("layout-party.json")
 """Multiplayer rooms lay the game out differently, so they are calibrated apart."""
 
 
+def wsl_distros() -> list[str]:
+    """The Linuxes WSL has, by name: none, too, where WSL isn't there at all."""
+    try:
+        listed = subprocess.run(
+            ["wsl", "--list", "--quiet"],
+            capture_output=True,
+            timeout=60,
+            env=dict(os.environ, WSL_UTF8="1"),
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if listed.returncode != 0:
+        return []
+    # Older versions of WSL say it in UTF-16, whatever they're asked.
+    text = listed.stdout.decode("utf-8", "replace").replace("\0", "")
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+_distro: str | None = None
+
+
+def wsl_distro() -> str:
+    """Where --hidden plays: Ubuntu, whichever version of it WSL has."""
+    global _distro
+    if _distro is None:
+        found = [name for name in wsl_distros() if name.lower().startswith("ubuntu")]
+        if not found:
+            return WSL_DISTRO
+        _distro = WSL_DISTRO if WSL_DISTRO in found else found[0]
+    return _distro
+
+
 def wsl_command(*command: str) -> list[str]:
-    """What runs ``command`` in :data:`WSL_DISTRO`, from this folder."""
-    return ["wsl", "-d", WSL_DISTRO, "--cd", str(REPO), "-e", *command]
+    """What runs ``command`` in :func:`wsl_distro`, from this folder."""
+    return ["wsl", "-d", wsl_distro(), "--cd", str(REPO), "-e", *command]
 
 
 @dataclass(frozen=True)

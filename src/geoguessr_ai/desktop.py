@@ -36,7 +36,7 @@ import numpy as np
 from global_land_mask import globe
 
 from .botrun import NO_WINDOW, BotRun, Choices, _bot_program, _end_process_tree
-from .config import REPO, wsl_command
+from .config import REPO, wsl_command, wsl_distros
 from .geo import inverse_mercator, mercator_xy
 
 PAGE = Path(__file__).with_name("desktop.html")
@@ -94,6 +94,11 @@ def land_rows(
     return ["".join("1" if dot else "0" for dot in row) for row in land]
 
 
+def wsl_is_there() -> bool:
+    """Whether Windows has its Linux, with an Ubuntu in it, for the bot's screen to be on."""
+    return any(name.lower().startswith("ubuntu") for name in wsl_distros())
+
+
 def ubuntu_is_set_up() -> bool:
     """Whether the bot can play on a screen of its own, in WSL."""
     try:
@@ -130,6 +135,7 @@ class App:
         self.setup = {
             "model": MODEL.exists(),
             "ubuntu": None,  # not known yet: finding out can take a while, if WSL has to start
+            "wsl": None,
             "chrome": util.find_spec("playwright") is not None,
             "fetching": None,  # how getting the model is going
             "fetch_failed": "",
@@ -175,7 +181,8 @@ class App:
         }
 
     def check_setup(self) -> None:
-        self.setup["ubuntu"] = ubuntu_is_set_up()
+        self.setup["wsl"] = wsl_is_there()
+        self.setup["ubuntu"] = self.setup["wsl"] and ubuntu_is_set_up()
         self.setup["model"] = MODEL.exists()
         self.changed()
 
@@ -210,7 +217,11 @@ class App:
             self.fetch_model()
             return
         console = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-        command = _staying_open(wsl_command("bash", "scripts/wsl_setup.sh"))
+        command = _staying_open(
+            ["wsl", "--install", "-d", "Ubuntu"]
+            if what == "wsl"
+            else wsl_command("bash", "scripts/wsl_setup.sh")
+        )
         process = subprocess.Popen(command, cwd=REPO, creationflags=console)
 
         def wait() -> None:
@@ -388,7 +399,7 @@ def handler_for(app: App, port_host: str) -> type[BaseHTTPRequestHandler]:
                 run = app.run
                 if run is not None and run.progress.screen:
                     webbrowser.open(run.progress.screen)
-            elif route == "/setup" and data.get("what") in ("ubuntu", "model"):
+            elif route == "/setup" and data.get("what") in ("wsl", "ubuntu", "model"):
                 app.set_up(data["what"])
             else:
                 raise ValueError("Nothing here does that.")

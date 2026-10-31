@@ -1,5 +1,8 @@
+import subprocess
+
 import pytest
 
+from geoguessr_ai import config
 from geoguessr_ai.config import Layout, Point, Region
 
 
@@ -79,3 +82,35 @@ def test_the_picture_reaches_down_to_the_bottom_of_the_collapsed_map():
     assert layout.hidden == (Region(12, 380, 298, 190), Region(954, 369, 256, 150))
     by_hand = Layout(**{**layout.__dict__, "minimap": None})
     assert by_hand.picture == by_hand.view and by_hand.hidden == by_hand.covered
+
+
+def wsl_says(monkeypatch, listed, code=0):
+    monkeypatch.setattr(config, "_distro", None)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda command, **_: subprocess.CompletedProcess(command, code, listed, b""),
+    )
+
+
+def test_plays_on_whichever_ubuntu_wsl_has(monkeypatch):
+    wsl_says(monkeypatch, b"docker-desktop\r\nUbuntu-24.04\r\n")
+    assert config.wsl_distro() == "Ubuntu-24.04"
+    assert config.wsl_command("ls")[:3] == ["wsl", "-d", "Ubuntu-24.04"]
+
+
+def test_reads_wsl_saying_its_list_in_utf16(monkeypatch):
+    wsl_says(monkeypatch, "Ubuntu\r\n".encode("utf-16-le"))
+    assert config.wsl_distros() == ["Ubuntu"]
+
+
+def test_knows_when_wsl_has_no_ubuntu_or_isnt_there(monkeypatch):
+    wsl_says(monkeypatch, b"", code=1)
+    assert config.wsl_distros() == []
+    assert config.wsl_distro() == config.WSL_DISTRO
+
+    def missing(*_, **__):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(subprocess, "run", missing)
+    assert config.wsl_distros() == []

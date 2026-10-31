@@ -54,6 +54,16 @@ class Served:
                     yield json.loads(line[6:])
 
 
+def test_offers_to_install_wsl_where_its_not_there(monkeypatch):
+    monkeypatch.setattr(desktop, "wsl_distros", lambda: [])
+    monkeypatch.setattr(desktop, "ubuntu_is_set_up", lambda: pytest.fail("no WSL to ask"))
+    app = App(program=[])
+
+    app.check_setup()
+
+    assert app.setup["wsl"] is False and app.setup["ubuntu"] is False
+
+
 @pytest.fixture
 def served(tmp_path, monkeypatch):
     monkeypatch.setattr(desktop, "APP_DIR", tmp_path)
@@ -218,6 +228,8 @@ def test_sets_up_the_screen_in_a_console_that_can_be_read(served, monkeypatch):
             pass
 
     monkeypatch.setattr(subprocess, "Popen", Finished)
+    monkeypatch.setattr(desktop, "wsl_command", lambda *command: ["wsl", *command])
+    monkeypatch.setattr(desktop, "wsl_is_there", lambda: True)
     monkeypatch.setattr(desktop, "ubuntu_is_set_up", lambda: True)
 
     served.app.set_up("ubuntu")

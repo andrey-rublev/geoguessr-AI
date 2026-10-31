@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 import numpy as np
 
@@ -28,7 +29,10 @@ MENU = re.compile(r"menu", re.I)
 LOGO = re.compile(r"open\s*guess", re.I)
 RETURN = re.compile(r"^\W*return\W*$", re.I)
 CHAT = re.compile(r"your\s*mess", re.I)
-CONTINUE = re.compile(r"^\W*continue\W*$", re.I)
+CONTINUE = re.compile(r"^\W*(\w+)\W*\w?\W*$")
+"""A word, and maybe the button's play symbol after it, which can read as a letter: Continue D."""
+CONTINUE_LIKENESS = 0.85
+"""How like the word Continue that word must be, misread as Contnue, but not as Continent."""
 TAB = re.compile(r"open\s*guessr\s*\W\s*free", re.I)
 """The browser tab's title, "OpenGuessr - Free GeoGuessr Alternative", however cut short."""
 MAP_BUTTON = re.compile(r"^\W*map\W*$", re.I)
@@ -204,9 +208,16 @@ def find_tab(words: Sequence[Word], origin: Point = Point(0, 0)) -> Point | None
     return None
 
 
+def _says_continue(text: str) -> bool:
+    said = CONTINUE.match(text)
+    if said is None:
+        return False
+    return SequenceMatcher(None, said[1].lower(), "continue").ratio() >= CONTINUE_LIKENESS
+
+
 def find_continue(words: Sequence[Word], origin: Point = Point(0, 0)) -> Point | None:
     """Where the result screen's Continue button is, by its name: the rightmost one."""
-    found = [w for w in words if CONTINUE.search(w.text)]
+    found = [w for w in words if _says_continue(w.text)]
     if not found:
         return None
     center = max(found, key=lambda w: w.box.right).box.center

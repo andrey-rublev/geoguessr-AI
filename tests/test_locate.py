@@ -200,6 +200,27 @@ NARROW = [  # as read off an 800 by 600 window
 ]
 
 
+@pytest.mark.parametrize(
+    "read, found",
+    [
+        ("Continue", True),
+        ("CONTINUE", True),
+        ("Continue >", True),
+        ("Continue D", True),  # its play symbol, read as a letter
+        ("ContinueD", True),
+        ("Contnue", True),
+        ("Cantinue", True),
+        ("Continent", False),
+        ("Continue reading", False),
+        ("Conte", False),
+        ("Guess", False),
+    ],
+)
+def test_finds_continue_however_its_read_but_only_it(read, found):
+    words = [Word(read, Region(100, 200, 80, 30))]
+    assert find_continue(words) == (Point(140, 215) if found else None)
+
+
 def test_tells_a_window_too_narrow_to_play_in():
     assert shows_narrow_game(NARROW)
     assert not shows_narrow_game(draw_game()[1])

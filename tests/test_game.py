@@ -537,6 +537,42 @@ def test_stops_rather_than_click_an_advert_covering_continue(tmp_path, capsys):
     assert next(tmp_path.glob("*/round_01/continue_blocked.png")).exists()
 
 
+def test_looks_closer_for_continue_when_the_whole_row_reads_wrong(monkeypatch):
+    desk = FakeScreen().virtual_desktop()
+
+    class ReadsItCloser(FakeSignReader):
+        def words(self, image):
+            if image.width > desk.width // 2 + 1:
+                return []
+            return [Word("Continue D", Region(100, 10, 60, 20))]
+
+    monkeypatch.setattr(game_module, "SignReader", ReadsItCloser)
+    settings = BotSettings(rounds=1, record_answers=False, read_text=False, debug_dir=None)
+    layout = replace(LAYOUT, continue_button=None)
+
+    bot = OpenGuessrBot(layout, FakePredictor(), settings, FakeScreen(), FakeControls())
+    bot.play()
+
+    assert bot.layout.continue_button.x == desk.left + desk.width // 2 + 130
+
+
+def test_keeps_what_it_saw_when_it_cant_find_continue(monkeypatch, tmp_path, capsys):
+    class NeverReadsIt(FakeSignReader):
+        def words(self, image):
+            return []
+
+    monkeypatch.setattr(game_module, "SignReader", NeverReadsIt)
+    settings = BotSettings(
+        rounds=2, record_answers=False, read_text=False, debug_dir=tmp_path, continue_timeout=2.0
+    )
+    layout = replace(LAYOUT, continue_button=None)
+
+    OpenGuessrBot(layout, FakePredictor(), settings, FakeScreen(), FakeControls()).play()
+
+    assert "couldn't find the Continue button" in capsys.readouterr().out
+    assert next(tmp_path.glob("*/round_01/continue_not_found.png")).exists()
+
+
 def test_a_corner_slam_ends_the_run_like_the_stop_key(tmp_path, capsys):
     controls = FakeControls(slam_on_click=3)  # part-way into the second round
     settings = BotSettings(rounds=3, record_answers=False, read_text=False, debug_dir=tmp_path)

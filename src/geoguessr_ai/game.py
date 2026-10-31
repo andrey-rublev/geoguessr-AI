@@ -6,6 +6,7 @@ and waits on the result screen for the host to go on rather than pressing Contin
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import statistics
@@ -987,7 +988,7 @@ class OpenGuessrBot:
     def _press_continue(self, folder: Path | None) -> None:
         """Click Continue, but only once it looks as it did at first, not covered."""
         if self.layout.continue_button is None:
-            self._find_continue()
+            self._find_continue(folder)
         if self.continue_image is None:
             self.controls.click(self.layout.continue_button)
             return
@@ -1011,17 +1012,25 @@ class OpenGuessrBot:
             "Close whatever covers it and play again; if nothing does, re-run calibrate."
         )
 
-    def _find_continue(self) -> None:
+    def _find_continue(self, folder: Path | None = None) -> None:
         """Find the Continue button by its name, on the first result screen, and remember it and
-        how it looks, for the rounds to come."""
+        how it looks, for the rounds to come. It looks along the row and at the end of it by
+        turns: the screen doesn't change, so what's misread once would be every time."""
         guess, waited = self.layout.guess_button, 0.0
         page = self.layout.page or self.screen.virtual_desktop()
         row = Region(page.left, guess.y - 3 * HALF_HEIGHT, page.width, 6 * HALF_HEIGHT)
+        end = Region(row.left + row.width // 2, row.top, row.width - row.width // 2, row.height)
         if self._words is None:
             self._words = SignReader(models=["latin"], threads=2).words
-        corner = Point(row.left, row.top)
-        while (button := find_continue(self._words(self.screen.grab(row)), corner)) is None:
+        for part in itertools.cycle((row, end)):
+            seen = self.screen.grab(part)
+            button = find_continue(self._words(seen), Point(part.left, part.top))
+            if button is not None:
+                break
             if waited >= self.settings.continue_timeout:
+                if folder is not None:
+                    folder.mkdir(parents=True, exist_ok=True)
+                    seen.save(folder / "continue_not_found.png")
                 raise ContinueBlocked("couldn't find the Continue button on the result screen")
             self.controls.sleep(1.0)
             waited += 1.0

@@ -38,7 +38,7 @@ geoguessr-ai = "geoguessr_ai.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-geoguessr_ai = ["knowledge/*.png", "knowledge/*.txt"]
+geoguessr_ai = ["knowledge/*.png", "knowledge/*.txt", "desktop.html", "desktop.ico"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

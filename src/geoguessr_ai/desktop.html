@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>geoguessr-AI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23D5E6EC'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23A8127A' stroke-width='3.5'/%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%230F2C38'/%3E%3C/svg%3E">
+<style>
+/* A sailor's chart. Buff land, pale water, and magenta, which charts keep for what's been added to
+   them: here, what the bot plotted. At night, the dimmed colours a ship's chart display goes to. */
+:root {
+  color-scheme: light dark;
+  --paper: #f3f8f9;
+  --sea: #d5e6ec;
+  --sea-deep: #bfd6df;
+  --land: #cdb678;
+  --ink: #0f2c38;
+  --ink-soft: #456170;
+  --rule: #8caab6;
+  --plot: #a8127a;
+  --on-plot: #ffffff;
+  --right: #1f6a3c;
+  --display: "Bahnschrift", "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif;
+  --body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --data: "Cascadia Mono", "Consolas", "Menlo", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0e1f27;
+    --sea: #15303b;
+    --sea-deep: #24434f;
+    --land: #5d6240;
+    --ink: #dceaee;
+    --ink-soft: #a3bbc5;
+    --rule: #3f606d;
+    --plot: #f07cc6;
+    --on-plot: #0e1f27;
+    --right: #7fd09b;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 14px/1.45 var(--body);
+  display: grid;
+  grid-template-columns: 344px minmax(0, 1fr);
+  height: 100vh;
+}
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--plot); outline-offset: 2px; }
+.hidden-text {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+[hidden] { display: none !important; }
+
+/* The chart table's drawer: everything to choose. */
+.choices {
+  background: var(--sea);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--rule);
+}
+.choices-scroll { flex: 1; overflow-y: auto; padding: 20px 20px 12px; }
+.brand { display: flex; align-items: center; gap: 9px; margin: 0 0 18px; font: 600 19px/1 var(--display); letter-spacing: .01em; }
+.brand svg { width: 20px; height: 20px; flex: none; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.section { margin-top: 20px; }
+.section-name { display: block; padding: 0; margin: 0 0 7px; font: 600 12.5px/1.2 var(--display); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); }
+.hint { margin: 5px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--ink-soft); }
+
+.modes { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--ink); border-radius: 5px; overflow: hidden; }
+.modes label { position: relative; text-align: center; cursor: pointer; }
+.modes input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; }
+.modes span { display: block; padding: 7px 4px; font-weight: 600; }
+.modes input:checked + span { background: var(--ink); color: var(--paper); }
+.modes input:focus-visible + span { outline: 2px solid var(--plot); outline-offset: -4px; }
+
+.code {
+  width: 100%;
+  height: 58px;
+  padding: 0 12px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  font: 500 30px/1 var(--display);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.code::placeholder { color: var(--rule); opacity: 1; }
+.code[aria-invalid="true"] { border-color: var(--plot); box-shadow: inset 0 0 0 1px var(--plot); }
+.wrong { margin: 5px 0 0; font-size: 12.5px; color: var(--plot); font-weight: 600; }
+
+.place { display: grid; grid-template-columns: 18px 1fr; gap: 0 8px; padding: 8px 9px 9px 7px; border-left: 3px solid transparent; cursor: pointer; border-radius: 0 4px 4px 0; }
+.place + .place { margin-top: 2px; }
+.place:hover { background: var(--sea-deep); }
+.place:has(input:checked) { background: var(--paper); border-left-color: var(--plot); }
+.place input { margin: 3px 0 0; accent-color: var(--plot); }
+.place-name { font-weight: 600; }
+.place-says { grid-column: 2; font-size: 12.5px; line-height: 1.35; color: var(--ink-soft); }
+.set-up {
+  margin: 4px 0 4px 36px; padding: 2px 8px;
+  background: none; border: 1px solid var(--plot); border-radius: 4px; color: var(--plot); font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.set-up:hover { background: var(--plot); color: var(--on-plot); }
+
+.switch { display: grid; grid-template-columns: 1fr 36px; gap: 0 12px; align-items: start; padding: 7px 0; cursor: pointer; }
+.switch + .switch { border-top: 1px solid var(--sea-deep); }
+.switch-name { font-weight: 600; }
+.switch-says { grid-column: 1; font-size: 12.5px; line-height: 1.35; color: var(--ink-soft); }
+.switch input { grid-column: 2; grid-row: 1 / span 2; appearance: none; width: 36px; height: 20px; margin: 1px 0 0; background: var(--paper); border: 1px solid var(--ink); border-radius: 10px; position: relative; cursor: pointer; transition: background-color .14s; }
+.switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); transition: transform .14s; }
+.switch input:checked { background: var(--plot); border-color: var(--plot); }
+.switch input:checked::after { transform: translateX(16px); background: var(--on-plot); }
+
+.count { display: flex; align-items: center; gap: 10px; }
+.count input { width: 76px; height: 34px; padding: 0 8px; background: var(--paper); border: 1px solid var(--ink); border-radius: 5px; font: 500 17px/1 var(--data); }
+
+.go { padding: 12px 20px 16px; border-top: 1px solid var(--rule); }
+.go-button {
+  width: 100%; height: 50px; border: 0; border-radius: 5px; cursor: pointer;
+  background: var(--plot); color: var(--on-plot);
+  font: 600 20px/1 var(--display); letter-spacing: .02em;
+  transition: filter .12s, transform .08s;
+}
+.go-button:hover:not(:disabled) { filter: brightness(1.12); }
+.go-button:active:not(:disabled) { transform: translateY(1px); }
+.go-button:disabled { opacity: .45; cursor: not-allowed; }
+.go-button.stops { background: var(--ink); color: var(--paper); }
+.go-note { margin: 7px 0 0; font-size: 12.5px; color: var(--ink-soft); text-align: center; }
+#set-up-model { display: block; margin: 6px auto 0; }
+fieldset:disabled .place, fieldset:disabled .switch, fieldset:disabled .modes label { opacity: .55; cursor: default; }
+
+/* The chart, and how the game is going. */
+main { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; }
+.status { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 18px 24px 12px; }
+.status-words { min-width: 0; }
+.playing-what { margin: 0 0 3px; font: 500 13px/1.2 var(--display); letter-spacing: .05em; color: var(--ink-soft); min-height: 16px; }
+h1 { margin: 0; font: 600 44px/1.02 var(--display); font-stretch: 75%; letter-spacing: -.005em; }
+.detail { margin: 5px 0 0; font-size: 15px; color: var(--ink-soft); min-height: 22px; }
+.tabs { display: flex; gap: 2px; flex: none; }
+.tabs button { padding: 6px 12px; background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
+.tabs button:hover:not(:disabled) { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--plot); }
+.tabs button:disabled { opacity: .45; cursor: default; }
+
+.needs-you { display: flex; align-items: center; gap: 14px; margin: 0 24px 10px; padding: 10px 14px; background: var(--plot); color: var(--on-plot); border-radius: 5px; font-weight: 600; }
+.needs-you p { margin: 0; flex: 1; }
+.needs-you button { flex: none; padding: 5px 12px; background: var(--on-plot); color: var(--plot); border: 0; border-radius: 4px; font-weight: 700; cursor: pointer; }
+
+.tab { min-height: 0; padding: 0 24px 16px; display: flex; flex-direction: column; gap: 12px; }
+.chart-holder { flex: 0 1 auto; width: 100%; aspect-ratio: 1000 / 557; min-height: 200px; position: relative; }
+#chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.land { stroke: var(--land); stroke-width: 3.1; stroke-linecap: round; fill: none; }
+.graticule { stroke: var(--rule); stroke-width: .6; opacity: .55; }
+.scale-dark { fill: var(--ink); }
+.scale-light { fill: var(--paper); }
+.neatline { fill: none; stroke: var(--ink); stroke-width: 1; }
+.degrees { font: 400 10px var(--data); fill: var(--ink-soft); }
+.legend { font: 400 11px var(--body); fill: var(--ink-soft); }
+.legend-box { fill: var(--paper); fill-opacity: .82; }
+
+.plot-line { stroke: var(--plot); stroke-width: 1.6; fill: none; stroke-dasharray: 1; stroke-dashoffset: 0; }
+.plot.new .plot-line { animation: plotted .8s cubic-bezier(.3, .7, .2, 1) both; }
+.guess-mark { fill: var(--paper); stroke: var(--plot); stroke-width: 1.8; }
+.fix-ring { fill: var(--paper); stroke: var(--ink); stroke-width: 1.6; }
+.fix-dot { fill: var(--ink); }
+.plot.new .fix { animation: fixed .3s .65s ease-out both; transform-box: fill-box; transform-origin: center; }
+.plot-name { font: 600 12.5px var(--display); fill: var(--ink); stroke: var(--paper); stroke-width: 3.5; paint-order: stroke; stroke-linejoin: round; }
+.plots.has-hot .plot:not(.hot) { opacity: .28; }
+.plot { transition: opacity .12s; cursor: pointer; }
+@keyframes plotted { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes fixed { from { transform: scale(0); } to { transform: scale(1); } }
+
+.rounds-holder { flex: 1 1 0; min-height: 96px; overflow-y: auto; border-top: 1px solid var(--ink); scrollbar-width: thin; }
+table { width: 100%; border-collapse: collapse; }
+th { position: sticky; top: 0; background: var(--paper); text-align: left; padding: 6px 10px 5px 0; font: 600 12px/1.2 var(--display); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
+td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--sea); font: 400 13px/1.4 var(--data); white-space: nowrap; }
+.number { text-align: right; padding-right: 0; padding-left: 10px; }
+tbody tr { cursor: default; }
+tbody tr:hover, tbody tr.hot { background: var(--sea); }
+.wrong-country { color: var(--plot); font-weight: 600; }
+.right-country { color: var(--right); }
+.soft { color: var(--ink-soft); }
+tfoot td { position: sticky; bottom: 0; background: var(--paper); font-weight: 600; border-top: 1px solid var(--ink); border-bottom: 0; }
+.no-rounds { margin: 10px 0 2px; color: var(--ink-soft); }
+
+.screen { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.screen-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.screen-bar label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; }
+.screen-bar input { accent-color: var(--plot); margin: 0; }
+.quiet-button { padding: 4px 10px; background: none; border: 1px solid var(--ink); border-radius: 4px; font-weight: 600; cursor: pointer; }
+.quiet-button:hover { background: var(--ink); color: var(--paper); }
+iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); background: #000; }
+.messages { flex: 1; min-height: 0; margin: 0; padding: 12px; overflow: auto; background: var(--sea); border-radius: 5px; font: 400 12.5px/1.5 var(--data); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 860px) {
+  body { display: block; height: auto; min-height: 100vh; }
+  .choices { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .choices-scroll { overflow: visible; padding: 16px 16px 8px; }
+  .go { padding: 12px 16px 16px; position: sticky; bottom: 0; background: var(--sea); z-index: 2; }
+  main { display: block; }
+  .status { flex-direction: column; align-items: flex-start; padding: 16px 16px 10px; gap: 10px; }
+  h1 { font-size: 34px; }
+  .tabs { flex-wrap: wrap; }
+  .needs-you { margin: 0 16px 10px; flex-wrap: wrap; }
+  .tab { padding: 0 16px 16px; }
+  .chart-holder { min-height: 0; }
+  .rounds-holder { overflow-x: auto; }
+  .screen, .messages { min-height: 60vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<form class="choices" id="form" novalidate>
+  <div class="choices-scroll">
+    <p class="brand">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.6" fill="none" stroke="var(--plot)" stroke-width="2.4"/><circle cx="10" cy="10" r="2.4" fill="var(--ink)"/></svg>
+      geoguessr-AI
+    </p>
+    <fieldset id="all-choices">
+      <div class="modes" role="radiogroup" aria-label="What to play">
+        <label><input type="radio" name="mode" value="friends" checked><span>Friends' room</span></label>
+        <label><input type="radio" name="mode" value="play"><span>Solo game</span></label>
+      </div>
+
+      <div class="section" id="room-section">
+        <label class="section-name" for="room">Room code</label>
+        <input class="code" id="room" maxlength="7" placeholder="EW2-78U" autocomplete="off" spellcheck="false" aria-describedby="room-hint" autofocus>
+        <p class="wrong" id="room-wrong" role="alert" hidden></p>
+        <p class="hint" id="room-hint">The host's screen shows it. Leave it empty to join the room yourself, once the bot has started.</p>
+      </div>
+
+      <div class="section" id="rounds-section" hidden>
+        <label class="section-name" for="rounds">Rounds</label>
+        <div class="count"><input id="rounds" type="number" min="1" max="100" value="5"></div>
+      </div>
+
+      <fieldset class="section">
+        <legend class="section-name">Where it plays</legend>
+        <label class="place">
+          <input type="radio" name="where" value="hidden" checked>
+          <span class="place-name">On a hidden screen</span>
+          <span class="place-says" id="hidden-says">Your mouse and screen stay yours.</span>
+        </label>
+        <button type="button" class="set-up" id="set-up-ubuntu" hidden>Set it up</button>
+        <label class="place">
+          <input type="radio" name="where" value="browser">
+          <span class="place-name">In its own Chrome window</span>
+          <span class="place-says" id="browser-says">OpenGuessr's person check may stop it there.</span>
+        </label>
+        <label class="place">
+          <input type="radio" name="where" value="screen">
+          <span class="place-name">On this screen</span>
+          <span class="place-says" id="screen-says">Open the game first. It takes over your mouse until you press F8.</span>
+        </label>
+      </fieldset>
+
+      <fieldset class="section">
+        <legend class="section-name">How hard it plays</legend>
+        <label class="switch">
+          <span class="switch-name">One view only (NMPZ)</span>
+          <span class="switch-says">For NMPZ rooms, or to give your friends a chance. It scores about 7% less.</span>
+          <input type="checkbox" role="switch" id="nmpz">
+        </label>
+        <label class="switch">
+          <span class="switch-name">Read signs</span>
+          <span class="switch-says">Off makes it easier to beat.</span>
+          <input type="checkbox" role="switch" id="signs" checked>
+        </label>
+        <label class="switch" id="walk-switch">
+          <span class="switch-name">Walk on when unsure</span>
+          <input type="checkbox" role="switch" id="walk" checked>
+        </label>
+        <label class="switch" id="sun-switch">
+          <span class="switch-name">Look up at the sun</span>
+          <input type="checkbox" role="switch" id="sun" checked>
+        </label>
+      </fieldset>
+    </fieldset>
+  </div>
+  <div class="go">
+    <button class="go-button" id="go" type="submit">Start the bot</button>
+    <p class="go-note" id="go-note" hidden></p>
+    <button type="button" class="set-up" id="set-up-model" hidden>Build it (downloads about 5.4 GB)</button>
+  </div>
+</form>
+
+<main>
+  <header class="status">
+    <div class="status-words">
+      <p class="playing-what" id="playing-what"></p>
+      <h1 id="headline" aria-live="polite"></h1>
+      <p class="detail" id="detail" aria-live="polite"></p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="What to show">
+      <button role="tab" id="tab-chart" aria-controls="chart-tab" aria-selected="true">Chart</button>
+      <button role="tab" id="tab-screen" aria-controls="screen-tab" aria-selected="false" tabindex="-1" disabled>Bot's screen</button>
+      <button role="tab" id="tab-messages" aria-controls="messages-tab" aria-selected="false" tabindex="-1">Messages</button>
+    </div>
+  </header>
+
+  <div>
+    <div class="needs-you" id="needs-you" role="alert" hidden>
+      <p id="needs-you-text"></p>
+      <button type="button" id="needs-you-show" hidden>Show the bot's screen</button>
+    </div>
+  </div>
+
+  <section class="tab" id="chart-tab" role="tabpanel" aria-labelledby="tab-chart">
+    <div class="chart-holder">
+      <svg id="chart" viewBox="0 0 1000 557" preserveAspectRatio="xMidYMin meet" role="img" aria-label="A map of the world, with each round's guess and answer plotted on it. The table below lists the same rounds."></svg>
+    </div>
+    <div class="rounds-holder" id="rounds-holder">
+      <table id="rounds-table" hidden>
+        <thead><tr><th scope="col">Round</th><th scope="col">Guessed</th><th scope="col">Answer</th><th scope="col" class="number">Off by</th><th scope="col" class="number">Points</th></tr></thead>
+        <tbody id="rounds-body"></tbody>
+        <tfoot id="rounds-foot"></tfoot>
+      </table>
+      <p class="no-rounds" id="no-rounds">Each round goes on the chart and in this list as it's played.</p>
+    </div>
+  </section>
+
+  <section class="tab" id="screen-tab" role="tabpanel" aria-labelledby="tab-screen" hidden>
+    <div class="screen">
+      <div class="screen-bar">
+        <label><input type="checkbox" role="switch" id="use-screen"> Let me click on it</label>
+        <button type="button" class="quiet-button" id="open-screen">Open in my browser</button>
+      </div>
+      <iframe id="screen-view" title="The bot's screen"></iframe>
+    </div>
+  </section>
+
+  <section class="tab" id="messages-tab" role="tabpanel" aria-labelledby="tab-messages" hidden>
+    <pre class="messages" id="messages" tabindex="0">Nothing yet.</pre>
+  </section>
+</main>
+
+<script>
+"use strict";
+const CHART = "__CHART__";
+const token = new URLSearchParams(location.search).get("token");
+const $ = (selector) => document.querySelector(selector);
+const SVG = "http://www.w3.org/2000/svg";
+const WIDTH = 1000;
+const SCALE_BAR = 7;
+
+let state = null;
+let game = null;
+let tab = "chart";
+let hotRound = null;
+
+async function post(path, body = {}) {
+  const answer = await fetch(`${path}?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (answer.ok) return null;
+  return (await answer.json()).error || "That didn't work.";
+}
+
+// The chart: Mercator's projection, on which a straight line keeps one compass course.
+const mercator = (lat) => Math.log(Math.tan(Math.PI / 4 + (Math.min(Math.max(lat, -85), 85) * Math.PI) / 360));
+const top_ = mercator(CHART.north);
+const bottom = mercator(CHART.south);
+const HEIGHT = (WIDTH * (top_ - bottom)) / (2 * Math.PI);
+const toX = (lon) => ((lon + 180) / 360) * WIDTH;
+const toY = (lat) => Math.min(Math.max(((top_ - mercator(lat)) / (top_ - bottom)) * HEIGHT, 0), HEIGHT);
+
+function element(name, attributes = {}, parent = null) {
+  const made = document.createElementNS(SVG, name);
+  for (const [key, value] of Object.entries(attributes)) made.setAttribute(key, value);
+  if (parent) parent.append(made);
+  return made;
+}
+
+function drawChart() {
+  const chart = $("#chart");
+  chart.setAttribute("viewBox", `0 0 ${WIDTH} ${HEIGHT.toFixed(1)}`);
+  const step = WIDTH / CHART.land[0].length;
+  let dots = "";
+  CHART.land.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] === "1") {
+        const across = (x + 0.5 + (y % 2) * 0.5) * step;
+        dots += `M${across.toFixed(1)} ${((y + 0.5) * step).toFixed(1)}h0`;
+      }
+    }
+  });
+  element("path", { class: "land", d: dots }, chart);
+
+  for (let lon = -150; lon <= 150; lon += 30) {
+    element("line", { class: "graticule", x1: toX(lon), x2: toX(lon), y1: 0, y2: HEIGHT }, chart);
+  }
+  for (const lat of [-30, 0, 30, 60]) {
+    element("line", { class: "graticule", x1: 0, x2: WIDTH, y1: toY(lat), y2: toY(lat) }, chart);
+  }
+
+  // The chart's border: bars of ten degrees, which grow towards the poles as the map does.
+  for (let lon = -180, dark = true; lon < 180; lon += 10, dark = !dark) {
+    const cls = dark ? "scale-dark" : "scale-light";
+    const x = toX(lon);
+    const across = toX(lon + 10) - x;
+    element("rect", { class: cls, x, y: 0, width: across, height: SCALE_BAR }, chart);
+    element("rect", { class: cls, x, y: HEIGHT - SCALE_BAR, width: across, height: SCALE_BAR }, chart);
+  }
+  for (let lat = -60, dark = true; lat < 80; lat += 10, dark = !dark) {
+    const cls = dark ? "scale-dark" : "scale-light";
+    const y = toY(lat + 10);
+    const down = toY(lat) - y;
+    element("rect", { class: cls, x: 0, y, width: SCALE_BAR, height: down }, chart);
+    element("rect", { class: cls, x: WIDTH - SCALE_BAR, y, width: SCALE_BAR, height: down }, chart);
+  }
+  element("rect", { class: "neatline", x: 0.5, y: 0.5, width: WIDTH - 1, height: HEIGHT - 1 }, chart);
+  element("rect", { class: "neatline", x: SCALE_BAR, y: SCALE_BAR, width: WIDTH - 2 * SCALE_BAR, height: HEIGHT - 2 * SCALE_BAR }, chart);
+
+  const named = (lon) => (lon === 0 ? "0°" : `${Math.abs(lon)}°${lon < 0 ? "W" : "E"}`);
+  for (const lon of [-120, -60, 0, 60, 120]) {
+    const label = element("text", { class: "degrees", x: toX(lon) + 3, y: SCALE_BAR + 12 }, chart);
+    label.textContent = named(lon);
+  }
+  for (const lat of [-30, 0, 30, 60]) {
+    const label = element("text", { class: "degrees", x: SCALE_BAR + 4, y: toY(lat) - 3 }, chart);
+    label.textContent = lat === 0 ? "0°" : `${Math.abs(lat)}°${lat < 0 ? "S" : "N"}`;
+  }
+
+  // The key, in the empty South Pacific: where charts keep theirs.
+  const key = element("g", { transform: `translate(${SCALE_BAR + 14} ${HEIGHT - SCALE_BAR - 50})` }, chart);
+  element("rect", { class: "legend-box", x: -6, y: -8, width: 112, height: 46 }, key);
+  element("rect", { class: "guess-mark", x: 0, y: 0, width: 9, height: 9 }, key);
+  element("text", { class: "legend", x: 16, y: 9 }, key).textContent = "The bot's guess";
+  element("circle", { class: "fix-ring", cx: 4.5, cy: 24, r: 5.2 }, key);
+  element("circle", { class: "fix-dot", cx: 4.5, cy: 24, r: 1.6 }, key);
+  element("text", { class: "legend", x: 16, y: 28 }, key).textContent = "The answer";
+
+  element("g", { class: "plots", id: "plots" }, chart);
+}
+
+// Each round's plot: a line from the guess, the shorter way round the world, to the answer.
+function lineBetween(guess, answer) {
+  const [x1, y1] = [toX(guess[1]), toY(guess[0])];
+  const [x2, y2] = [toX(answer[1]), toY(answer[0])];
+  if (Math.abs(x2 - x1) <= WIDTH / 2) return `M${x1} ${y1}L${x2} ${y2}`;
+  const across = x2 > x1 ? x2 - WIDTH : x2 + WIDTH;
+  const edgeX = x2 > x1 ? 0 : WIDTH;
+  const edgeY = y1 + ((edgeX - x1) / (across - x1)) * (y2 - y1);
+  return `M${x1} ${y1}L${edgeX} ${edgeY}M${WIDTH - edgeX} ${edgeY}L${x2} ${y2}`;
+}
+
+function drawPlots(rounds) {
+  const plots = $("#plots");
+  const shown = new Set();
+  for (const round of rounds) {
+    if (!round.guess) continue;
+    const id = `plot-${round.number}`;
+    shown.add(id);
+    let plot = document.getElementById(id);
+    if (!plot) {
+      plot = element("g", { class: "plot", id, "data-round": round.number }, plots);
+      plot.addEventListener("mouseenter", () => setHot(round.number));
+      plot.addEventListener("mouseleave", () => setHot(null));
+      const x = toX(round.guess[1]);
+      const y = toY(round.guess[0]);
+      element("rect", { class: "guess-mark", x: x - 4.5, y: y - 4.5, width: 9, height: 9 }, plot);
+    }
+    if (round.answer && !plot.dataset.answered) {
+      plot.dataset.answered = "yes";
+      plot.classList.add("new");
+      const x = toX(round.answer[1]);
+      const y = toY(round.answer[0]);
+      const line = element("path", { class: "plot-line", d: lineBetween(round.guess, round.answer), pathLength: 1 });
+      plot.prepend(line);
+      const fix = element("g", { class: "fix" }, plot);
+      element("circle", { class: "fix-ring", cx: x, cy: y, r: 5.8 }, fix);
+      element("circle", { class: "fix-dot", cx: x, cy: y, r: 1.8 }, fix);
+      const nearEdge = x > WIDTH - 40;
+      const label = element("text", { class: "plot-name", x: x + (nearEdge ? -9 : 9), y: y + 4.5, "text-anchor": nearEdge ? "end" : "start" }, plot);
+      label.textContent = round.number;
+    }
+  }
+  for (const plot of [...plots.children]) if (!shown.has(plot.id)) plot.remove();
+}
+
+function setHot(number) {
+  hotRound = number;
+  $("#plots").classList.toggle("has-hot", number !== null);
+  for (const plot of $("#plots").children) plot.classList.toggle("hot", Number(plot.dataset.round) === number);
+  for (const row of $("#rounds-body").children) row.classList.toggle("hot", Number(row.dataset.round) === number);
+}
+
+function drawRounds(rounds) {
+  const body = $("#rounds-body");
+  $("#rounds-table").hidden = rounds.length === 0;
+  $("#no-rounds").hidden = rounds.length > 0;
+  body.replaceChildren(
+    ...rounds.map((round) => {
+      const row = document.createElement("tr");
+      row.dataset.round = round.number;
+      row.addEventListener("mouseenter", () => setHot(round.number));
+      row.addEventListener("mouseleave", () => setHot(null));
+      const cell = (text, cls = "") => {
+        const made = document.createElement("td");
+        made.textContent = text;
+        made.className = cls;
+        row.append(made);
+        return made;
+      };
+      cell(round.number);
+      const place = round.guess_country ? `${round.guess_country} ${round.sure}%` : "";
+      cell(round.guess ? place || "pin down" : round.missed ? "no pin" : "looking…", round.guess ? "" : "soft");
+      if (round.answer) {
+        const answer = cell(round.answer_country || "?", round.right ? "right-country" : "wrong-country");
+        const said = document.createElement("span");
+        said.className = "hidden-text";
+        said.textContent = round.right ? " the right country" : " the wrong country";
+        answer.append(said);
+        if (round.right) answer.prepend("✓ ");
+        cell(`${round.km.toLocaleString("en")} km`, "number");
+        cell(round.points.toLocaleString("en"), "number");
+      } else {
+        cell("", "soft");
+        cell("", "number");
+        cell(round.expected ? `expects ~${round.expected.toLocaleString("en")}` : "", "number soft");
+      }
+      return row;
+    }),
+  );
+  const answered = rounds.filter((round) => round.answer);
+  const foot = $("#rounds-foot");
+  foot.replaceChildren();
+  if (answered.length > 1) {
+    const mean = (read) => answered.reduce((sum, round) => sum + read(round), 0) / answered.length;
+    const right = answered.filter((round) => round.right).length;
+    const row = document.createElement("tr");
+    for (const [text, cls] of [
+      ["Average", ""],
+      ["", ""],
+      [`${right} of ${answered.length} right`, ""],
+      [`${Math.round(mean((r) => r.km)).toLocaleString("en")} km`, "number"],
+      [Math.round(mean((r) => r.points)).toLocaleString("en"), "number"],
+    ]) {
+      const made = document.createElement("td");
+      made.textContent = text;
+      made.className = cls;
+      row.append(made);
+    }
+    foot.append(row);
+  }
+  const holder = $("#rounds-holder");
+  holder.scrollTop = holder.scrollHeight;
+  if (hotRound !== null) setHot(hotRound);
+}
+
+// The choices.
+const WHERE_NAMES = { hidden: "Hidden screen", browser: "Its own Chrome window", screen: "This screen" };
+const formatCode = (text) => {
+  const code = text.replace(/[^0-9a-z]/gi, "").toUpperCase().slice(0, 6);
+  return code.length > 3 ? `${code.slice(0, 3)}-${code.slice(3)}` : code;
+};
+
+function chosen() {
+  return {
+    mode: document.querySelector("[name=mode]:checked").value,
+    room: $("#room").value,
+    where: document.querySelector("[name=where]:checked").value,
+    rounds: Number($("#rounds").value),
+    nmpz: $("#nmpz").checked,
+    signs: $("#signs").checked,
+    walk: $("#walk").checked,
+    sun: $("#sun").checked,
+  };
+}
+
+function restore(saved) {
+  for (const [name, value] of [["mode", saved.mode], ["where", saved.where]]) {
+    const radio = document.querySelector(`[name=${name}][value="${value}"]`);
+    if (radio) radio.checked = true;
+  }
+  if (saved.rounds) $("#rounds").value = saved.rounds;
+  for (const name of ["nmpz", "signs", "walk", "sun"]) {
+    if (name in saved) document.getElementById(name).checked = saved[name];
+  }
+}
+
+function showRoomProblem(problem) {
+  $("#room-wrong").textContent = problem;
+  $("#room-wrong").hidden = !problem;
+  if (problem) $("#room").setAttribute("aria-invalid", "true");
+  else $("#room").removeAttribute("aria-invalid");
+}
+
+function drawChoices() {
+  const picks = chosen();
+  const setup = state ? state.setup : {};
+  const running = Boolean(state && state.running);
+  $("#room-section").hidden = picks.mode !== "friends" || picks.where === "screen";
+  $("#rounds-section").hidden = picks.mode !== "play";
+  $("#walk-switch").hidden = picks.nmpz;
+  $("#sun-switch").hidden = picks.nmpz;
+  $("#all-choices").disabled = running;
+
+  const hiddenSays = $("#hidden-says");
+  if (setup.ubuntu === null || setup.ubuntu === undefined) hiddenSays.textContent = "Checking it's set up…";
+  else if (setup.ubuntu) hiddenSays.textContent = "Your mouse and screen stay yours.";
+  else hiddenSays.textContent = "Not set up yet. Setting it up downloads about 1.5 GB.";
+  $("#set-up-ubuntu").hidden = setup.ubuntu !== false;
+  $("#set-up-model").hidden = setup.model !== false;
+  $("#browser-says").textContent = setup.chrome === false
+    ? "Needs Playwright: pip install playwright."
+    : "OpenGuessr's person check may stop it there.";
+
+  const go = $("#go");
+  const stopping = running && state.progress && state.progress.phase === "stopping";
+  go.classList.toggle("stops", running);
+  go.textContent = stopping ? "Stopping…" : running ? "Stop the bot" : "Start the bot";
+  let blocked = "";
+  if (!running) {
+    if (setup.model === false) blocked = "It has no model to play with yet.";
+    else if (picks.where === "hidden" && setup.ubuntu === false) blocked = "Set up the hidden screen, or choose another place.";
+    else if (picks.where === "browser" && setup.chrome === false) blocked = "Its Chrome window needs Playwright.";
+  }
+  go.disabled = stopping || Boolean(blocked);
+  $("#go-note").textContent = blocked;
+  $("#go-note").hidden = !blocked;
+
+  if (!running && !(state && state.progress)) drawIdle(picks);
+}
+
+function drawIdle(picks) {
+  $("#playing-what").textContent = "";
+  const onScreen = picks.where === "screen";
+  if (picks.mode === "play") {
+    $("#headline").textContent = "Ready for a solo game";
+    $("#detail").textContent = onScreen
+      ? "Open a Singleplayer game first, then press Start."
+      : `Press Start, and it plays ${picks.rounds || 5} rounds.`;
+  } else if (onScreen) {
+    $("#headline").textContent = "Ready for a room";
+    $("#detail").textContent = "Join the room in your browser first, then press Start.";
+  } else {
+    $("#headline").textContent = picks.room ? `Ready to join ${picks.room}` : "Paste a room code";
+    $("#detail").textContent = "Press Start, and it plays each round the host starts.";
+  }
+}
+
+// How the game is going.
+function setTab(name) {
+  tab = name;
+  for (const which of ["chart", "screen", "messages"]) {
+    const on = which === name;
+    const button = document.getElementById(`tab-${which}`);
+    button.setAttribute("aria-selected", on);
+    button.tabIndex = on ? 0 : -1;
+    document.getElementById(`${which}-tab`).hidden = !on;
+  }
+  drawScreen();
+  if (name === "messages") $("#messages").scrollTop = $("#messages").scrollHeight;
+}
+
+function screenAddress() {
+  const address = state && state.progress ? state.progress.screen : "";
+  if (!address) return "";
+  return $("#use-screen").checked ? address : `${address}&view_only=1`;
+}
+
+function drawScreen() {
+  const view = $("#screen-view");
+  const address = tab === "screen" ? screenAddress() : "";
+  if (view.dataset.address !== address) {
+    view.dataset.address = address;
+    if (address) view.src = address;
+    else view.removeAttribute("src");
+  }
+}
+
+function draw(message) {
+  state = message;
+  const progress = state.progress;
+  if (state.game !== game) {
+    game = state.game;
+    if (game > 0) {
+      $("#messages").textContent = "";
+      $("#use-screen").checked = false;
+    }
+    restoredOnce();
+    if (progress) setTab(tab === "screen" ? "chart" : tab);
+  }
+  if (message.lines.length) {
+    const log = $("#messages");
+    const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    log.append(message.lines.join("\n") + "\n");
+    if (atEnd) log.scrollTop = log.scrollHeight;
+  }
+  if (progress) {
+    $("#headline").textContent = progress.headline;
+    $("#detail").textContent = progress.detail;
+    document.title = `${progress.headline}: geoguessr-AI`;
+    $("#playing-what").textContent = playingWhat(state.choices);
+    drawPlots(progress.rounds);
+    drawRounds(progress.rounds);
+    const needs = progress.attention;
+    $("#needs-you").hidden = !needs;
+    if (needs) {
+      $("#needs-you-text").textContent = needs.text;
+      $("#needs-you-show").hidden = !progress.screen;
+    }
+    const canWatch = Boolean(progress.screen);
+    $("#tab-screen").disabled = !canWatch;
+    if (!canWatch && tab === "screen") setTab("chart");
+    drawScreen();
+  }
+  drawChoices();
+}
+
+let restored = false;
+function restoredOnce() {
+  if (restored) return;
+  restored = true;
+  restore(state.saved);
+  if (state.choices) restore(state.choices);
+}
+
+function playingWhat(choices) {
+  const parts = [];
+  if (choices.mode === "play") parts.push(`Solo game, ${choices.rounds} rounds`);
+  else parts.push(choices.room ? `Room ${formatCode(choices.room)}` : "Friends' room");
+  parts.push(WHERE_NAMES[choices.where]);
+  if (choices.nmpz) parts.push("One view only");
+  if (!choices.signs) parts.push("Not reading signs");
+  return parts.join("  ·  ");
+}
+
+// What you can do.
+$("#form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (state && state.running) {
+    await post("/stop");
+    return;
+  }
+  const picks = chosen();
+  const typed = picks.room.replace(/[^0-9a-z]/gi, "");
+  if (picks.mode === "friends" && picks.where !== "screen" && typed && typed.length !== 6) {
+    showRoomProblem("A room code has six letters and digits, like EW2-78U.");
+    $("#room").focus();
+    return;
+  }
+  showRoomProblem("");
+  const problem = await post("/start", picks);
+  if (problem) showRoomProblem(problem);
+});
+$("#room").addEventListener("input", (event) => {
+  event.target.value = formatCode(event.target.value);
+  showRoomProblem("");
+  drawChoices();
+});
+$("#form").addEventListener("change", drawChoices);
+$("#set-up-ubuntu").addEventListener("click", (event) => {
+  event.preventDefault();
+  post("/setup", { what: "ubuntu" });
+});
+$("#set-up-model").addEventListener("click", () => post("/setup", { what: "model" }));
+$("#open-screen").addEventListener("click", () => post("/open-screen"));
+$("#use-screen").addEventListener("change", drawScreen);
+$("#needs-you-show").addEventListener("click", () => {
+  $("#use-screen").checked = true;
+  setTab("screen");
+});
+
+const TABS = ["chart", "screen", "messages"];
+for (const name of TABS) document.getElementById(`tab-${name}`).addEventListener("click", () => setTab(name));
+$(".tabs").addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+  const available = TABS.filter((name) => !document.getElementById(`tab-${name}`).disabled);
+  const at = available.indexOf(tab);
+  const next = available[(at + (event.key === "ArrowRight" ? 1 : available.length - 1)) % available.length];
+  setTab(next);
+  document.getElementById(`tab-${next}`).focus();
+});
+
+addEventListener("beforeunload", (event) => {
+  if (state && state.running) event.preventDefault();  // closing the window stops the bot
+});
+
+drawChart();
+drawChoices();
+new EventSource(`/events?token=${encodeURIComponent(token)}`).onmessage = (event) => draw(JSON.parse(event.data));
+</script>
+</body>
+</html>

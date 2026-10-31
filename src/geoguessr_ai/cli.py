@@ -538,6 +538,16 @@ def cmd_friends(args: argparse.Namespace) -> None:
     _run_bot(args, settings)
 
 
+def cmd_app(args: argparse.Namespace) -> None:
+    from .desktop import main as open_app
+    from .desktop import make_shortcut
+
+    if args.shortcut:
+        print(f"Put an icon for the app on your desktop: {make_shortcut()}")
+    else:
+        open_app()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="geoguessr-ai",
@@ -694,6 +704,13 @@ def build_parser() -> argparse.ArgumentParser:
         add_browser(p)
         add_prior_strength(p)
         add_device(p)
+
+    p = add("app", cmd_app, "Open the desktop app, to start the bot and watch it play.")
+    p.add_argument(
+        "--shortcut",
+        action="store_true",
+        help="put an icon on your desktop that opens it, with no terminal",
+    )
 
     p = add(
         "play",

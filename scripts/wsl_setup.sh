@@ -13,7 +13,7 @@ VENV=${GEOGUESSR_VENV:-$HOME/geoguessr-venv}
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb x11-utils openbox x11vnc \
     novnc websockify fonts-noto-core fonts-noto-cjk fonts-liberation python3-venv python3-dev \
-    python3-tk wget
+    python3-tk wget libgl1-mesa-dri
 
 if ! command -v google-chrome >/dev/null; then
     deb=$(mktemp --suffix=.deb)

@@ -1,7 +1,29 @@
+import sys
+import types
+
 import numpy as np
 from PIL import Image
 
+from geoguessr_ai.model import backbone
 from geoguessr_ai.model.backbone import in_batches, square_crops
+
+
+def test_a_gpu_that_cant_take_the_image_model_leaves_it_to_the_cpu(monkeypatch, tmp_path, capsys):
+    class Core:
+        available_devices = ("CPU", "GPU")
+
+        def read_model(self, xml):
+            return xml
+
+        def compile_model(self, model, device, config):
+            raise RuntimeError("the driver is too old")
+
+    monkeypatch.setitem(sys.modules, "openvino", types.SimpleNamespace(Core=Core))
+    monkeypatch.setattr(backbone, "OPENVINO_DIR", tmp_path)
+    (tmp_path / "some__model-16.xml").write_text("converted")
+
+    assert backbone._intel_gpu("some/model", 336) is None
+    assert "the driver is too old" in capsys.readouterr().out
 
 
 def test_in_batches_pads_the_last_batch_and_drops_what_the_padding_gave():

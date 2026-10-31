@@ -142,10 +142,14 @@ def _intel_gpu(name: str, size: int):
     if "GPU" not in core.available_devices:
         return None
     xml = OPENVINO_DIR / f"{name.replace('/', '__')}-{OPENVINO_BATCH}.xml"
-    if not xml.exists():
-        print(f"Converting {name} to run on the GPU (once, a minute or two)...")
-        _convert(ov, name, size, xml)
-    return core.compile_model(core.read_model(xml), "GPU", {"INFERENCE_PRECISION_HINT": "f16"})
+    try:
+        if not xml.exists():
+            print(f"Converting {name} to run on the GPU (once, a minute or two)...")
+            _convert(ov, name, size, xml)
+        return core.compile_model(core.read_model(xml), "GPU", {"INFERENCE_PRECISION_HINT": "f16"})
+    except Exception as error:  # an old driver, or too little memory: the CPU can do it instead
+        print(f"The image model will run on the CPU, as the GPU couldn't take it: {error}")
+        return None
 
 
 def _convert(ov, name: str, size: int, xml: Path) -> None:

@@ -424,9 +424,11 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
 
     from .buttons import button_image_path
     from .game import OpenGuessrBot, load_sign_reader
+    from .windows import COMPUTER_AWAKE, SCREEN_AWAKE, keep_awake
 
     if not args.model.exists():
         raise SystemExit(f"{args.model} not found. Get one with `geoguessr-ai fetch-model`.")
+    keep_awake(COMPUTER_AWAKE, SCREEN_AWAKE)  # a game on this screen draws nothing with it off
     if args.layout is None:
         args.layout = _browser_layout(args.default_layout, args.browser)
     predictor = _predictor(args)
@@ -915,7 +917,10 @@ def _play_hidden(argv: list[str], args: argparse.Namespace) -> None:
         raise SystemExit("--hidden is for Windows: here, run scripts/wsl_screen.sh")
     if args.browser:
         raise SystemExit("--hidden plays on a screen of its own: leave out --browser")
+    from .windows import COMPUTER_AWAKE, keep_awake
+
     print(f"Playing on a screen of the bot's own, in WSL's {WSL_DISTRO}.", flush=True)
+    keep_awake(COMPUTER_AWAKE)  # this screen can go dark: the game isn't on it
     try:
         bot = subprocess.Popen(wsl_command("bash", "scripts/wsl_screen.sh", *argv))
     except FileNotFoundError:

@@ -183,6 +183,30 @@ def test_hidden_plays_on_a_screen_of_its_own_in_wsl(monkeypatch):
         main(["play", "--hidden", "--browser"])
 
 
+def test_keeps_the_computer_awake_but_lets_the_screen_go_dark_on_a_screen_of_its_own(monkeypatch):
+    class Bot:
+        def __init__(self, command):
+            pass
+
+        def wait(self):
+            return 0
+
+    asked = []
+    monkeypatch.setattr(windows, "keep_awake", lambda *what: asked.append(what))
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(config, "_distro", "Ubuntu")
+    monkeypatch.setattr(cli.subprocess, "Popen", Bot)
+
+    main(["play", "--hidden"])
+
+    assert asked == [(windows.COMPUTER_AWAKE,)]
+
+
+def test_asking_windows_to_stay_awake_is_taken():
+    windows.keep_awake(windows.COMPUTER_AWAKE)
+    windows.keep_awake()
+
+
 def test_on_a_screen_of_its_own_it_joins_there_not_in_a_browser(monkeypatch):
     ran = []
     monkeypatch.setattr(cli, "_run_bot", lambda args, settings: ran.append(args))
@@ -450,13 +474,16 @@ def desk(tmp_path, monkeypatch):
     return play
 
 
-def test_play_reads_every_answer_and_says_how_it_went(desk, tmp_path, capsys):
+def test_play_reads_every_answer_and_says_how_it_went(desk, tmp_path, capsys, monkeypatch):
     layout = tmp_path / "layout.json"
     LAYOUT.save(layout)
     street_view = TurningStreetView()
+    awake = []
+    monkeypatch.setattr(windows, "keep_awake", lambda *what: awake.append(what))
 
     desk(["play", "--rounds", "2", "--layout", str(layout), "--no-look-up"], street_view)
 
+    assert awake == [(windows.COMPUTER_AWAKE, windows.SCREEN_AWAKE)]
     assert desk.predictor.view_counts == [4, 4]
     assert street_view.clicks.count(LAYOUT.continue_button) == 2
     saved = [json.loads(p.read_text()) for p in tmp_path.glob("runs/*/round_*/round.json")]

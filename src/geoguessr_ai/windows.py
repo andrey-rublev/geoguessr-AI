@@ -1,6 +1,7 @@
-"""Bring OpenGuessr's browser window to the front, on Windows, for when none of it shows on
-screen to be found: hidden behind other windows, or minimised. Only the window's title is
-looked at, as the taskbar shows it; the game itself is still only ever seen in pixels."""
+"""What the bot asks of Windows: to stay awake while it plays, and to bring OpenGuessr's browser
+window to the front, for when none of it shows on screen to be found: hidden behind other windows,
+or minimised. Only the window's title is looked at, as the taskbar shows it; the game itself is
+still only ever seen in pixels."""
 
 from __future__ import annotations
 
@@ -9,6 +10,20 @@ import sys
 TITLE = "OpenGuessr - Free"
 """The start of the game's tab title, which a browser window shows while that tab is open."""
 SW_RESTORE = 9
+STAYS_ON, COMPUTER_AWAKE, SCREEN_AWAKE = 0x80000000, 0x1, 0x2
+"""Flags of Windows' ``SetThreadExecutionState``."""
+
+
+def keep_awake(*what: int) -> None:
+    """Keep the computer from sleeping for as long as this thread lasts: Windows takes a bot playing
+    by itself for nobody using the computer, and would put it to sleep mid-game."""
+    if sys.platform == "win32":
+        import ctypes
+
+        flags = STAYS_ON
+        for flag in what:
+            flags |= flag
+        ctypes.windll.kernel32.SetThreadExecutionState(ctypes.c_uint(flags))
 
 
 def bring_forward(title: str = TITLE) -> bool:

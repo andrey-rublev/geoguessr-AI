@@ -29,7 +29,7 @@ fi
 # an accent. It's run from there as it complains from a Linux folder.
 profile=$(cd /mnt/c && powershell.exe -NoProfile -Command \
     '[Console]::OutputEncoding = [Text.Encoding]::UTF8; $env:USERPROFILE' 2>/dev/null | tr -d '\r')
-WINDOWS_HOME=${WINDOWS_HOME:-$(wslpath -u "$profile" 2>/dev/null || echo "/mnt/c/Users/${USER:-}")}
+WINDOWS_HOME=${WINDOWS_HOME:-$([ -n "$profile" ] && wslpath -u "$profile" 2>/dev/null || echo "/mnt/c/Users/${USER:-}")}
 
 pids=()
 stop() {

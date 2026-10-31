@@ -183,6 +183,11 @@ def test_says_what_it_needs_from_you(line, says):
     assert says in played(line).attention["text"]
 
 
+def test_says_when_its_getting_the_image_model_ready():
+    line = "Converting geolocal/StreetCLIP to run on the GPU (once, a minute or two)..."
+    assert "just once" in played(line).detail
+
+
 def test_says_when_its_starting_a_solo_game_itself():
     assert played("Starting a Singleplayer game").detail == "Starting a solo game"
 

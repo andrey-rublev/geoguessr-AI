@@ -372,6 +372,7 @@ _LINES: Sequence[tuple[re.Pattern, Callable[[Progress, re.Match], None]]] = [
         (r"^OpenGuessr's window is too narrow", Progress._narrow),
         (r"^Found the game", Progress._found),
         (r"^Starting a Singleplayer game", _saying("Starting a solo game")),
+        (r"^Converting .+ to run on the GPU", _saying("Getting the image model ready, just once")),
         (r"^The bot's screen: (\S+)", Progress._screen),
         (r"^Starting in (\d+)", _saying("Starting in {} s: let go of the mouse")),
         (r"^Playing on a screen of the bot's own", _saying("Opening its screen")),

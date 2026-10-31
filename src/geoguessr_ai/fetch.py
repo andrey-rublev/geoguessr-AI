@@ -174,6 +174,15 @@ def fetch_sign_reader() -> None:
     SignReader()
 
 
+def ready_image_model(name: str = IMAGE_MODEL) -> None:
+    """Have the image model ready for this computer's GPU now, not before the first round, and where
+    the hidden screen finds it: Windows can keep that cool, as Linux in WSL can't."""
+    from .model.backbone import ImageEncoder
+
+    print("Getting the image model ready for this computer...", flush=True)
+    ImageEncoder(name)
+
+
 def fetch_model(
     root: Path = Path("."), steps: tuple[Callable[[], None], ...] | None = None
 ) -> None:
@@ -187,6 +196,7 @@ def fetch_model(
         print("Unpacking the model...", flush=True)
         unpack(pack, root)
         pack.unlink()
-    for step in steps if steps is not None else (fetch_image_model, fetch_sign_reader):
+    every_step = (fetch_image_model, fetch_sign_reader, ready_image_model)
+    for step in steps if steps is not None else every_step:
         step()
     print("Everything's here: the bot is ready to play.", flush=True)

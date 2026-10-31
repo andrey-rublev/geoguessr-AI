@@ -68,7 +68,7 @@ LAND_MOST = 800
 CHART_NORTH, CHART_SOUTH = 78.0, -58.0
 """The chart runs from here to here: Street View goes no further, bar a few rounds in the Arctic.
 On Mercator's projection, like OpenGuessr's map and sailors' charts."""
-FETCHING = re.compile(r"^Fetching (.+?)(?:: (\d+)%|\.\.\.)$")
+FETCHING = re.compile(r"^(?:Fetching|Getting) (.+?)(?:: (\d+)%|\.\.\.)$")
 
 
 def land_rows(

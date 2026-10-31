@@ -198,7 +198,7 @@ h1 { margin: 0; font: 600 44px/1.02 var(--display); font-stretch: 75%; letter-sp
 .plot.new .fix { animation: fixed .3s .65s ease-out both; transform-box: fill-box; transform-origin: center; }
 .plot-name { font: 600 11.5px var(--display); fill: var(--ink); stroke: var(--paper); stroke-width: 3; paint-order: stroke; stroke-linejoin: round; }
 .plot.old:not(.hot) :is(.guess-mark, .fix-ring, .plot-name) { display: none; }
-.plot.old:not(.hot) .plot-line { stroke-width: .8; opacity: .3; }
+.plot.old:not(.hot) .plot-line { stroke-width: .8; opacity: .3; pointer-events: none; }
 .plot.old:not(.hot) .fix-dot { opacity: .55; }
 .plots.has-hot .plot:not(.hot) { opacity: .25; }
 .plot { cursor: pointer; }
@@ -432,6 +432,7 @@ const TALL = (NORTH - mercator(CHART.south)) / (2 * Math.PI);  // the chart's he
 const COLUMNS = CHART.land[0].length;
 const MAX_ZOOM = 128;
 const MAX_LAND_LEVEL = 7;  // the land mask goes no finer than this many halvings of the first dots
+const LAND_MOST = 800;  // the most rows or columns of dots to ask for at once
 const DOT = 0.28;  // a land dot's radius, as a share of the space between dots
 const BAR = 6;  // how wide the chart's border of degree bars is, in pixels
 const FIT_ZOOM = 32;  // the closest a round is shown when picked, for a guess right on the answer
@@ -563,12 +564,13 @@ function drawLand(edges) {
 
 // The rows and columns of dots the view takes at ``level``.
 function landWanted(level, edges) {
-  const step = shown.world / (COLUMNS * 2 ** level);
+  const columns = COLUMNS * 2 ** level;
+  const step = shown.world / columns;
   return {
     firstRow: Math.max(Math.floor((edges.top - shown.top) / step), 0),
-    lastRow: Math.ceil((edges.bottom - shown.top) / step),
+    lastRow: Math.min(Math.ceil((edges.bottom - shown.top) / step), Math.round(TALL * columns)),
     firstColumn: Math.max(Math.floor((edges.left - shown.left) / step), 0),
-    lastColumn: Math.ceil((edges.right - shown.left) / step),
+    lastColumn: Math.min(Math.ceil((edges.right - shown.left) / step), columns),
   };
 }
 
@@ -577,8 +579,8 @@ function sheetFor(level, edges) {
   return (sheets.get(level) || []).find((sheet) =>
     sheet.row <= want.firstRow &&
     sheet.column <= want.firstColumn &&
-    sheet.row + sheet.rows.length >= Math.min(want.lastRow, COLUMNS * 2 ** level) &&
-    sheet.column + sheet.rows[0].length >= Math.min(want.lastColumn, COLUMNS * 2 ** level));
+    sheet.row + sheet.rows.length >= want.lastRow &&
+    sheet.column + sheet.rows[0].length >= want.lastColumn);
 }
 
 const askForLand = debounced(async (level, edges) => {
@@ -587,8 +589,8 @@ const askForLand = debounced(async (level, edges) => {
   const marginColumns = want.lastColumn - want.firstColumn;
   const row = Math.max(want.firstRow - (marginRows >> 1), 0);
   const column = Math.max(want.firstColumn - (marginColumns >> 1), 0);
-  const rows = marginRows * 2;
-  const columns = marginColumns * 2;
+  const rows = Math.min(marginRows * 2, LAND_MOST);
+  const columns = Math.min(marginColumns * 2, LAND_MOST);
   try {
     const answer = await fetch(`/land?token=${encodeURIComponent(token)}&level=${level}&row=${row}&column=${column}&rows=${rows}&columns=${columns}`);
     if (!answer.ok) return;
@@ -738,7 +740,9 @@ function drawPlots(rounds) {
       const made = element("g", { class: "plot", "data-round": round.number }, group);
       made.addEventListener("mouseenter", () => pointAt(round.number));
       made.addEventListener("mouseleave", () => pointAt(null));
-      made.addEventListener("animationend", () => made.classList.remove("new"));
+      made.addEventListener("animationend", (event) => {
+        if (event.target.classList.contains("fix")) made.classList.remove("new");  // it's the last
+      });
       plot = { group: made, line: null, mark: null, fix: null, ring: null, dot: null, name: null };
       plots.set(round.number, plot);
     }

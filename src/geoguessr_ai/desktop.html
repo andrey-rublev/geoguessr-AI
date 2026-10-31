@@ -912,7 +912,8 @@ function flyTo(target, duration = 450) {
   const from = { ...view };
   const start = performance.now();
   const step = (now) => {
-    const t = Math.min((now - start) / duration, 1);
+    // A frame's time can be from just before the start, and the view mustn't jump back for it.
+    const t = Math.max(Math.min((now - start) / duration, 1), 0);
     const eased = 1 - (1 - t) ** 3;
     view.zoom = from.zoom * (target.zoom / from.zoom) ** eased;
     view.x = from.x + (target.x - from.x) * eased;

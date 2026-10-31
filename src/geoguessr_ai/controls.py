@@ -27,6 +27,11 @@ class StopRequested(Exception):
 
 
 class Controls:
+    stop_name = "F8"
+    """What stops the bot, as said while it waits."""
+    stop_hint = "F8, or by slamming the mouse into a screen corner"
+    """All that stops it, as said when it starts."""
+
     def __init__(self, *, dry_run: bool = False, stop_key: str = "f8") -> None:
         enable_dpi_awareness()
         import pyautogui  # imported lazily: it touches the display on import

@@ -84,7 +84,7 @@ def ensure_layout(
         if layout is not None:
             break
         if why != said:  # each once
-            print(f"{why} (F8 stops.)")
+            print(f"{why} ({getattr(controls, 'stop_name', 'F8')} stops.)")
             said = why
         controls.sleep(LOOK_AGAIN_S)
     layout.save(path)

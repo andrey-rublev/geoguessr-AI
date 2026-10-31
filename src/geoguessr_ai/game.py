@@ -298,7 +298,7 @@ class OpenGuessrBot:
         rounds = 1 if s.dry_run else s.rounds
         if s.dry_run:
             print("Dry run: one round, no clicks. The mouse still hovers, drags and zooms.")
-        print("Stop any time with F8, or by slamming the mouse into a screen corner.")
+        print(f"Stop any time with {getattr(self.controls, 'stop_hint', 'F8')}.")
         try:
             if s.party:
                 self._play_party(run_dir)

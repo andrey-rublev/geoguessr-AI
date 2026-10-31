@@ -180,6 +180,8 @@ class BrowserControls(Controls):
     """A mouse and keyboard in the bot's browser window, like :class:`.controls.Controls` on
     your screen. The stop key still works from anywhere."""
 
+    stop_hint = "F8"
+
     def __init__(self, session: BrowserSession, *, dry_run: bool = False, stop_key: str = "f8"):
         self._listen(dry_run, stop_key)  # no screen corners, and no mouse of yours to move
         self.session = session

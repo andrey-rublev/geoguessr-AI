@@ -88,7 +88,10 @@ def _find_game(
     try:
         controls.sleep(delay)
         if join and not join_room(screen, controls, read_words, join):
-            print(f"Join room {join} yourself, in the bot's browser.")
+            print(
+                f"Join room {join} yourself, in the bot's browser "
+                "(with --hidden, at http://localhost:6080/vnc.html)."
+            )
         return ensure_layout(
             screen,
             controls,
@@ -459,6 +462,8 @@ def _devices(args: argparse.Namespace, dry_run: bool = False):
 
     if not args.browser:
         with Screen() as screen, Controls(dry_run=dry_run, stop_key=args.stop_key) as controls:
+            if getattr(args, "own_screen", False):  # your keys don't reach that screen
+                controls.stop_name = controls.stop_hint = "Ctrl+C"
             yield screen, controls
         return
     from .browser import GAME_URL, BrowserControls, BrowserScreen, BrowserSession
@@ -877,7 +882,11 @@ def main(argv: list[str] | None = None) -> None:
     if getattr(args, "hidden", False):
         _play_hidden([arg for arg in argv if arg != "--hidden"], args)
         return
-    args.func(args)
+    try:
+        args.func(args)
+    except KeyboardInterrupt:  # as the bot's own screen stops it, in WSL
+        print("Stopped by user.")
+        raise SystemExit(130) from None
 
 
 if __name__ == "__main__":

@@ -31,6 +31,17 @@ jobs:
           installer/uv/uv.exe python install 3.13 --install-dir pythons --no-bin
           $python = Get-ChildItem pythons -Directory | Where-Object Name -Match '^cpython-3\.13\.\d+' | Select-Object -First 1
           Move-Item $python.FullName installer/python
+      # Torch, OpenVINO and the sign reader need Microsoft's C++ runtime, as new as they were built
+      # with, and a clean or older Windows hasn't got that. Beside python.exe, they're found first.
+      - name: Bring the C++ runtime along
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $crt = Get-ChildItem "$vs\VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT" -Directory | Sort-Object FullName | Select-Object -Last 1
+          Copy-Item "$crt\*.dll" installer/python -Force
+          foreach ($needed in "msvcp140.dll", "msvcp140_1.dll", "msvcp140_atomic_wait.dll", "vcruntime140.dll", "vcruntime140_1.dll", "vcruntime140_threads.dll") {
+            if (-not (Test-Path "installer/python/$needed")) { throw "No $needed in $crt" }
+          }
       - name: Get Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Build it

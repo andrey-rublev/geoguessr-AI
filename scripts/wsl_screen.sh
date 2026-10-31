@@ -18,6 +18,13 @@ VIEW_PORT=6080
 VENV=${GEOGUESSR_VENV:-$HOME/geoguessr-venv}
 PROFILE=$HOME/.geoguessr-chrome
 REPO=$(cd "$(dirname "$0")/.." && pwd)
+
+# For the desktop app: is this Ubuntu set up to play?
+if [ "${1:-}" = --check ]; then
+    [ -x "$VENV/bin/geoguessr-ai" ] && command -v google-chrome >/dev/null
+    exit
+fi
+
 WINDOWS_HOME=${WINDOWS_HOME:-/mnt/c/Users/$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')}
 
 pids=()

@@ -1,7 +1,10 @@
+import io
 import json
+import time
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -26,7 +29,7 @@ from geoguessr_ai import game as game_module
 from geoguessr_ai.buttons import HALF_HEIGHT, HALF_WIDTH
 from geoguessr_ai.cli import DEFAULT_ROUNDS, build_parser, main
 from geoguessr_ai.clock import NOTICE_WIDTH
-from geoguessr_ai.config import Layout, Point, Region
+from geoguessr_ai.config import REPO, Layout, Point, Region
 from geoguessr_ai.mapcal import MapProjection
 from geoguessr_ai.model import backbone, evaluate, predictor, rounds, train
 from geoguessr_ai.model.geocells import (
@@ -130,6 +133,20 @@ def test_nmpz_can_be_asked_for_in_any_game(command):
     assert not cli._bot_settings(build_parser().parse_args([command])).nmpz
 
 
+def test_closing_standard_input_stops_the_bot(monkeypatch, capsys):
+    def play(*_):
+        time.sleep(5)
+        pytest.fail("played on")
+
+    monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(buffer=io.BytesIO()))
+    monkeypatch.setattr(cli, "_run_bot", play)
+
+    with pytest.raises(SystemExit) as stopped:
+        main(["play", "--stop-on-eof"])
+
+    assert stopped.value.code == 130 and "Stopped by user." in capsys.readouterr().out
+
+
 def test_hidden_plays_on_a_screen_of_its_own_in_wsl(monkeypatch):
     ran = []
 
@@ -147,7 +164,7 @@ def test_hidden_plays_on_a_screen_of_its_own_in_wsl(monkeypatch):
     main(["friends", "--join", "EW2-78U", "--hidden", "--nmpz"])
 
     assert ran == [
-        ["wsl", "-d", "Ubuntu", "--cd", str(cli.REPO), "-e", "bash", "scripts/wsl_screen.sh"]
+        ["wsl", "-d", "Ubuntu", "--cd", str(REPO), "-e", "bash", "scripts/wsl_screen.sh"]
         + ["friends", "--join", "EW2-78U", "--nmpz"]
     ]
     with pytest.raises(SystemExit, match="leave out --browser"):

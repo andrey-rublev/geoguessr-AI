@@ -11,9 +11,17 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+REPO = Path(__file__).resolve().parents[2]
+WSL_DISTRO = "Ubuntu"
+"""Where --hidden plays: WSL's Ubuntu, set up with scripts/wsl_setup.sh."""
 DEFAULT_LAYOUT_PATH = Path("layout.json")
 PARTY_LAYOUT_PATH = Path("layout-party.json")
 """Multiplayer rooms lay the game out differently, so they are calibrated apart."""
+
+
+def wsl_command(*command: str) -> list[str]:
+    """What runs ``command`` in :data:`WSL_DISTRO`, from this folder."""
+    return ["wsl", "-d", WSL_DISTRO, "--cd", str(REPO), "-e", *command]
 
 
 @dataclass(frozen=True)

@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import _thread
 import argparse
 import json
 import os
 import subprocess
 import sys
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-from .config import DEFAULT_LAYOUT_PATH, PARTY_LAYOUT_PATH
+from .config import DEFAULT_LAYOUT_PATH, PARTY_LAYOUT_PATH, WSL_DISTRO, wsl_command
 from .knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
 from .model.backbone import DEFAULT_BACKBONE
 from .model.geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
@@ -30,9 +32,6 @@ DEFAULT_REST = 1.0
 # Even so, it went down again embedding beside other work, which alone kept it at 80 to 90 C:
 # long jobs wait whenever the CPU reaches this, until it has cooled a few degrees.
 DEFAULT_MAX_TEMP = 85.0
-REPO = Path(__file__).resolve().parents[2]
-WSL_DISTRO = "Ubuntu"
-"""Where --hidden plays: WSL's Ubuntu, set up with scripts/wsl_setup.sh."""
 
 
 def _embedding_dir(root: Path, backbone: str) -> Path:
@@ -685,6 +684,11 @@ def build_parser() -> argparse.ArgumentParser:
             help="the screen it plays on is its own, like scripts/wsl_screen.sh's: it starts at "
             "once, with no mouse of yours to let go of",
         )
+        p.add_argument(
+            "--stop-on-eof",
+            action="store_true",
+            help="stop when standard input closes, for a program running the bot",
+        )
         p.add_argument("--start-delay", type=float, default=5.0)
         p.add_argument("--stop-key", default="f8")
         add_browser(p)
@@ -868,9 +872,8 @@ def _play_hidden(argv: list[str], args: argparse.Namespace) -> None:
     if args.browser:
         raise SystemExit("--hidden plays on a screen of its own: leave out --browser")
     print(f"Playing on a screen of the bot's own, in WSL's {WSL_DISTRO}.", flush=True)
-    command = ["wsl", "-d", WSL_DISTRO, "--cd", str(REPO), "-e", "bash", "scripts/wsl_screen.sh"]
     try:
-        bot = subprocess.Popen([*command, *argv])
+        bot = subprocess.Popen(wsl_command("bash", "scripts/wsl_screen.sh", *argv))
     except FileNotFoundError:
         raise SystemExit(
             '--hidden needs WSL: see the README, "Play it on the same laptop"'
@@ -883,6 +886,17 @@ def _play_hidden(argv: list[str], args: argparse.Namespace) -> None:
         raise SystemExit(code)
 
 
+def _stop_on_eof() -> None:
+    """Stop, as Ctrl+C does, once standard input closes: how the desktop app stops the bot, and
+    what stops it should the app go away."""
+
+    def wait() -> None:
+        sys.stdin.buffer.read()
+        _thread.interrupt_main()
+
+    threading.Thread(target=wait, daemon=True).start()
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else list(argv)
     args = build_parser().parse_args(argv)
@@ -890,6 +904,8 @@ def main(argv: list[str] | None = None) -> None:
         _play_hidden([arg for arg in argv if arg != "--hidden"], args)
         return
     try:
+        if getattr(args, "stop_on_eof", False):
+            _stop_on_eof()
         args.func(args)
     except KeyboardInterrupt:  # as the bot's own screen stops it, in WSL
         print("Stopped by user.")

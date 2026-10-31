@@ -1,4 +1,7 @@
+import subprocess
 import sys
+import threading
+import time
 
 import pytest
 
@@ -151,7 +154,7 @@ def test_sums_up_a_game_it_was_asked_to_stop():
     progress.finish(130, asked_to=True)
 
     assert progress.phase == "stopped" and progress.headline == "Stopped"
-    assert progress.detail == "2 rounds, on average 149 km off, the right country in 1"
+    assert progress.detail == "2 rounds, on average 149 km off, 1 in the right country"
 
 
 def test_says_why_a_game_ended_by_itself():
@@ -244,6 +247,24 @@ def test_ends_a_bot_that_wont_stop(monkeypatch):
     run.stop()
 
     assert run.over.is_set() and run.process.poll() is not None
+
+
+def test_a_stop_while_the_bot_is_starting_still_stops_it(monkeypatch):
+    popen, starting = subprocess.Popen, threading.Event()
+
+    def slowly(*args, **options):
+        starting.set()
+        time.sleep(0.3)
+        return popen(*args, **options)
+
+    monkeypatch.setattr(subprocess, "Popen", slowly)
+    run = bot(PLAYS_UNTIL_STDIN_CLOSES)
+    assert starting.wait(5.0)
+
+    threading.Thread(target=run.stop, daemon=True).start()
+
+    assert run.over.wait(20.0) and run.process is not None
+    assert run.progress.phase == "stopped"
 
 
 def test_stopping_before_the_bot_has_started_leaves_it_unstarted(monkeypatch):

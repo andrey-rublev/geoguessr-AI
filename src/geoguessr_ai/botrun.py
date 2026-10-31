@@ -165,7 +165,7 @@ class Progress:
         km = sum(r.km for r in answered) / len(answered)
         right = sum(bool(r.right) for r in answered)
         rounds = f"{len(answered)} round{'s' * (len(answered) != 1)}"
-        return f"{rounds}, on average {km:,.0f} km off, the right country in {right}"
+        return f"{rounds}, on average {km:,.0f} km off, {right} in the right country"
 
     def as_dict(self) -> dict:
         return {
@@ -377,6 +377,8 @@ class BotRun:
         self.process: subprocess.Popen | None = None
         self.asked_to_stop = False
         self.over = threading.Event()
+        self._starting = threading.Lock()
+        """Held while the process starts, so that a stop comes before that or after it."""
 
     def start(self) -> None:
         """Start the bot, and return. A bot left behind on the screen goes first, or the new one
@@ -389,24 +391,25 @@ class BotRun:
                 if not _signal_on_its_screen("INT"):
                     break
                 time.sleep(LEFTOVER_WAIT_S)
-        if self.asked_to_stop:
-            self._finish(130)
-            return
-        try:
-            self.process = subprocess.Popen(
-                [*self.program, *self.choices.arguments()],
-                cwd=REPO,
-                stdin=subprocess.DEVNULL if self.choices.hidden else subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                # WSL_UTF8: else wsl.exe says what's wrong in UTF-16.
-                env=dict(os.environ, PYTHONUNBUFFERED="1", PYTHONUTF8="1", WSL_UTF8="1"),
-                creationflags=NO_WINDOW,
-            )
-        except OSError as error:
-            self.progress.last_said = str(error)
-            self._finish(1)
-            return
+        with self._starting:
+            if self.asked_to_stop:
+                self._finish(130)
+                return
+            try:
+                self.process = subprocess.Popen(
+                    [*self.program, *self.choices.arguments()],
+                    cwd=REPO,
+                    stdin=subprocess.DEVNULL if self.choices.hidden else subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    # WSL_UTF8: else wsl.exe says what's wrong in UTF-16.
+                    env=dict(os.environ, PYTHONUNBUFFERED="1", PYTHONUTF8="1", WSL_UTF8="1"),
+                    creationflags=NO_WINDOW,
+                )
+            except OSError as error:
+                self.progress.last_said = str(error)
+                self._finish(1)
+                return
         reader = threading.Thread(target=self._read, daemon=True)
         reader.start()
         code = self.process.wait()
@@ -430,13 +433,15 @@ class BotRun:
     def stop(self) -> None:
         """Stop the bot as Ctrl+C would, so that it sums up and tidies away, or if it won't, end
         it. Returns once it has gone."""
-        if self.over.is_set() or self.asked_to_stop:
+        with self._starting:
+            told_already = self.asked_to_stop
+            self.asked_to_stop = True
+            process = self.process
+        if told_already or self.over.is_set():
             self.over.wait()
             return
-        self.asked_to_stop = True
         self.progress.stopping()
         self.changed()
-        process = self.process
         if process is None:  # still clearing the way: it won't start now
             self.over.wait()
             return

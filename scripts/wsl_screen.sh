@@ -87,6 +87,7 @@ fi
 url=https://openguessr.com/multiplayer
 [ "${1:-}" = play ] && url=https://openguessr.com/
 google-chrome --user-data-dir="$PROFILE" --no-first-run --no-default-browser-check \
+    --disable-search-engine-choice-screen \
     --start-maximized --mute-audio "${graphics[@]}" "$url" >/dev/null 2>&1 &
 pids+=($!)
 unset GALLIUM_DRIVER

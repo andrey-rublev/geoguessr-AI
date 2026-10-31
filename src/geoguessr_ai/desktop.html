@@ -206,8 +206,8 @@ h1 { margin: 0; font: 600 44px/1.02 var(--display); font-stretch: 75%; letter-sp
 @keyframes plotted { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes fixed { from { transform: scale(0); } to { transform: scale(1); } }
 
-.rounds-holder { contain: paint; flex: 1 1 0; min-height: 96px; overflow-y: auto; border-top: 1px solid var(--ink); }
-table { width: 100%; border-collapse: collapse; }
+.rounds-holder { contain: paint; flex: 1 1 0; min-height: max(148px, 24vh); overflow-y: auto; border-top: 1px solid var(--ink); scroll-padding: 28px 0 32px; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; }  /* collapsed borders wouldn't stick */
 th { position: sticky; top: 0; background: var(--paper); text-align: left; padding: 6px 10px 5px 0; font: 600 12px/1.2 var(--display); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
 td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--sea); font: 400 13px/1.4 var(--data); white-space: nowrap; }
 .number { text-align: right; padding-right: 8px; padding-left: 10px; }
@@ -242,7 +242,9 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
   .needs-you { margin: 0 16px 10px; flex-wrap: wrap; }
   .tab { padding: 0 16px 16px; }
   .chart-holder { min-height: 0; }
-  .rounds-holder { overflow-x: auto; }
+  .rounds-holder { flex: none; min-height: 0; max-height: 60vh; overflow-x: auto; }
+  th, td { padding-right: 4px; }
+  .number { padding-left: 4px; }
   .screen, .messages { min-height: 60vh; }
 }
 @media (prefers-reduced-motion: reduce) {

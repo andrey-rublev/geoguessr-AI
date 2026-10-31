@@ -1076,16 +1076,18 @@ function drawRounds(rounds) {
         pick(round.number);
       });
       row.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          pick(round.number);
-        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          event.preventDefault();
-          const next = event.key === "ArrowDown" ? row.nextElementSibling : row.previousElementSibling;
-          if (next) {
-            tabToRow(next, true);
-            next.focus();
-          }
+        const moves = {
+          ArrowDown: row.nextElementSibling,
+          ArrowUp: row.previousElementSibling,
+          Home: body.firstElementChild,
+          End: body.lastElementChild,
+        };
+        if (event.key === "Enter" || event.key === " ") pick(round.number);
+        else if (event.key === "Escape") pick(null, false);
+        else if (!(event.key in moves)) return;
+        else if (moves[event.key]) {
+          tabToRow(moves[event.key], true);
+          moves[event.key].focus();
         }
       });
       rows.set(round.number, row);
@@ -1131,6 +1133,7 @@ const formatCode = (text) => {
 };
 
 function chosen() {
+        event.preventDefault();
   return {
     mode: document.querySelector("[name=mode]:checked").value,
     room: $("#room").value,

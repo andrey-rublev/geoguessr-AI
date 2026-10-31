@@ -2,7 +2,7 @@ import pytest
 from PIL import Image
 
 from geoguessr_ai.config import Point, Region
-from geoguessr_ai.join import join_room, lit, room_code
+from geoguessr_ai.join import join_room, lit, room_code, start_solo
 from geoguessr_ai.ocr import Word
 
 DULL, BRIGHT = (146, 23, 29), (255, 8, 8)  # the code page's Join, before and after the code
@@ -61,6 +61,52 @@ class OpenGuessr:
 
     def sleep(self, seconds):
         pass
+
+
+class StartPage(OpenGuessr):
+    """OpenGuessr's start page, as it shows at 800x600: the maps under Singleplayer."""
+
+    def __init__(self, welcome=False):
+        super().__init__(welcome)
+        self.page = "welcome" if welcome else "start"
+
+    def words(self, image):
+        if self.page == "start":
+            return [word("Singleplayer", 220, 223), word("World", 188, 323)]
+        return super().words(image)
+
+    def click(self, p):
+        self.clicks.append(p)
+        if self.page == "welcome":
+            self.page = "start"
+        elif self.page == "start" and abs(p.x - 188) <= 40 and abs(p.y - 323) <= 15:
+            self.page = "round"
+
+
+@pytest.mark.parametrize("welcome", [False, True])
+def test_starts_a_solo_game_of_the_whole_world(welcome):
+    game = StartPage(welcome)
+
+    assert start_solo(game, game, game.words, wait=5)
+
+    assert game.page == "round"
+
+
+def test_says_when_it_cant_find_where_to_start_a_solo_game(capsys):
+    game = OpenGuessr()  # a page with no World on it
+
+    assert not start_solo(game, game, game.words, wait=3)
+
+    assert game.clicks == [] and "Couldn't find World" in capsys.readouterr().out
+
+
+def test_waits_for_a_person_to_pass_the_sites_check_before_starting():
+    game = StartPage()
+    game.checks_for = 20  # longer than it would wait for anything else
+
+    assert start_solo(game, game, game.words, wait=3)
+
+    assert game.page == "round"
 
 
 def test_joins_a_room_by_its_code():

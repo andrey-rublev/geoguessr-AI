@@ -1,5 +1,7 @@
-"""Join a friend's multiplayer room by its code, in a browser of the bot's own, as a person
-would: by the words on screen, read with OCR, never by the page's code.
+"""Join a friend's multiplayer room by its code, or start a Singleplayer game, in a browser of the
+bot's own, as a person would: by the words on screen, read with OCR, never by the page's code.
+
+OpenGuessr's start page shows its maps under Singleplayer: World starts a game of the whole world.
 
 OpenGuessr's multiplayer page (:data:`ROOMS_URL`) shows Join beside Host. Join opens six boxes
 for the code, like EW2-78U, which take it typed once the first is clicked, over a Join button
@@ -40,6 +42,8 @@ CONFIRM_WAIT_S = 8.0
 _JOIN = re.compile(r"^[\W_]*join[\W_]*$", re.I)
 _HOST = re.compile(r"^[\W_]*host[\W_]*$", re.I)
 _CONFIRM = re.compile(r"^[\W_]*confirm[\W_]*$", re.I)
+_SINGLE = re.compile(r"single\s*player", re.I)
+_WORLD = re.compile(r"^[\W_]*world[\W_]*$", re.I)
 _SKIP = re.compile(r"\bskip\b", re.I)
 """The welcome's "No, skip to menu", which a browser new to the game may be shown first."""
 _CHECK = re.compile(r"verify you are human|security verification", re.I)
@@ -58,6 +62,25 @@ def room_code(text: str) -> str:
             f"{text!r} isn't a room's code: one is six letters and digits, like EW2-78U"
         )
     return code
+
+
+def start_solo(screen, controls, read_words: ReadWords, wait: float = WAIT_S) -> bool:
+    """Start a Singleplayer game of the whole world from OpenGuessr's start page, showing on
+    ``screen``. Whether it found where to."""
+    page = screen.virtual_desktop()
+
+    def start_page(words: Sequence[Word]) -> bool:
+        if (skip := _find(words, _SKIP)) is not None:  # a welcome first: pass it by
+            controls.click(skip.box.center)
+            return False
+        return _find(words, _WORLD) is not None and _find(words, _SINGLE) is not None
+
+    if (words := _wait_for(screen, controls, read_words, page, start_page, wait)) is None:
+        print("Couldn't find World on OpenGuessr's start page")
+        return False
+    print("Starting a Singleplayer game")
+    controls.click(_find(words, _WORLD).box.center)
+    return True
 
 
 def join_room(screen, controls, read_words: ReadWords, code: str, wait: float = WAIT_S) -> bool:

@@ -72,14 +72,16 @@ def _find_game(
     delay: float,
     own=False,
     join: str | None = None,
+    solo: bool = False,
 ):
     """After ``delay`` seconds, the game's layout: as saved at ``path`` if the game still shows
     there, else found on screen and saved. None if the bot was stopped meanwhile. ``own``: in a
     browser, or on a screen, of the bot's own, with no window of yours to bring it forward
-    from. ``join``: the code of a room to join first, from OpenGuessr's multiplayer page."""
+    from. ``join``: the code of a room to join first, from OpenGuessr's multiplayer page.
+    ``solo``: start a Singleplayer game first, from OpenGuessr's start page."""
     from .calibrate import WrongGame, ensure_layout
     from .controls import StopRequested
-    from .join import join_room
+    from .join import join_room, start_solo
     from .windows import bring_forward
 
     try:
@@ -89,6 +91,8 @@ def _find_game(
                 f"Join room {join} yourself, in the bot's browser "
                 "(with --hidden, at http://localhost:6080/vnc.html)."
             )
+        if solo:
+            start_solo(screen, controls, read_words)
         return ensure_layout(
             screen,
             controls,
@@ -443,6 +447,7 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
             0.0 if own else args.start_delay,
             own,
             getattr(args, "join", None),
+            solo=bool(own and not settings.party and not settings.dry_run),
         )
         if layout is None:
             return
@@ -481,8 +486,8 @@ def _devices(args: argparse.Namespace, dry_run: bool = False):
     else:
         session = BrowserSession(url=GAME_URL, size=args.window)
         print(
-            "Opened a browser of the bot's own. In it, start a Singleplayer game, or join the "
-            "room; the bot finds the game and plays, leaving your mouse and screen free."
+            "Opened a browser of the bot's own, where it plays, leaving your mouse and screen "
+            "free. For a room, join it there."
         )
     try:
         with BrowserControls(session, dry_run=dry_run, stop_key=args.stop_key) as controls:

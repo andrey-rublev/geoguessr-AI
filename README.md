@@ -48,7 +48,7 @@ Training runs cool, since running flat out has crashed a laptop: on a quarter of
 | Option for `play` and `friends` | What it does |
 | --- | --- |
 | `--hidden` | Plays on a screen of its own in WSL (set it up once with `wsl -d Ubuntu -e bash scripts/wsl_setup.sh`). Watch it at `http://localhost:6080/vnc.html?autoconnect=1&resize=scale` |
-| `--browser` | Plays in a muted browser window of its own. Start the game in that window |
+| `--browser` | Plays in a muted browser window of its own: `play` starts a game there, and for `friends`, join the room there or use `--join` |
 | `--rounds N` | How many rounds to play (`friends` plays as many as the host starts) |
 | `--nmpz` | One view a round: for a game with NMPZ on, or to make it easier to beat |
 | `--no-text`, `--no-walk`, `--no-look-up` | Quicker but less accurate: don't read signs, walk on when unsure, or look up at the sun |

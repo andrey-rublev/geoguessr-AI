@@ -170,9 +170,12 @@ class Progress:
         text = line.strip()
         if not text:
             return
+        stopping = self.phase == "stopping"
         for pattern, action in _LINES:
             if found := pattern.search(text):
                 action(self, found)
+                if stopping:  # it may print more on its way out, which changes nothing
+                    self.stopping()
                 return
         self.last_said = text
 

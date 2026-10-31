@@ -171,6 +171,17 @@ def test_sums_up_a_game_it_was_asked_to_stop():
     assert progress.detail == "2 rounds, on average 149 km off, 1 in the right country"
 
 
+def test_stays_stopping_whatever_the_bot_prints_on_its_way_out():
+    progress = played(GAME.split("Round 2")[0])
+    progress.stopping()
+
+    progress.read("Waiting for the host to start a round...")
+    progress.read("Round 2")
+
+    assert progress.phase == "stopping" and progress.headline == "Stopping the bot"
+    assert [r.number for r in progress.rounds] == [1, 2]
+
+
 def test_says_why_a_game_ended_by_itself():
     progress = played("models/geoguessr.pt not found. Build a model first.\n")
     progress.finish(1, asked_to=False)

@@ -6,6 +6,7 @@ same one the terminal runs, and knows nothing of the app.
 from __future__ import annotations
 
 import _thread
+import ctypes
 import os
 import re
 import subprocess
@@ -33,6 +34,8 @@ LEFTOVER_TRIES, LEFTOVER_WAIT_S = 5, 2.0
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 EOF_LOOK_S = 0.25
 """How often, on Windows, to look whether standard input has closed."""
+STAYS_ON, COMPUTER_AWAKE, SCREEN_AWAKE = 0x80000000, 0x1, 0x2
+"""Flags of Windows' ``SetThreadExecutionState``."""
 
 
 def _wait_for_eof() -> None:
@@ -406,6 +409,15 @@ def _signal_on_its_screen(signal: str) -> bool:
     return done.returncode == 0
 
 
+def _keep_awake(*what: int) -> None:
+    """Keep the computer from sleeping till asked again with nothing, or this thread ends."""
+    if sys.platform == "win32":
+        flags = STAYS_ON
+        for flag in what:
+            flags |= flag
+        ctypes.windll.kernel32.SetThreadExecutionState(ctypes.c_uint(flags))
+
+
 def _end_process_tree(process: subprocess.Popen) -> None:
     if sys.platform == "win32":
         subprocess.run(
@@ -441,6 +453,16 @@ class BotRun:
         threading.Thread(target=self._run, daemon=True).start()
 
     def _run(self) -> None:
+        # Windows takes a bot playing by itself for nobody using the computer, and would put it to
+        # sleep mid-game. Its screen can go dark if the game's on a screen of its own, but not if
+        # it's on this one, where a game draws nothing with the screen off.
+        _keep_awake(COMPUTER_AWAKE, *(() if self.choices.hidden else (SCREEN_AWAKE,)))
+        try:
+            self._play()
+        finally:
+            _keep_awake()
+
+    def _play(self) -> None:
         if self.choices.hidden:
             for _ in range(LEFTOVER_TRIES):
                 if not _signal_on_its_screen("INT"):

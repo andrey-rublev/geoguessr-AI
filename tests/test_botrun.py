@@ -183,6 +183,37 @@ def test_says_what_it_needs_from_you(line, says):
     assert says in played(line).attention["text"]
 
 
+@pytest.mark.parametrize(
+    "where, awake",
+    [
+        ("hidden", (botrun.COMPUTER_AWAKE,)),
+        ("browser", (botrun.COMPUTER_AWAKE, botrun.SCREEN_AWAKE)),
+        ("screen", (botrun.COMPUTER_AWAKE, botrun.SCREEN_AWAKE)),
+    ],
+)
+def test_keeps_the_computer_awake_for_as_long_as_the_bot_plays(monkeypatch, where, awake):
+    monkeypatch.setattr(botrun, "_signal_on_its_screen", lambda signal: False)
+    asked = []
+    monkeypatch.setattr(botrun, "_keep_awake", lambda *what: asked.append(what))
+    choices = botrun.Choices(mode="play", where=where, rounds=1)
+    run = botrun.BotRun(choices, lambda: None, [sys.executable, "-c", "pass"])
+
+    run.start()
+
+    assert run.over.wait(30)
+    assert asked[0] == awake
+    for _ in range(100):  # it's the last the thread does, just after saying it's over
+        if len(asked) == 2:
+            break
+        time.sleep(0.01)
+    assert asked == [awake, ()]
+
+
+def test_asking_windows_to_stay_awake_is_taken():
+    botrun._keep_awake(botrun.COMPUTER_AWAKE)
+    botrun._keep_awake()
+
+
 def test_says_when_its_getting_the_image_model_ready():
     line = "Converting geolocal/StreetCLIP to run on the GPU (once, a minute or two)..."
     assert "just once" in played(line).detail

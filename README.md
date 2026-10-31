@@ -42,9 +42,10 @@ Training runs cool, since running flat out has crashed a laptop: on a quarter of
 
 | Option | What it does |
 | --- | --- |
-| `--browser` | Plays in a Chrome window of the bot's own, so your mouse and screen stay free (`pip install playwright` first). Start the game in that window |
+| `--browser` | Plays in a muted Chrome window of the bot's own, so your mouse and screen stay free (`pip install playwright` first). Start the game in that window |
 | `--hidden` | Plays on a screen of its own in WSL, so you can use the laptop meanwhile (see below) |
 | `--rounds N` | How many rounds to play (`friends` plays as many as the host starts) |
+| `--nmpz` | No moving, panning or zooming: guesses from the one view each round starts with. Use it in a game with NMPZ on, where the bot would otherwise lose time trying to look round, or in any game to make it easier to beat. One view scores about 3,510 points a round on the held-out rounds, against 3,770; add `--no-text` to make it harder still for the bot |
 | `--dry-run` | Plays one round without clicking, to check the bot can see the game |
 | `--no-answers` | Doesn't read the answer after each round: quicker, but no distances and nothing for `train` |
 | `--no-save` | Saves nothing to `runs/` |
@@ -52,9 +53,11 @@ Training runs cool, since running flat out has crashed a laptop: on a quarter of
 
 Add `--help` to any command to see all its options.
 
+The bot can't mute a browser it didn't open: to silence yours while it plays there, right-click the game's tab and choose Mute site.
+
 ### Play it on the same laptop
 
-To play against the bot while you use the laptop, give it a screen and mouse of its own: a virtual screen with a normal Chrome, in WSL's Ubuntu. Set it up once (about 1.5 GB; it asks for your Ubuntu password):
+To play against the bot while you use the laptop, give it a screen and mouse of its own: a virtual screen with a normal, muted Chrome, in WSL's Ubuntu. Set it up once (about 1.5 GB; it asks for your Ubuntu password):
 
 ```powershell
 wsl -d Ubuntu -e bash scripts/wsl_setup.sh

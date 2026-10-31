@@ -158,6 +158,10 @@ class BotSettings:
     rounds gain the most from walking; this is where 1,000 was on the estimate before."""
     walk_steps: int = 5
     """Presses of the Up key when walking on: Street View moves about 10 metres each."""
+    nmpz: bool = False
+    """No moving, panning or zooming: guess from the one view each round starts with. In a game
+    with that restriction on, Street View ignores drags and the compass's arrows, which would
+    only waste the round's time. In any other, the bot keeps to it to be easier to beat."""
     step_wait: float = 0.8
     record_answers: bool = True
     """Read the real location off each result screen and save it with the round."""
@@ -304,6 +308,8 @@ class OpenGuessrBot:
         if s.dry_run:
             print("Dry run: one round, no clicks. The mouse still hovers, drags and zooms.")
         print(f"Stop any time with {getattr(self.controls, 'stop_hint', 'F8')}.")
+        if s.nmpz:
+            print("No moving, panning or zooming: one view a round.")
         try:
             if s.party:
                 self._play_party(run_dir)
@@ -346,7 +352,7 @@ class OpenGuessrBot:
         read_up_to = len(look.scenes) if read else 0
         guess = self.predictor.predict(look.seen(), evidence)
         sure = [guess.expected_score]  # after each look, saved to judge walking by later
-        for below in () if s.dry_run else (s.walk_below, s.walk_again_below):
+        for below in () if s.dry_run or s.nmpz else (s.walk_below, s.walk_again_below):
             if guess.expected_score >= below:
                 break
             self._read_clock()
@@ -688,6 +694,7 @@ class OpenGuessrBot:
         anything was left out for want of it, and whether another player guessed first."""
         how = {
             "party": self.settings.party,
+            "nmpz": self.settings.nmpz,
             "model": getattr(self.predictor, "source", None),
             "expected_in": "openguessr points",  # before 19 October 2026, an estimate ~900 lower
             "short_of_time": list(self.short_of_time),
@@ -710,11 +717,14 @@ class OpenGuessrBot:
         self.took[step] = (self.took[step] + self.controls.now() - start) / 2
 
     def look_around(self) -> Look:
-        """See every direction: north, east, south and west by the compass, if it can be found."""
+        """See every direction: north, east, south and west by the compass, if it can be found.
+        Under NMPZ, only the way the round faces."""
         s = self.settings
         self.controls.leave(self.layout.view.center)  # also collapses the minimap if it was open
         self.controls.sleep(s.view_settle_wait)
         self._wait_for_street_view()
+        if s.nmpz:
+            return self._look_still()
         compass = None if s.dry_run else self.compass.read()
         if compass is None:
             if s.party and not s.dry_run:  # no compass, no round: it must have ended
@@ -747,6 +757,15 @@ class OpenGuessrBot:
             look.up_views += views
             look.up_headings += headings
             look.up_pitches += [pitch] * len(views)
+        return look
+
+    def _look_still(self) -> Look:
+        """See only what the round starts with, reading the compass but never pressing it."""
+        compass = self.compass.read()
+        if compass is None:
+            self._check_round()  # no compass, no round, unless the clock says otherwise
+        look = Look()
+        self._capture(look, None if compass is None else compass.heading)
         return look
 
     def _sun_may_show(self, look: Look) -> bool:

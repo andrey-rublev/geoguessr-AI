@@ -355,6 +355,39 @@ def test_a_sun_to_the_south_hints_at_the_northern_hemisphere():
     assert evidence.latitude(45) > 3 * evidence.latitude(-35)
 
 
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_under_nmpz_it_guesses_from_one_view_and_leaves_street_view_alone(tmp_path, dry_run):
+    street_view = TurningStreetView(clear=True)  # blue sky: would look up, given the chance
+    predictor = FakePredictor(expected=(900.0,))  # unsure: would walk on, given the chance
+    settings = BotSettings(
+        rounds=1, nmpz=True, record_answers=False, dry_run=dry_run, debug_dir=tmp_path
+    )
+
+    bot = OpenGuessrBot(LAYOUT, predictor, settings, street_view, street_view)
+    bot.play()
+
+    assert predictor.view_counts == [1]
+    assert street_view.drags == [] and street_view.keys == []
+    assert street_view.heading == 260.0  # the compass read, but not pressed
+    pin = LAYOUT.map_region.to_screen(400, 300)
+    assert all(c in (pin, LAYOUT.guess_button, LAYOUT.continue_button) for c in street_view.clicks)
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    assert saved["nmpz"] is True and saved["walked"] is False
+    assert saved["headings"] == [pytest.approx(260.0, abs=5.0)] and saved["up_headings"] == []
+    assert len(bot.signs.scenes) == 1  # still reads what the view shows
+
+
+def test_under_nmpz_with_no_compass_to_read_it_still_looks(tmp_path):
+    controls, predictor = FakeControls(), FakePredictor()
+    settings = BotSettings(rounds=1, nmpz=True, record_answers=False, debug_dir=tmp_path)
+
+    OpenGuessrBot(LAYOUT, predictor, settings, FakeScreen(), controls).play()
+
+    assert predictor.view_counts == [1] and controls.drags == []
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    assert saved["headings"] == [None]
+
+
 def test_looks_up_at_a_clear_sky_and_finds_the_sun(tmp_path):
     street_view = TurningStreetView(sun_heading=90.0, sun_high=True, clear=True)
     settings = BotSettings(rounds=1, record_answers=False, read_text=False, debug_dir=tmp_path)
@@ -722,6 +755,20 @@ def test_plays_each_round_the_host_starts_and_waits_for_the_host_to_go_on(party,
     assert bot.guess_map.guesses == [LAGOS, LAGOS]
     assert bot.reader.crowded and not bot.reader.aborted  # other players' pins show too
     assert "60 s on the clock" not in capsys.readouterr().out  # read after the round loaded
+
+
+def test_under_nmpz_a_room_still_gets_the_early_pin_and_the_answer_read(party):
+    room = MultiplayerRoom(rounds=2, length=60.0, others_guess=5.0)
+    predictor = FakePredictor(expected=(900.0,))  # unsure: would walk on, given the chance
+    bot = party(room, predictor, nmpz=True)
+
+    bot.play()
+
+    assert len(room.locked) == 2 and all(at is not None and at < 60 for at in room.locked)
+    assert predictor.view_counts == [1, 1, 1, 1]  # the pin down early, and with what else it saw
+    assert room.drags == [] and room.keys == []
+    assert bot.guess_map.early == [LAGOS, LAGOS] and bot.guess_map.guesses == [LAGOS, LAGOS]
+    assert bot.reader.crowded
 
 
 def test_hurries_when_little_time_is_left(party):

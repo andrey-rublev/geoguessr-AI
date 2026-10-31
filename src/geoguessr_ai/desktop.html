@@ -498,6 +498,8 @@ function setHot(number) {
 
 function drawRounds(rounds) {
   const body = $("#rounds-body");
+  const holder = $("#rounds-holder");
+  const atEnd = holder.scrollHeight - holder.scrollTop - holder.clientHeight < 40;
   $("#rounds-table").hidden = rounds.length === 0;
   $("#no-rounds").hidden = rounds.length > 0;
   body.replaceChildren(
@@ -554,8 +556,7 @@ function drawRounds(rounds) {
     }
     foot.append(row);
   }
-  const holder = $("#rounds-holder");
-  holder.scrollTop = holder.scrollHeight;
+  if (atEnd) holder.scrollTop = holder.scrollHeight;
   if (hotRound !== null) setHot(hotRound);
 }
 

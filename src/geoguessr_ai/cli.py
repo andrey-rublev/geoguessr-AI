@@ -915,7 +915,8 @@ def _play_hidden(argv: list[str], args: argparse.Namespace) -> None:
         bot = subprocess.Popen(wsl_command("bash", "scripts/wsl_screen.sh", *argv))
     except FileNotFoundError:
         raise SystemExit(
-            '--hidden needs WSL: see the README, "Play it on the same laptop"'
+            "--hidden needs WSL: `wsl --install -d Ubuntu`, then, in this folder, "
+            "`wsl -d Ubuntu -e bash scripts/wsl_setup.sh`"
         ) from None
     try:
         code = bot.wait()

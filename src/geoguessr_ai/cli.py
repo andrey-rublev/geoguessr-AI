@@ -538,10 +538,11 @@ def cmd_friends(args: argparse.Namespace) -> None:
 
 def cmd_app(args: argparse.Namespace) -> None:
     from .desktop import main as open_app
-    from .desktop import make_shortcut
+    from .desktop import make_shortcuts
 
     if args.shortcut:
-        print(f"Put an icon for the app on your desktop: {make_shortcut()}")
+        for path in make_shortcuts():
+            print(f"Made {path}")
     else:
         open_app()
 
@@ -707,7 +708,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--shortcut",
         action="store_true",
-        help="put an icon on your desktop that opens it, with no terminal",
+        help="put an icon on your desktop and in the Start menu that opens it, with no terminal",
     )
 
     p = add(

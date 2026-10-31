@@ -7,7 +7,7 @@ the server: it listens on this computer only, and every request must carry a sec
 window is opened with. Closing the window stops the bot and ends the app.
 
     geoguessr-ai app              # open it
-    geoguessr-ai app --shortcut   # put an icon for it on the desktop
+    geoguessr-ai app --shortcut   # put an icon for it on the desktop and in the Start menu
 """
 
 from __future__ import annotations
@@ -362,18 +362,18 @@ def _running_url() -> str | None:
         return None
 
 
-def make_shortcut() -> str:
-    """Put an icon for the app on the desktop, and say where it went. ``pythonw`` runs it with no
-    terminal. Windows makes shortcuts for PowerShell, not for Python."""
+def make_shortcuts() -> list[str]:
+    """Put an icon for the app on the desktop and in the Start menu, where it can be searched for
+    and pinned, and say where they went. ``pythonw`` runs it with no terminal. Windows makes
+    shortcuts for PowerShell, not for Python."""
     python = Path(sys.executable).with_name("pythonw.exe")
 
     def quoted(text: object) -> str:
         return "'" + str(text).replace("'", "''") + "'"
 
-    script = "; ".join(
+    each = "; ".join(
         [
-            "$desktop = [Environment]::GetFolderPath('Desktop')",
-            "$path = Join-Path $desktop 'geoguessr-AI.lnk'",
+            "$path = Join-Path ([Environment]::GetFolderPath($folder)) 'geoguessr-AI.lnk'",
             "$link = (New-Object -ComObject WScript.Shell).CreateShortcut($path)",
             f"$link.TargetPath = {quoted(python)}",
             "$link.Arguments = '-m geoguessr_ai.desktop'",
@@ -385,14 +385,20 @@ def make_shortcut() -> str:
         ]
     )
     done = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f"foreach ($folder in 'Desktop', 'Programs') {{ {each} }}",
+        ],
         capture_output=True,
         text=True,
         check=False,
     )
     if done.returncode != 0:
-        raise OSError(done.stderr.strip() or "PowerShell couldn't make the shortcut")
-    return done.stdout.strip()
+        raise OSError(done.stderr.strip() or "PowerShell couldn't make the shortcuts")
+    return done.stdout.splitlines()
 
 
 def _say_what_went_wrong(error: BaseException) -> None:

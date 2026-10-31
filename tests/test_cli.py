@@ -134,7 +134,7 @@ def test_nmpz_can_be_asked_for_in_any_game(command):
 def test_app_opens_the_app_or_makes_its_icon(monkeypatch, capsys):
     opened = []
     monkeypatch.setattr(desktop, "main", lambda: opened.append(True))
-    monkeypatch.setattr(desktop, "make_shortcut", lambda: "C:\\Desktop\\geoguessr-AI.lnk")
+    monkeypatch.setattr(desktop, "make_shortcuts", lambda: ["C:\\Desktop\\geoguessr-AI.lnk"])
 
     main(["app", "--shortcut"])
     assert not opened and "geoguessr-AI.lnk" in capsys.readouterr().out

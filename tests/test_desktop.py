@@ -215,17 +215,20 @@ def test_the_window_opens_as_an_app_with_a_profile_of_its_own(monkeypatch, tmp_p
     assert f"--user-data-dir={tmp_path / 'window'}" in started[0]
 
 
-def test_makes_a_desktop_shortcut_that_runs_with_no_terminal(monkeypatch):
+def test_makes_shortcuts_on_the_desktop_and_in_start_that_run_with_no_terminal(monkeypatch):
     ran = []
 
     def powershell(command, **_):
         ran.append(command)
-        return subprocess.CompletedProcess(command, 0, "C:\\Desktop\\geoguessr-AI.lnk\n", "")
+        made = "C:\\My Desktop\\geoguessr-AI.lnk\nC:\\Start\\geoguessr-AI.lnk\n"
+        return subprocess.CompletedProcess(command, 0, made, "")
 
     monkeypatch.setattr(subprocess, "run", powershell)
 
-    assert desktop.make_shortcut() == "C:\\Desktop\\geoguessr-AI.lnk"
+    made = desktop.make_shortcuts()
+    assert made == ["C:\\My Desktop\\geoguessr-AI.lnk", "C:\\Start\\geoguessr-AI.lnk"]
     script = ran[0][-1]
+    assert "'Desktop', 'Programs'" in script
     assert "pythonw.exe" in script and "-m geoguessr_ai.desktop" in script
     assert str(desktop.ICON).replace("'", "''") in script
 

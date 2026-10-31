@@ -19,7 +19,7 @@ The last line builds the first model: it downloads about 5.4 GB of street photos
 
 ### The desktop app
 
-Once, in PowerShell, put an icon on your desktop:
+Once, in PowerShell, put an icon on your desktop and in the Start menu, where you can right-click it to pin it:
 
 ```powershell
 geoguessr-ai app --shortcut

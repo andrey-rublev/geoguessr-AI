@@ -4,6 +4,8 @@ An AI that plays [OpenGuessr](https://openguessr.com) by looking at the screen a
 
 For fun and learning. Only play it against friends who know it's a bot, never in ranked or public games.
 
+![The app after a real game of 20 rounds: each guess joined to its answer on a chart of the world, above the list of rounds](docs/app.png)
+
 ## Get it
 
 On Windows 10 or 11, download **[geoguessr-AI-Setup.exe](https://github.com/andrey-rublev/geoguessr-AI/releases/latest/download/geoguessr-AI-Setup.exe)** and run it. It needs no administrator or Python. Windows may warn that it doesn't recognise the installer, as it isn't signed: choose **More info**, then **Run anyway**.

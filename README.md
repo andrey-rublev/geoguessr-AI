@@ -17,6 +17,18 @@ The last line builds the first model: it downloads about 5.4 GB of street photos
 
 ## Use
 
+### The desktop app
+
+Once, in PowerShell, put an icon on your desktop:
+
+```powershell
+geoguessr-ai app --shortcut
+```
+
+Then double-click it, enter the room's code, and press **Start the bot**. There's no terminal to use. The window plots each round's guess and answer on a chart, shows the bot's hidden screen if you want to watch it, and says when it needs you, such as to tick OpenGuessr's box. Switches set how hard the bot plays. Closing the window stops the bot. It draws its window with Edge or Chrome, so there's nothing more to install.
+
+### From a terminal
+
 1. Open the game in your browser: a Singleplayer game for `play`, a multiplayer room for `friends`.
 2. Run the command and let go of the mouse. Press **F8** to stop.
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geoguessr-ai"
-version = "1.0.0"
+version = "1.0.1"
 description = "A self-trained geolocation AI that plays OpenGuessr by watching your screen and controlling your mouse."
 readme = "README.md"
 license = "MIT"

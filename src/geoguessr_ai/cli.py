@@ -11,6 +11,7 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+from . import __version__
 from .config import DEFAULT_LAYOUT_PATH, PARTY_LAYOUT_PATH, WSL_DISTRO, wsl_command
 from .knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
 from .model.backbone import DEFAULT_BACKBONE
@@ -576,6 +577,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="A self-trained AI that plays OpenGuessr through your screen and mouse.",
         epilog="Run `geoguessr-ai <command> --help` for a command's options.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(
         dest="command", required=True, title="commands", metavar="<command>"
     )

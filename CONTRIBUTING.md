@@ -43,4 +43,4 @@ Training and embedding photos can run for hours. They pace themselves to keep a 
 
 ## Releases
 
-A tag like `v1.2.0` builds `geoguessr-AI-Setup.exe`, installs it on a clean GitHub computer, checks that what it installed runs there, and publishes the release only if it does. The model is released separately: see `scripts/pack_model.py`.
+Set `version` in `pyproject.toml` first: a tag like `v1.2.0` must match it. The tag builds `geoguessr-AI-Setup.exe`, installs it on a clean GitHub computer, checks that what it installed runs there, and publishes the release only if it does. The model is released separately: see `scripts/pack_model.py`.

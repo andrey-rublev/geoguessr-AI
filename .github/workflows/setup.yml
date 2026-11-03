@@ -48,6 +48,8 @@ jobs:
         shell: pwsh
         run: |
           $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.0.0" }
+          $declared = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $version -ne $declared) { throw "The tag says $version, but pyproject.toml says $declared" }
           $iscc = (Get-ChildItem "C:\Program Files*\Inno Setup *\ISCC.exe" | Select-Object -First 1).FullName
           & $iscc "/DVersion=$version" installer/geoguessr-AI.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

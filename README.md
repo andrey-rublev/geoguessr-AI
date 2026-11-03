@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/andrey-rublev/geoguessr-AI)](https://github.com/andrey-rublev/geoguessr-AI/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/andrey-rublev/geoguessr-AI)](LICENSE)
 
-An AI that plays [OpenGuessr](https://openguessr.com) by looking at the screen and moving a mouse. It never reads the page's code, and it learns from the rounds it plays. On 1,052 held-out rounds it averages about 3,770 of OpenGuessr's 5,000 points a round.
+An AI that plays [OpenGuessr](https://openguessr.com) by looking at the screen and moving a mouse. It never reads the page's code, and it learns from the rounds it plays. On 1,338 held-out rounds it averages about 3,770 of OpenGuessr's 5,000 points a round.
 
 For fun and learning. Only play it against friends who know it's a bot, never in ranked or public games.
 

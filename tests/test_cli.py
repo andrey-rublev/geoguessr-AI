@@ -70,6 +70,12 @@ def test_every_command_parses(argv):
     assert callable(args.func)
 
 
+def test_it_says_its_version(capsys):
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--version"])
+    assert capsys.readouterr().out == f"geoguessr-ai {cli.__version__}\n"
+
+
 @pytest.mark.parametrize(
     "command", [["predict", "a.jpg"], ["evaluate"], ["play"], ["friends"], ["train"]]
 )

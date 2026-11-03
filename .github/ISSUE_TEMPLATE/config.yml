@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question
+    url: https://github.com/andrey-rublev/geoguessr-AI/discussions/new?category=q-a
+    about: How to set it up, how it works, or anything else. Ask in Discussions.
+  - name: Security problem
+    url: https://github.com/andrey-rublev/geoguessr-AI/security/advisories/new
+    about: Tell us privately, not in a public issue.

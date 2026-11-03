@@ -1,0 +1,47 @@
+name: Bug report
+description: Something went wrong while installing or playing
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what it did instead. A screenshot helps.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it played
+      options:
+        - On a hidden screen (WSL)
+        - In its own browser window
+        - On this screen
+        - It didn't get that far (installing or setting up)
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Game
+      options:
+        - Solo game
+        - Friends' room
+        - Not playing yet
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: From Settings > Apps > Installed apps, or `git rev-parse --short HEAD` if you run it from a terminal.
+      placeholder: v1.0.1
+  - type: input
+    id: computer
+    attributes:
+      label: Windows and graphics
+      placeholder: Windows 11 24H2, Intel Arc 140V, 16 GB
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The end of `%LOCALAPPDATA%\geoguessr-ai\app.log`, or what the terminal printed.
+      render: text

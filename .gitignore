@@ -26,3 +26,5 @@ layout-wsl.json
 layout-party-wsl.json
 layout*-continue.png
 calibration_preview*.png
+build/
+dist/

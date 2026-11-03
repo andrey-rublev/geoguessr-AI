@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,20 @@ name = "geoguessr-ai"
 version = "1.0.0"
 description = "A self-trained geolocation AI that plays OpenGuessr by watching your screen and controlling your mouse."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Nikhil Kolli" }]
 requires-python = ">=3.10"
+keywords = ["geoguessr", "openguessr", "geolocation", "streetclip", "computer-vision", "bot"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Games/Entertainment",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
 dependencies = [
     "numpy>=1.26",
     "pillow>=10",
@@ -27,6 +40,11 @@ dependencies = [
     "onnxruntime>=1.20",
     "openvino>=2025.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/andrey-rublev/geoguessr-AI"
+Download = "https://github.com/andrey-rublev/geoguessr-AI/releases/latest"
+Issues = "https://github.com/andrey-rublev/geoguessr-AI/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]

@@ -152,8 +152,7 @@ def embed_rounds(
     rounds = {rnd.id: rnd for rnd in find_rounds(root)}
     if not rounds:
         raise FileNotFoundError(
-            f"No rounds with a recorded answer under {root}. "
-            "Play some with `geoguessr-ai play`."
+            f"No rounds with a recorded answer under {root}. Play some with `geoguessr-ai play`."
         )
     out_path = Path(out_path)
     kept = None

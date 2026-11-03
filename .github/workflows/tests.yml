@@ -14,4 +14,5 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen --extra dev --extra browser --python 3.13
       - run: uv run --frozen ruff check src tests
+      - run: uv run --frozen ruff format --check src tests
       - run: uv run --frozen pytest -q --color=no

@@ -1,0 +1,450 @@
+Playing on a screen of the bot's own, in WSL's Ubuntu.
+The bot's screen: http://localhost:6080/vnc.html?autoconnect=1&resize=scale
+Open it in your browser to watch, or to join the room or start a game there yourself.
+Ctrl+C here stops the bot.
+Starting a Singleplayer game
+The game isn't where it was last time: looking for it.
+Found OpenGuessr's tab: switching to it.
+Found the game, and saved where it is to layout-wsl.json (see calibration_preview.png).
+Stop any time with Ctrl+C.
+
+Round 1
+  measured Street View's camera: it faces (960, 547) on screen, 1268 pixels per 90 degrees
+  guess 32.539, -96.874 (US 100%, MX 0%, AR 0%; driving on the right 100%) (model expects ~4,210 points)
+  answer 31.074, -97.840 in US: our pin at 32.535, -96.885 was 186 km away, the right country
+
+Round 2
+  guess 12.866, 79.971 (IN 98%, BD 1%, NP 0%; driving on the left 100%) (model expects ~4,022 points)
+  answer 16.947, 82.411 in IN: our pin at 12.868, 79.992 was 523 km away, the right country
+
+Round 3
+  guess 40.653, -8.001 (PT 64%, ES 26%, FR 5%; driving on the right 100%) (model expects ~4,140 points)
+  answer 42.624, -8.417 in ES: our pin at 40.642, -8.006 was 223 km away, guessed PT
+
+Round 4
+  clue: Turkish: sk.
+  guess 40.729, 29.508 (TR 95%, GR 1%, BG 1%; driving on the right 100%) (model expects ~3,975 points)
+  answer 40.057, 27.030 in TR: our pin at 40.742, 29.507 was 223 km away, the right country
+
+Round 5
+  clue: town pretoria (ZA)
+  guess 51.653, -0.772 (GB 90%, FR 6%, NL 1%; driving on the left 91%) (model expects ~4,416 points)
+  answer 51.399, 0.484 in GB: our pin at 51.647, -0.752 was 90 km away, the right country
+
+Round 6
+  guess 28.393, 77.261 (IN 99%, NP 1%, PK 0%; driving on the left 100%) (model expects ~4,116 points)
+  answer 24.628, 76.120 in IN: our pin at 28.405, 77.264 was 435 km away, the right country
+
+Round 7
+  guess -1.213, 36.877 (KE 98%, TZ 2%, UG 1%; driving on the left 100%) (model expects ~4,921 points)
+  answer -1.486, 36.798 in KE: our pin at -1.227, 36.895 was 31 km away, the right country
+
+Round 8
+  clue: Romanian: strada
+  guess 46.338, 19.586 (RO 23%, HU 18%, RS 8%; driving on the right 100%) (model expects ~3,737 points)
+  answer 45.443, 23.267 in RO: our pin at 46.346, 19.568 was 303 km away, guessed HU
+
+Round 9
+  guess 23.599, 90.689 (BD 65%, IN 32%, BT 1%; driving on the left 99%) (model expects ~4,295 points)
+  answer 24.427, 88.995 in BD: our pin at 23.584, 90.679 was 195 km away, the right country
+
+Round 10
+  clue: Spanish: c.
+  guess 20.283, -101.010 (MX 98%, EC 1%, CO 0%; driving on the right 100%) (model expects ~4,072 points)
+  answer 18.942, -98.010 in MX: our pin at 20.280, -101.017 was 348 km away, the right country
+
+Round 11
+  guess 54.978, 26.810 (RU 33%, BY 16%, LV 13%; driving on the right 100%) (model expects ~3,291 points)
+  answer 54.243, 25.754 in LT: our pin at 54.982, 26.822 was 107 km away, guessed BY
+
+Round 12
+  guess 52.556, -1.386 (GB 89%, FR 4%, IE 2%; driving on the left 92%) (model expects ~4,428 points)
+  answer 52.269, -1.677 in GB: our pin at 52.566, -1.367 was 39 km away, the right country
+
+Round 13
+  guess 40.379, -3.808 (ES 87%, PT 6%, FR 5%; driving on the right 100%) (model expects ~3,954 points)
+  answer 41.515, -4.695 in ES: our pin at 40.375, -3.830 was 146 km away, the right country
+
+Round 14
+  guess -25.458, -49.279 (BR 89%, AR 4%, PY 2%; driving on the right 100%) (model expects ~3,269 points)
+  answer -26.218, -51.164 in BR: our pin at -25.456, -49.300 was 205 km away, the right country
+
+Round 15
+  guess 52.026, 5.866 (NL 50%, DE 36%, BE 9%; driving on the right 98%) (model expects ~4,497 points)
+  answer 52.140, 6.621 in NL: our pin at 52.028, 5.847 was 54 km away, the right country
+
+Round 16
+  clue: Catalan/Spanish/French/Portuguese: av.
+  guess -16.571, -68.113 (BO 87%, PE 7%, CO 6%; driving on the right 100%) (model expects ~4,715 points)
+  answer -16.426, -68.109 in BO: our pin at -16.559, -68.124 was 15 km away, the right country
+
+Round 17
+  guess -6.353, 106.954 (ID 79%, PH 7%, BD 3%; driving on the left 89%) (model expects ~3,294 points)
+  answer -6.539, 107.336 in ID: our pin at -6.359, 106.950 was 47 km away, the right country
+
+Round 18
+  guess 2.388, 102.436 (TH 35%, ID 28%, MY 24%; driving on the left 92%) (model expects ~2,709 points)
+  answer 9.562, 99.082 in TH: our pin at 2.378, 102.420 was 880 km away, guessed MY
+
+Round 19
+  clue: Croatian/Slovak/Slovene: cesta
+  guess 45.850, 15.647 (HR 16%, SI 15%, SK 12%; driving on the right 99%) (model expects ~3,863 points)
+  answer 48.218, 17.246 in SK: our pin at 45.858, 15.652 was 289 km away, guessed SI
+
+Round 20
+  unsure (~2,243 points): walking on to look
+  unsure (~2,132 points): walking on to look again
+  guess 49.089, 45.032 (RU 65%, KZ 5%, CA 5%; driving on the right 100%) (model expects ~2,158 points)
+  answer 52.616, 78.859 in RU: our pin at 49.096, 45.031 was 2,384 km away, the right country
+
+Round 21
+  guess 41.121, -83.092 (US 94%, CA 6%, IN 0%; driving on the right 100%) (model expects ~4,051 points)
+  answer 40.379, -86.289 in US: our pin at 41.108, -83.076 was 282 km away, the right country
+
+Round 22
+  guess 48.296, 106.756 (MN 36%, FR 12%, CA 9%; driving on the right 96%) (model expects ~3,170 points)
+  answer 47.901, 107.130 in MN: our pin at 48.283, 106.774 was 50 km away, the right country
+
+Round 23
+  guess 31.781, 36.022 (JO 75%, IL 12%, PS 11%; driving on the right 100%) (model expects ~4,868 points)
+  answer 31.984, 36.146 in JO: our pin at 31.790, 36.015 was 25 km away, the right country
+
+Round 24
+  guess 34.819, 135.369 (JP 100%, KR 0%, US 0%; driving on the left 100%) (model expects ~3,912 points)
+  answer 35.950, 140.003 in JP: our pin at 34.804, 135.357 was 440 km away, the right country
+
+Round 25
+  guess 15.084, 146.060 (MP 77%, CO 12%, MX 5%; driving on the right 99%) (model expects ~4,581 points)
+  answer 15.335, 145.915 in MP: our pin at 15.087, 146.046 was 31 km away, the right country
+
+Round 26
+  guess 52.023, 5.877 (NL 49%, DE 36%, BE 10%; driving on the right 98%) (model expects ~4,462 points)
+  answer 51.799, 4.699 in NL: our pin at 52.028, 5.889 was 86 km away, the right country
+
+Round 27
+  clue: English: street
+  guess 6.574, 5.751 (NG 97%, GH 1%, BJ 1%; driving on the right 100%) (model expects ~4,139 points)
+  answer 7.540, 4.870 in NG: our pin at 6.586, 5.759 was 145 km away, the right country
+
+Round 28
+  clue: town herndon (US)
+  guess 31.340, -88.670 (US 100%, CA 0%, BR 0%; driving on the right 100%) (model expects ~3,743 points)
+  answer 33.043, -82.085 in US: our pin at 31.340, -88.659 was 647 km away, the right country
+
+Round 29
+  guess 41.880, -72.565 (US 99%, CA 1%, GB 0%; driving on the right 100%) (model expects ~4,479 points)
+  answer 41.980, -71.220 in US: our pin at 41.865, -72.564 was 112 km away, the right country
+
+Round 30
+  clue: Portuguese/Vietnamese: ã
+  guess -23.483, -47.481 (BR 99%, AR 1%, UY 0%; driving on the right 100%) (model expects ~3,437 points)
+  answer -27.347, -51.246 in BR: our pin at -23.495, -47.497 was 570 km away, the right country
+
+Round 31
+  guess -23.430, -48.770 (BR 80%, AR 13%, PY 6%; driving on the right 100%) (model expects ~3,092 points)
+  answer -28.454, -54.183 in BR: our pin at -23.414, -48.774 was 779 km away, the right country
+
+Round 32
+  guess 37.848, -121.251 (US 100%, MX 0%, AU 0%; driving on the right 100%) (model expects ~4,355 points)
+  answer 35.607, -120.647 in US: our pin at 37.850, -121.246 was 255 km away, the right country
+
+Round 33
+  guess 34.184, -118.330 (US 100%, MX 0%, AU 0%; driving on the right 100%) (model expects ~4,616 points)
+  answer 34.134, -118.684 in US: our pin at 34.187, -118.344 was 32 km away, the right country
+
+Round 34
+  guess 23.091, 89.100 (BD 74%, IN 25%, BT 1%; driving on the left 100%) (model expects ~4,477 points)
+  answer 22.232, 88.576 in IN: our pin at 23.099, 89.095 was 110 km away, guessed BD
+
+Round 35
+  guess 56.091, 40.613 (RU 94%, KZ 1%, BY 1%; driving on the right 100%) (model expects ~3,268 points)
+  answer 58.206, 30.979 in RU: our pin at 56.102, 40.631 was 627 km away, the right country
+
+Round 36
+  guess 42.791, 74.780 (KG 38%, BG 10%, KZ 9%; driving on the right 100%) (model expects ~3,393 points)
+  answer 42.711, 23.223 in BG: our pin at 42.776, 74.801 was 4,144 km away, guessed KG
+
+Round 37
+  guess -26.147, 28.315 (ZA 62%, BW 13%, SZ 12%; driving on the left 95%) (model expects ~3,970 points)
+  answer -25.820, 28.303 in ZA: our pin at -26.130, 28.319 was 34 km away, the right country
+
+Round 38
+  guess 42.544, 20.462 (RS 15%, MK 9%, RO 9%; driving on the right 100%) (model expects ~3,701 points)
+  answer 43.648, 26.102 in BG: our pin at 42.549, 20.446 was 475 km away, guessed XK
+
+Round 39
+  guess -25.313, -57.437 (PY 67%, AR 18%, TH 3%; driving on the right 96%) (model expects ~4,692 points)
+  answer -25.395, -57.832 in AR: our pin at -25.297, -57.437 was 41 km away, guessed PY
+
+Round 40
+  guess 45.467, -75.483 (CA 64%, US 35%, RU 0%; driving on the right 100%) (model expects ~3,977 points)
+  answer 46.126, -77.122 in CA: our pin at 45.458, -75.466 was 148 km away, the right country
+
+Round 41
+  guess 59.295, 16.358 (SE 70%, FI 9%, EE 6%; driving on the right 100%) (model expects ~3,995 points)
+  answer 56.855, 13.651 in SE: our pin at 59.296, 16.356 was 314 km away, the right country
+
+Round 42
+  guess 41.845, 19.763 (IT 18%, FR 17%, AL 17%; driving on the right 100%) (model expects ~3,549 points)
+  answer 43.877, 7.157 in FR: our pin at 41.832, 19.744 was 1,050 km away, guessed AL
+
+Round 43
+  guess 48.578, 2.717 (FR 72%, DE 9%, CH 5%; driving on the right 97%) (model expects ~4,004 points)
+  answer 43.274, -0.441 in FR: our pin at 48.575, 2.725 was 638 km away, the right country
+
+Round 44
+  guess 55.882, 38.547 (RU 96%, GE 1%, BY 1%; driving on the right 100%) (model expects ~3,745 points)
+  answer 53.924, 38.191 in RU: our pin at 55.881, 38.564 was 219 km away, the right country
+
+Round 45
+  clue: Devanagari: युनियन बेक
+  guess 18.797, 74.025 (IN 99%, BD 0%, NP 0%; driving on the left 100%) (model expects ~3,931 points)
+  answer 18.476, 73.041 in IN: our pin at 18.788, 74.011 was 108 km away, the right country
+
+Round 46
+  clue: Estonian/Portuguese/Vietnamese: õ
+  guess -21.013, -47.953 (BR 96%, PY 1%, AR 1%; driving on the right 100%) (model expects ~2,735 points)
+  answer -1.422, -48.334 in BR: our pin at -21.012, -47.938 was 2,179 km away, the right country
+
+Round 47
+  guess 45.059, 19.796 (HU 14%, RS 13%, IT 11%; driving on the right 99%) (model expects ~3,492 points)
+  answer 48.195, 20.392 in HU: our pin at 45.056, 19.788 was 352 km away, guessed RS
+
+Round 48
+  guess 38.010, -81.171 (US 99%, CA 0%, DE 0%; driving on the right 100%) (model expects ~3,842 points)
+  answer 37.018, -81.518 in US: our pin at 38.023, -81.185 was 116 km away, the right country
+
+Round 49
+  guess 51.998, 1.157 (GB 37%, DE 19%, FR 13%; driving on the right 60%) (model expects ~3,503 points)
+  answer 55.679, 12.575 in DK: our pin at 52.001, 1.142 was 853 km away, guessed GB
+
+Round 50
+  guess 41.075, 16.942 (IT 64%, AL 9%, ME 5%; driving on the right 100%) (model expects ~4,113 points)
+  answer 41.008, 14.282 in IT: our pin at 41.074, 16.929 was 222 km away, the right country
+
+Round 51
+  clue: Spanish: ñ
+  guess 19.281, -98.961 (MX 91%, PE 3%, CO 3%; driving on the right 100%) (model expects ~4,640 points)
+  answer 19.384, -99.257 in MX: our pin at 19.288, -98.952 was 34 km away, the right country
+
+Round 52
+  clue: town crystal (US)
+  guess 36.022, -115.121 (US 100%, MX 0%, AE 0%; driving on the right 100%) (model expects ~4,373 points)
+  answer 36.086, -115.395 in US: our pin at 36.022, -115.133 was 25 km away, the right country
+
+Round 53
+  clue: Italian: via
+  guess 44.634, 10.753 (IT 77%, CH 7%, FR 3%; driving on the right 100%) (model expects ~4,112 points)
+  answer 45.011, 8.908 in IT: our pin at 44.619, 10.773 was 153 km away, the right country
+
+Round 54
+  guess -26.147, 31.261 (SZ 62%, ZA 35%, MZ 2%; driving on the left 100%) (model expects ~4,692 points)
+  answer -26.336, 31.112 in SZ: our pin at -26.129, 31.264 was 28 km away, the right country
+
+Round 55
+  guess 46.393, -117.148 (US 94%, CA 4%, TR 1%; driving on the right 100%) (model expects ~3,043 points)
+  answer 47.805, -119.124 in US: our pin at 46.406, -117.156 was 215 km away, the right country
+
+Round 56
+  guess -26.160, 31.293 (SZ 82%, ZA 13%, MZ 4%; driving on the left 100%) (model expects ~4,870 points)
+  answer -26.434, 31.171 in SZ: our pin at -26.168, 31.308 was 33 km away, the right country
+
+Round 57
+  guess -26.125, 31.260 (SZ 70%, ZA 23%, LS 4%; driving on the left 100%) (model expects ~4,759 points)
+  answer -26.287, 31.067 in SZ: our pin at -26.130, 31.266 was 26 km away, the right country
+
+Round 58
+  guess -16.532, -68.118 (BO 97%, PE 2%, CL 0%; driving on the right 100%) (model expects ~4,675 points)
+  answer -16.467, -68.051 in BO: our pin at -16.517, -68.122 was 9 km away, the right country
+
+Round 59
+  clue: numbered street: 99th ave
+  guess 46.977, -102.972 (US 77%, CA 23%, ZA 0%; driving on the right 100%) (model expects ~3,674 points)
+  answer 48.499, -102.781 in US: our pin at 46.979, -102.952 was 169 km away, the right country
+
+Round 60
+  guess 5.938, 1.212 (GH 53%, NG 19%, TG 15%; driving on the right 100%) (model expects ~4,212 points)
+  answer 5.563, 0.024 in GH: our pin at 5.931, 1.230 was 139 km away, the right country
+
+Round 61
+  clue: county road: co rd 300
+  guess 33.569, -113.979 (US 95%, MX 5%, AR 0%; driving on the right 100%) (model expects ~2,948 points)
+  answer 31.710, -103.743 in US: our pin at 33.567, -113.992 was 981 km away, the right country
+
+Round 62
+  clue: US highway: us-85
+  guess 44.140, -106.540 (US 99%, CA 1%, AU 0%; driving on the right 100%) (model expects ~3,658 points)
+  answer 45.276, -103.590 in US: our pin at 44.148, -106.558 was 266 km away, the right country
+
+Round 63
+  guess -2.001, 30.125 (RW 68%, UG 25%, BI 4%; driving on the right 74%) (model expects ~4,626 points)
+  answer -1.925, 30.022 in RW: our pin at -2.018, 30.121 was 15 km away, the right country
+
+Round 64
+  clue: Italian: via
+  guess 40.937, 16.884 (IT 98%, AL 1%, GR 0%; driving on the right 100%) (model expects ~4,470 points)
+  answer 41.055, 16.791 in IT: our pin at 40.941, 16.885 was 15 km away, the right country
+
+Round 65
+  guess 20.481, -101.165 (MX 93%, AR 2%, PE 2%; driving on the right 100%) (model expects ~3,528 points)
+  answer 17.853, -98.990 in MX: our pin at 20.486, -101.149 was 370 km away, the right country
+
+Round 66
+  clue: sun to the east (92 deg), 43 deg up
+  guess 38.470, -97.845 (US 97%, BR 1%, AR 0%; driving on the right 99%) (model expects ~3,866 points)
+  answer 37.627, -98.429 in US: our pin at 38.472, -97.852 was 107 km away, the right country
+
+Round 67
+  clue: compass point in a road name: n ring rd
+  guess -24.643, 26.063 (BW 52%, ZA 43%, LS 3%; driving on the left 99%) (model expects ~4,523 points)
+  answer -24.777, 25.979 in ZA: our pin at -24.660, 26.077 was 16 km away, guessed BW
+
+Round 68
+  guess 23.449, 58.527 (OM 80%, AE 18%, QA 1%; driving on the right 100%) (model expects ~4,662 points)
+  answer 23.471, 58.575 in OM: our pin at 23.463, 58.531 was 5 km away, the right country
+
+Round 69
+  guess 42.828, -80.214 (US 60%, CA 35%, PL 1%; driving on the right 100%) (model expects ~4,021 points)
+  answer 42.751, -80.993 in CA: our pin at 42.840, -80.216 was 64 km away, the right country
+
+Round 70
+  clue: Devanagari: बाबा हरिदास नगर/एक्स
+  clue: town najafgarh (IN)
+  guess 27.468, 78.149 (IN 100%, NP 0%, PK 0%; driving on the left 100%) (model expects ~3,624 points)
+  answer 28.708, 77.062 in IN: our pin at 27.472, 78.145 was 174 km away, the right country
+
+Round 71
+  guess 41.226, -73.274 (US 99%, CA 1%, DE 0%; driving on the right 100%) (model expects ~4,462 points)
+  answer 40.410, -74.495 in US: our pin at 41.240, -73.269 was 138 km away, the right country
+
+Round 72
+  clue: Italian: via
+  guess 43.815, 11.133 (IT 75%, CH 7%, FR 5%; driving on the right 100%) (model expects ~3,928 points)
+  answer 43.806, 10.460 in IT: our pin at 43.800, 11.123 was 53 km away, the right country
+
+Round 73
+  unsure (~2,393 points): walking on to look
+  guess 54.242, 55.430 (RU 72%, GE 5%, KZ 5%; driving on the right 99%) (model expects ~2,215 points)
+  answer 51.278, 58.223 in RU: our pin at 54.244, 55.409 was 380 km away, the right country
+
+Round 74
+  clue: Italian: vendesi, via
+  guess 40.582, 14.665 (IT 92%, AL 2%, CH 1%; driving on the right 100%) (model expects ~4,094 points)
+  answer 40.649, 14.620 in IT: our pin at 40.575, 14.685 was 10 km away, the right country
+
+Round 75
+  clue: Turkish: cd.
+  guess 39.745, 33.159 (TR 92%, SY 4%, CY 2%; driving on the right 98%) (model expects ~3,971 points)
+  answer 39.656, 32.237 in TR: our pin at 39.735, 33.155 was 79 km away, the right country
+
+Round 76
+  guess 4.353, -73.969 (CO 98%, EC 1%, GT 0%; driving on the right 100%) (model expects ~4,661 points)
+  answer 4.684, -74.223 in CO: our pin at 4.354, -73.973 was 46 km away, the right country
+
+Round 77
+  guess 40.758, -73.940 (US 99%, CA 0%, FR 0%; driving on the right 100%) (model expects ~4,623 points)
+  answer 40.877, -74.001 in US: our pin at 40.742, -73.927 was 16 km away, the right country
+
+Round 78
+  guess -6.312, 106.987 (ID 97%, PH 2%, VN 1%; driving on the left 97%) (model expects ~4,704 points)
+  answer -6.153, 107.019 in ID: our pin at -6.315, 106.992 was 18 km away, the right country
+
+Round 79
+  clue: Spanish: calle
+  guess 19.317, -98.988 (MX 100%, EC 0%, GT 0%; driving on the right 100%) (model expects ~4,769 points)
+  answer 19.498, -99.253 in MX: our pin at 19.329, -98.996 was 33 km away, the right country
+
+Round 80
+  clue: Russian road word in Latin letters: ulitsa
+  guess 56.050, 40.142 (RU 99%, GE 0%, KZ 0%; driving on the right 100%) (model expects ~4,091 points)
+  answer 54.035, 58.512 in RU: our pin at 56.053, 40.149 was 1,187 km away, the right country
+
+Round 81
+  guess 52.028, 5.861 (NL 46%, DE 38%, BE 10%; driving on the right 99%) (model expects ~4,468 points)
+  answer 50.839, 5.950 in NL: our pin at 52.028, 5.845 was 132 km away, the right country
+
+Round 82
+  guess 55.781, 38.941 (RU 96%, BY 1%, UA 0%; driving on the right 100%) (model expects ~4,250 points)
+  answer 55.415, 37.515 in RU: our pin at 55.782, 38.962 was 100 km away, the right country
+
+Round 83
+  guess 2.323, 102.358 (MY 72%, SG 20%, ID 6%; driving on the left 99%) (model expects ~4,534 points)
+  answer 1.170, 103.946 in ID: our pin at 2.335, 102.376 was 217 km away, guessed MY
+
+Round 84
+  guess -25.254, -57.496 (PY 49%, IN 21%, AR 11%; driving on the right 77%) (model expects ~3,815 points)
+  answer -25.317, -57.763 in AR: our pin at -25.258, -57.480 was 29 km away, guessed PY
+
+Round 85
+  guess 28.434, -105.980 (MX 58%, US 38%, CL 3%; driving on the right 100%) (model expects ~3,759 points)
+  answer 28.320, -105.632 in MX: our pin at 28.443, -105.986 was 37 km away, the right country
+
+Round 86
+  guess 39.083, -76.703 (US 100%, CA 0%, AU 0%; driving on the right 100%) (model expects ~4,446 points)
+  answer 39.373, -76.778 in US: our pin at 39.089, -76.699 was 32 km away, the right country
+
+Round 87
+  guess 39.534, -78.442 (US 93%, CA 7%, HU 0%; driving on the right 100%) (model expects ~3,623 points)
+  answer 41.211, -77.694 in US: our pin at 39.532, -78.458 was 198 km away, the right country
+
+Round 88
+  guess -26.152, 31.295 (SZ 74%, ZA 21%, MZ 3%; driving on the left 100%) (model expects ~4,793 points)
+  answer -26.315, 31.184 in SZ: our pin at -26.169, 31.310 was 21 km away, the right country
+
+Round 89
+  guess -29.111, 27.691 (LS 62%, ZA 34%, SZ 2%; driving on the left 100%) (model expects ~4,678 points)
+  answer -29.566, 27.489 in LS: our pin at -29.129, 27.704 was 53 km away, the right country
+
+Round 90
+  guess 43.707, -79.262 (CA 69%, US 31%, AU 0%; driving on the right 100%) (model expects ~4,427 points)
+  answer 43.678, -79.446 in CA: our pin at 43.704, -79.248 was 16 km away, the right country
+
+Round 91
+  clue: French: rue
+  guess 50.417, 3.769 (FR 45%, BE 41%, NL 5%; driving on the right 99%) (model expects ~4,499 points)
+  answer 50.348, 2.757 in FR: our pin at 50.421, 3.781 was 73 km away, guessed BE
+
+Round 92
+  guess -41.342, 174.617 (NZ 94%, CO 2%, CL 1%; driving on the left 96%) (model expects ~4,593 points)
+  answer -41.373, 174.724 in NZ: our pin at -41.337, 174.607 was 11 km away, the right country
+
+Round 93
+  guess 30.011, 78.404 (IN 56%, TR 8%, BT 6%; driving on the left 73%) (model expects ~2,893 points)
+  answer 27.400, 89.646 in BT: our pin at 30.027, 78.420 was 1,132 km away, guessed IN
+
+Round 94
+  clue: Italian: via
+  guess 43.730, 11.849 (IT 95%, CH 2%, FR 1%; driving on the right 100%) (model expects ~4,104 points)
+  answer 43.780, 10.264 in IT: our pin at 43.732, 11.864 was 129 km away, the right country
+
+Round 95
+  guess 56.515, 60.345 (RU 93%, FI 2%, KZ 1%; driving on the right 100%) (model expects ~3,230 points)
+  answer 56.496, 66.471 in RU: our pin at 56.526, 60.364 was 375 km away, the right country
+
+Round 96
+  guess -25.639, 28.405 (ZA 71%, BW 13%, BR 6%; driving on the left 92%) (model expects ~4,086 points)
+  answer -24.048, 28.970 in ZA: our pin at -25.629, 28.426 was 184 km away, the right country
+
+Round 97
+  guess 29.647, -96.883 (US 73%, MX 10%, BR 5%; driving on the right 96%) (model expects ~3,040 points)
+  answer 27.128, -97.648 in US: our pin at 29.646, -96.867 was 290 km away, the right country
+
+Round 98
+  clue: state route: state hwy 2
+  clue: numbered highway: hwy 2
+  guess -41.237, 174.765 (NZ 79%, US 19%, AU 2%; driving on the left 81%) (model expects ~3,849 points)
+  answer -41.248, 174.866 in NZ: our pin at -41.238, 174.783 was 7 km away, the right country
+
+Round 99
+  unsure (~1,620 points): walking on to look
+  clue: sun to the south-west (245 deg), 52 deg up
+  guess 14.693, 102.501 (IN 28%, TH 25%, VN 21%; driving on the left 62%) (model expects ~2,206 points)
+  answer 17.120, 106.970 in VN: our pin at 14.690, 102.495 was 550 km away, guessed TH
+
+Round 100
+  guess 15.138, 145.987 (MP 97%, US 1%, CO 0%; driving on the right 99%) (model expects ~4,963 points)
+  answer 15.106, 145.797 in MP: our pin at 15.157, 145.987 was 21 km away, the right country
+
+100 rounds with the answer read: on average 302 km off (half within 135 km), the right country in 82% (82 of 100)
+
+The rounds are saved with their answers in runs: `geoguessr-ai train` learns from them.

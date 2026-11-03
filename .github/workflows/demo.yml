@@ -1,0 +1,57 @@
+# Builds the live demo, the app's page playing back a real game, and puts it on GitHub Pages:
+# https://andrey-rublev.github.io/geoguessr-AI/
+name: Demo
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/geoguessr_ai/desktop.html
+      - src/geoguessr_ai/desktop.py
+      - src/geoguessr_ai/botrun.py
+      - src/geoguessr_ai/knowledge/borders.json
+      - scripts/build_demo.py
+      - docs/demo/**
+      - docs/social-preview.png
+      - .github/workflows/demo.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # The page needs only these: no model, nor anything that plays.
+      - run: pip install numpy global-land-mask
+      - run: python scripts/build_demo.py docs/demo/game.log site/index.html
+        env:
+          PYTHONPATH: src
+      - run: cp docs/social-preview.png site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

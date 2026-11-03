@@ -1,14 +1,27 @@
 # geoguessr-AI
 
+[![Tests](https://github.com/andrey-rublev/geoguessr-AI/actions/workflows/tests.yml/badge.svg)](https://github.com/andrey-rublev/geoguessr-AI/actions/workflows/tests.yml)
+[![Release](https://img.shields.io/github/v/release/andrey-rublev/geoguessr-AI)](https://github.com/andrey-rublev/geoguessr-AI/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/andrey-rublev/geoguessr-AI)](LICENSE)
+
 An AI that plays [OpenGuessr](https://openguessr.com) by looking at the screen and moving a mouse. It never reads the page's code, and it learns from the rounds it plays. On 1,052 held-out rounds it averages about 3,770 of OpenGuessr's 5,000 points a round.
 
 For fun and learning. Only play it against friends who know it's a bot, never in ranked or public games.
 
-![The app after a real game of 20 rounds: each guess joined to its answer on a chart of the world, above the list of rounds](docs/app.png)
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/app.png">
+  <img src="docs/demo.gif" width="880" alt="The app as the bot plays a real game: each guess lands on a chart of the world, joined to its answer, and goes in the list of rounds below. After 100 rounds it was 302 km off on average, and in the right country 82 times.">
+</picture>
+
+**[Watch that game in your browser](https://andrey-rublev.github.io/geoguessr-AI/)**, played back in the app, with nothing to install.
 
 ## Get it
 
-On Windows 10 or 11, download **[geoguessr-AI-Setup.exe](https://github.com/andrey-rublev/geoguessr-AI/releases/latest/download/geoguessr-AI-Setup.exe)** and run it. It needs no administrator or Python. Windows may warn that it doesn't recognise the installer, as it isn't signed: choose **More info**, then **Run anyway**.
+On Windows 10 or 11, download **[geoguessr-AI-Setup.exe](https://github.com/andrey-rublev/geoguessr-AI/releases/latest/download/geoguessr-AI-Setup.exe)** and run it. It needs no administrator or Python. Windows may warn that it doesn't recognise the installer, as it isn't signed: choose **More info**, then **Run anyway**. Or, in PowerShell:
+
+```powershell
+curl.exe -Lo geoguessr-AI-Setup.exe https://github.com/andrey-rublev/geoguessr-AI/releases/latest/download/geoguessr-AI-Setup.exe; .\geoguessr-AI-Setup.exe
+```
 
 It fetches the libraries it needs as it installs (about 1 GB), then opens the app, which offers to download the model (about 2.2 GB). It takes about 4 GB of disk in all, and it plays best with 8 GB of memory or more. On an Intel GPU it thinks in under a second a look. On any other computer it thinks on the CPU, in 10 seconds or more, so a very short round in a room may catch it out.
 
@@ -63,4 +76,12 @@ Add `--help` to any command to see all its options.
 
 It looks around, reads signs and checks the sun. StreetCLIP, an image model trained to geolocate street photos, and a classifier trained on its own rounds rank regions of the world. The clues and the photos that look most alike reweigh them, and those photos place the guess within the chosen region.
 
-Data: OpenStreetView-5M (CC-BY-SA 4.0), GeoNames (CC BY 4.0), Natural Earth, `global-land-mask`. Models: StreetCLIP (CC BY-NC 4.0, non-commercial use only), OpenAI CLIP, RapidOCR with PaddleOCR (Apache 2.0), run with OpenVINO (Apache 2.0).
+## Contributing
+
+Bug reports, results from your computer and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), the [good first issues](https://github.com/andrey-rublev/geoguessr-AI/labels/good%20first%20issue), and [Discussions](https://github.com/andrey-rublev/geoguessr-AI/discussions) for questions.
+
+## License
+
+The code is [MIT](LICENSE). The model it downloads sees through StreetCLIP, which is CC BY-NC 4.0, so the model is for non-commercial use only.
+
+Data: OpenStreetView-5M (CC-BY-SA 4.0), GeoNames (CC BY 4.0), Natural Earth, `global-land-mask`. Models: StreetCLIP (CC BY-NC 4.0), OpenAI CLIP, RapidOCR with PaddleOCR (Apache 2.0), run with OpenVINO (Apache 2.0).

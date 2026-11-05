@@ -23,7 +23,7 @@ On Windows 10 or 11, download **[geoguessr-AI-Setup.exe](https://github.com/andr
 curl.exe -Lo geoguessr-AI-Setup.exe https://github.com/andrey-rublev/geoguessr-AI/releases/latest/download/geoguessr-AI-Setup.exe; .\geoguessr-AI-Setup.exe
 ```
 
-It fetches the libraries it needs as it installs (about 1 GB), then opens the app, which offers to download the model (about 2.2 GB). It takes about 4 GB of disk in all, and it plays best with 8 GB of memory or more. On an Intel GPU it thinks in under a second a look. On any other computer it thinks on the CPU, in 10 seconds or more, so a very short round in a room may catch it out.
+Setup fetches the libraries (about 1 GB), and the app then offers to download the model (about 2.2 GB): about 4 GB of disk in all. It plays best with 8 GB of memory or more. On an Intel GPU it thinks in under a second a look; elsewhere it uses the CPU and takes 10 seconds or more, so very short rounds in a room may catch it out.
 
 ## Play
 
@@ -35,7 +35,7 @@ Enter the room's code and press **Start the bot**, or choose **Solo game** and h
 - **In its own browser window** needs nothing more, but OpenGuessr's person check may stop it there.
 - **On this screen** plays in your own browser, taking over your mouse until you press F8.
 
-The map plots each round's guess and answer with a line between them. Scroll to zoom, drag to move, and click a round on it or in the list to see it. The switches under **How hard it plays** make it easier to beat: one view only (NMPZ) scores about 3,510 points a round against 3,770, and turning off signs brings it down further.
+The map joins each guess to its answer: scroll to zoom, drag to move, and click a round to see it. To make it easier to beat, use **How hard it plays**: one view only (NMPZ) scores about 3,510 a round instead of 3,770, and turning off signs lowers it further.
 
 ## From a terminal
 
@@ -48,21 +48,21 @@ pip install -e ".[dev,browser]"
 geoguessr-ai fetch-model
 ```
 
-`geoguessr-ai app` opens the app, and `geoguessr-ai app --shortcut` puts an icon for it on your desktop and in the Start menu. Otherwise, open the game in your browser, run a command and let go of the mouse. **F8** stops it. The bot finds the game by itself, on any screen, and finds it again if it moves.
+`geoguessr-ai app` opens the app; `--shortcut` adds it to the desktop and Start menu. Otherwise, open the game in your browser, run a command and let go of the mouse. The bot finds the game on any screen. **F8** stops it.
 
 **`geoguessr-ai play`** plays a Singleplayer game on its own: 5 rounds, or `--rounds 10`. After each round it says how far off its pin was, like `our pin at 6.452, 3.391 was 111 km away, guessed NG`, and saves the round to `runs/` for `train`.
 
 **`geoguessr-ai friends`** plays in a multiplayer room until you stop it: each round the host starts, keeping to the timer. `--join EW2-78U` joins that room in a browser of its own.
 
-**`geoguessr-ai train`** learns from the street photos and the rounds in `runs/`, and keeps the new model only if it scores better on rounds held out from training. `--shards 1 2` first downloads and adds more photos, about 2.5 GB a shard. **`train-details`** tries to learn the small things players use from close-ups of its rounds, kept only if they add points; on 1,800 rounds they didn't yet.
+**`geoguessr-ai train`** learns from the street photos and the rounds in `runs/`, and keeps the new model only if it scores better on rounds held out from training. `--shards 1 2` first downloads and adds more photos, about 2.5 GB a shard.
 
-**`geoguessr-ai calibrate`** finds the game on screen, if `play` and `friends` can't by themselves; `--manual` lets you show it each part by hovering over it. **`evaluate --rounds`** scores the model on the held-out rounds, and **`predict photo.jpg`** guesses where photos were taken.
+Training runs cool, on a quarter of the CPU's threads, resting as long as it works and pausing above 85 °C; `--threads`, `--rest` and `--max-temp` change that.
 
-Training runs cool, since running flat out has crashed a laptop: on a quarter of the CPU's threads, resting as long as it works, and pausing above 85 °C. `--threads`, `--rest` and `--max-temp` change that.
+**`calibrate`** shows the bot where the game is if it can't find it, **`evaluate --rounds`** scores the model on held-out rounds, and **`predict photo.jpg`** guesses where a photo was taken.
 
 | Option for `play` and `friends` | What it does |
 | --- | --- |
-| `--hidden` | Plays on a screen of its own in WSL (set it up once with `wsl -d Ubuntu -e bash scripts/wsl_setup.sh`). Watch it at `http://localhost:6080/vnc.html?autoconnect=1&resize=scale` |
+| `--hidden` | Plays on a screen of its own in WSL (set up once with `wsl -d Ubuntu -e bash scripts/wsl_setup.sh`), watched at `localhost:6080/vnc.html` |
 | `--browser` | Plays in a muted browser window of its own: `play` starts a game there, and for `friends`, join the room there or use `--join` |
 | `--rounds N` | How many rounds to play (`friends` plays as many as the host starts) |
 | `--nmpz` | One view a round: for a game with NMPZ on, or to make it easier to beat |
@@ -78,7 +78,7 @@ It looks around, reads signs and checks the sun. StreetCLIP, an image model trai
 
 ## Contributing
 
-Bug reports, results from your computer and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), the [good first issues](https://github.com/andrey-rublev/geoguessr-AI/labels/good%20first%20issue), and [Discussions](https://github.com/andrey-rublev/geoguessr-AI/discussions) for questions.
+Bug reports, results from your computer and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), the [good first issues](https://github.com/andrey-rublev/geoguessr-AI/labels/good%20first%20issue), and [Discussions](https://github.com/andrey-rublev/geoguessr-AI/discussions) for questions.
 
 ## License
 

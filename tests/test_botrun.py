@@ -54,10 +54,20 @@ def played(lines=GAME, choices=Choices()):
             Choices(mode="play", nmpz=True, walk=False, sun=False),
             ["play", "--rounds", "5", "--hidden", "--nmpz"],
         ),
+        (  # speed mode is one view too
+            Choices(mode="play", model="zeus", speed=True, nmpz=True, walk=False),
+            ["play", "--rounds", "5", "--hidden", "--model", "zeus", "--speed"],
+        ),
     ],
 )
 def test_the_choices_made_become_a_command(choices, arguments):
     assert choices.arguments() == arguments
+
+
+def test_a_model_not_in_the_lineup_is_played_as_hermes():
+    choices = Choices.read({"mode": "play", "where": "hidden", "model": "../secret.pt"})
+    assert choices.model == "hermes" and "--model" not in choices.arguments()
+    assert Choices.read({"mode": "play", "where": "hidden", "model": "apollo"}).model == "apollo"
 
 
 def test_a_rooms_code_is_tidied_and_checked():

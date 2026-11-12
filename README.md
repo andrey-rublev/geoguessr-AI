@@ -35,7 +35,9 @@ Enter the room's code and press **Start the bot**, or choose **Solo game** and h
 - **In its own browser window** needs nothing more, but OpenGuessr's person check may stop it there.
 - **On this screen** plays in your own browser, taking over your mouse until you press F8.
 
-The map joins each guess to its answer: scroll to zoom, drag to move, and click a round to see it. To make it easier to beat, use **How hard it plays**: one view only (NMPZ) scores about 3,510 a round instead of 3,770, and turning off signs lowers it further.
+The map joins each guess to its answer: scroll to zoom, drag to move, and click a round to see it. To make it easier to beat, use **How it plays**: one view only (NMPZ) scores about 3,510 a round instead of 3,770, and turning off signs lowers it further. **Speed mode** guesses at once from the view each round starts with, without turning, walking or looking up.
+
+**Who plays** picks the model. **Hermes** is the one the app downloads. **Zeus**, the strongest, and **Apollo**, an early one that's easier to beat, play when their files are in `models/` as `zeus.pt` and `apollo.pt`.
 
 ## From a terminal
 
@@ -65,6 +67,8 @@ Training runs cool, on a quarter of the CPU's threads, resting as long as it wor
 | `--hidden` | Plays on a screen of its own in WSL (set up once with `wsl -d Ubuntu -e bash scripts/wsl_setup.sh`), watched at `localhost:6080/vnc.html` |
 | `--browser` | Plays in a muted browser window of its own: `play` starts a game there, and for `friends`, join the room there or use `--join` |
 | `--rounds N` | How many rounds to play (`friends` plays as many as the host starts) |
+| `--model zeus` | Which model plays: `zeus`, `hermes` (the default) or `apollo`, or a model's file |
+| `--speed` | Guesses at once from the first view, thinking quickly: no turning, walking or looking up |
 | `--nmpz` | One view a round: for a game with NMPZ on, or to make it easier to beat |
 | `--no-text`, `--no-walk`, `--no-look-up` | Quicker but less accurate: don't read signs, walk on when unsure, or look up at the sun |
 | `--dry-run` | Plays one round without clicking, to check the bot can see the game |

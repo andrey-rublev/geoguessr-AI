@@ -76,6 +76,9 @@ their tiles loaded under 12, like half of a Beijing round's, which sent the gues
 Aires. Black ones, even with "No Street View available" written on them, count as blank."""
 
 
+SPEED_LOAD_WAIT = 1.0
+"""In speed mode, the most to wait for a round to load before looking: Street View still black
+is waited for anyway (see ``view_load_timeout``)."""
 STEP_SECONDS = {"view": 2.5, "read": 6.0, "walk": 22.0, "look_up": 8.0, "camera": 2.0}
 """In a multiplayer round, how long each optional step is planned to take until it has been
 timed: one more view, reading the signs, walking on to look again, looking up for the sun and
@@ -168,6 +171,10 @@ class BotSettings:
     """No moving, panning or zooming: guess from the one view each round starts with. In a game
     with that restriction on, Street View ignores drags and the compass's arrows, which would
     only waste the round's time. In any other, the bot keeps to it to be easier to beat."""
+    speed: bool = False
+    """Guess as soon as it can: from the one view each round starts with, as under ``nmpz``,
+    thinking from each view as a whole (see :meth:`Predictor.predict`'s ``quick``), with no
+    early pin, since the guess follows at once, and waiting less for the round to load."""
     step_wait: float = 0.8
     record_answers: bool = True
     """Read the real location off each result screen and save it with the round."""
@@ -317,7 +324,9 @@ class OpenGuessrBot:
         if s.dry_run:
             print("Dry run: one round, no clicks. The mouse still hovers, drags and zooms.")
         print(f"Stop any time with {getattr(self.controls, 'stop_hint', 'F8')}.")
-        if s.nmpz:
+        if s.speed:
+            print("Speed mode: one view a round, guessed at once.")
+        elif s.nmpz:
             print("No moving, panning or zooming: one view a round.")
         try:
             if s.party:
@@ -347,7 +356,9 @@ class OpenGuessrBot:
 
     def _play_round(self, number: int, run_dir: Path | None) -> Placement:
         s = self.settings
-        self.controls.sleep(s.round_load_wait)
+        self.controls.sleep(
+            min(s.round_load_wait, SPEED_LOAD_WAIT) if s.speed else s.round_load_wait
+        )
         self._start_clock()
 
         look = self.look_around()
@@ -359,9 +370,10 @@ class OpenGuessrBot:
         with self._timing("read" if read else None):
             evidence, lines = self.notice(look, read=read)
         read_up_to = len(look.scenes) if read else 0
-        guess = self.predictor.predict(look.seen(), evidence)
+        guess = self.predictor.predict(look.seen(), evidence, quick=s.speed)
         sure = [guess.expected_score]  # after each look, saved to judge walking by later
-        for below in () if s.dry_run or s.nmpz else (s.walk_below, s.walk_again_below):
+        stays = s.dry_run or s.nmpz or s.speed
+        for below in () if stays else (s.walk_below, s.walk_again_below):
             if guess.expected_score >= below:
                 break
             self._read_clock()
@@ -458,7 +470,7 @@ class OpenGuessrBot:
         in. The game counts a pin that is down when the round ends, locked in or not: in a live
         room one never locked in scored all the same. So should the round be cut short, as when
         another player guesses, it isn't lost while the bot reads signs and thinks."""
-        if not self.settings.party or self.settings.dry_run:
+        if not self.settings.party or self.settings.dry_run or self.settings.speed:
             return None
         self._check_round()
         guess = self.predictor.predict(look.seen(), quick=True)
@@ -713,6 +725,7 @@ class OpenGuessrBot:
         how = {
             "party": self.settings.party,
             "nmpz": self.settings.nmpz,
+            "speed": self.settings.speed,
             "model": getattr(self.predictor, "source", None),
             "expected_in": "openguessr points",  # before 19 October 2026, an estimate ~900 lower
             "short_of_time": list(self.short_of_time),
@@ -741,7 +754,7 @@ class OpenGuessrBot:
         self.controls.leave(self.layout.view.center)  # also collapses the minimap if it was open
         self.controls.sleep(s.view_settle_wait)
         self._wait_for_street_view()
-        if s.nmpz:
+        if s.nmpz or s.speed:
             return self._look_still()
         compass = None if s.dry_run else self.compass.read()
         if compass is None:

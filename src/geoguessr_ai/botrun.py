@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .config import REPO, wsl_command
 from .geo import openguessr_score
+from .lineup import BY_NAME, DEFAULT
 
 MODES = ("friends", "play")
 PLACES = ("hidden", "browser", "screen")
@@ -77,6 +78,8 @@ class Choices:
     signs: bool = True
     walk: bool = True
     sun: bool = True
+    speed: bool = False
+    model: str = DEFAULT
 
     @classmethod
     def read(cls, data: dict) -> Choices:
@@ -102,6 +105,8 @@ class Choices:
             bool(data.get("signs", True)),
             bool(data.get("walk", True)),
             bool(data.get("sun", True)),
+            bool(data.get("speed")),
+            data.get("model") if data.get("model") in BY_NAME else DEFAULT,
         )
 
     @property
@@ -117,13 +122,17 @@ class Choices:
             arguments += ["--rounds", str(self.rounds)]
         if self.where != "screen":
             arguments.append(f"--{self.where}")
-        if self.nmpz:
+        if self.model != DEFAULT:
+            arguments += ["--model", self.model]
+        if self.speed:
+            arguments.append("--speed")
+        elif self.nmpz:
             arguments.append("--nmpz")
         if not self.signs:
             arguments.append("--no-text")
-        if not self.nmpz and not self.walk:
+        if not (self.nmpz or self.speed) and not self.walk:
             arguments.append("--no-walk")
-        if not self.nmpz and not self.sun:
+        if not (self.nmpz or self.speed) and not self.sun:
             arguments.append("--no-look-up")
         if not self.hidden:  # on its own screen, it stops by a signal: see BotRun.stop
             arguments.append("--stop-on-eof")

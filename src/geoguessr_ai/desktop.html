@@ -149,6 +149,8 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .fetch-bar div { height: 100%; width: 100%; background: var(--plot); transition: width .3s; }
 .fetch-bar.unknown div { opacity: .35; }
 fieldset:disabled .place, fieldset:disabled .switch, fieldset:disabled .modes label { opacity: .55; cursor: default; }
+.place.missing { cursor: default; }
+.place.missing .place-name { color: var(--ink-soft); }
 
 /* The chart, and how the game is going. */
 main { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; }
@@ -281,6 +283,11 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
       </div>
 
       <fieldset class="section">
+        <legend class="section-name">Who plays</legend>
+        <div id="lineup"></div>
+      </fieldset>
+
+      <fieldset class="section">
         <legend class="section-name">Where it plays</legend>
         <label class="place">
           <input type="radio" name="where" value="hidden" checked>
@@ -301,8 +308,13 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
       </fieldset>
 
       <fieldset class="section">
-        <legend class="section-name">How hard it plays</legend>
+        <legend class="section-name">How it plays</legend>
         <label class="switch">
+          <span class="switch-name">Speed mode</span>
+          <span class="switch-says">Guesses at once from the view each round starts with: no turning, walking or looking up.</span>
+          <input type="checkbox" role="switch" id="speed">
+        </label>
+        <label class="switch" id="nmpz-switch">
           <span class="switch-name">One view only (NMPZ)</span>
           <span class="switch-says">For NMPZ rooms, or to give your friends a chance. It scores about 7% less.</span>
           <input type="checkbox" role="switch" id="nmpz">
@@ -1227,6 +1239,8 @@ function chosen() {
     room: $("#room").value,
     where: document.querySelector("[name=where]:checked").value,
     rounds: Number($("#rounds").value),
+    model: (document.querySelector("[name=model]:checked") || { value: "hermes" }).value,
+    speed: $("#speed").checked,
     nmpz: $("#nmpz").checked,
     signs: $("#signs").checked,
     walk: $("#walk").checked,
@@ -1235,12 +1249,12 @@ function chosen() {
 }
 
 function restore(saved) {
-  for (const [name, value] of [["mode", saved.mode], ["where", saved.where]]) {
+  for (const [name, value] of [["mode", saved.mode], ["where", saved.where], ["model", saved.model]]) {
     const radio = document.querySelector(`[name=${name}][value="${value}"]`);
     if (radio) radio.checked = true;
   }
   if (saved.rounds) $("#rounds").value = saved.rounds;
-  for (const name of ["nmpz", "signs", "walk", "sun"]) {
+  for (const name of ["speed", "nmpz", "signs", "walk", "sun"]) {
     if (name in saved) document.getElementById(name).checked = saved[name];
   }
 }
@@ -1252,8 +1266,37 @@ function showProblem(problem) {
   else $("#room").removeAttribute("aria-invalid");
 }
 
+// Who plays: each model in the lineup, and whether this computer has it.
+function drawLineup(setup) {
+  const list = $("#lineup");
+  if (!list.childElementCount && setup.lineup) {
+    for (const brain of setup.lineup) {
+      const row = document.createElement("label");
+      row.className = "place";
+      row.innerHTML = '<input type="radio" name="model"><span class="place-name"></span><span class="place-says"></span>';
+      const [radio, name, says] = row.children;
+      radio.value = brain.name;
+      radio.checked = brain.name === "hermes";
+      name.textContent = brain.title;
+      says.id = `${brain.name}-says`;
+      list.append(row);
+    }
+    const wanted = (state.choices && state.choices.model) || state.saved.model;
+    if (wanted) restore({ model: wanted });
+  }
+  for (const brain of setup.lineup || []) {
+    const here = !setup.models || setup.models[brain.name] !== false;
+    const radio = document.querySelector(`[name=model][value="${brain.name}"]`);
+    radio.disabled = !here;
+    radio.closest(".place").classList.toggle("missing", !here);
+    $(`#${brain.name}-says`).textContent = here ? brain.says : `${brain.says} Not on this computer.`;
+    if (!here && radio.checked) document.querySelector("[name=model][value=hermes]").checked = true;
+  }
+}
+
 function drawChoices() {
   const setup = state ? state.setup : {};
+  drawLineup(setup);
   // It starts out on what needs nothing more set up, till you've said where it plays.
   if (setup.ubuntu === false && setup.chrome && !placeChosen && !state.saved.where) {
     document.querySelector("[name=where][value=browser]").checked = true;
@@ -1262,8 +1305,9 @@ function drawChoices() {
   const running = Boolean(state && state.running);
   $("#room-section").hidden = picks.mode !== "friends" || picks.where === "screen";
   $("#rounds-section").hidden = picks.mode !== "play";
-  $("#walk-switch").hidden = picks.nmpz;
-  $("#sun-switch").hidden = picks.nmpz;
+  $("#nmpz-switch").hidden = picks.speed;
+  $("#walk-switch").hidden = picks.nmpz || picks.speed;
+  $("#sun-switch").hidden = picks.nmpz || picks.speed;
   $("#all-choices").disabled = running;
 
   const hiddenSays = $("#hidden-says");
@@ -1296,6 +1340,7 @@ function drawChoices() {
   if (!running) {
     if (fetching) blocked = "It's getting what it plays with: it only takes this once.";
     else if (setup.model === false) blocked = setup.fetch_failed || "It has no model to play with yet.";
+    else if (setup.models && setup.models[picks.model] === false) blocked = "That model isn't on this computer.";
     else if (picks.where === "hidden" && checking) blocked = "Checking the hidden screen is set up…";
     else if (picks.where === "hidden" && setup.ubuntu === false) blocked = "Set up the hidden screen, or choose another place.";
     else if (picks.where === "browser" && setup.chrome === false) blocked = "Its own window needs Playwright.";
@@ -1411,7 +1456,10 @@ function playingWhat(choices) {
   if (choices.mode === "play") parts.push(`Solo game, ${roundsOf(choices.rounds)}`);
   else parts.push(choices.room ? `Room ${formatCode(choices.room)}` : "Friends' room");
   parts.push(WHERE_NAMES[choices.where]);
-  if (choices.nmpz) parts.push("One view only");
+  const brain = ((state && state.setup.lineup) || []).find((b) => b.name === choices.model);
+  if (brain) parts.push(brain.title);
+  if (choices.speed) parts.push("Speed mode");
+  else if (choices.nmpz) parts.push("One view only");
   if (!choices.signs) parts.push("Not reading signs");
   return parts.join("  ·  ");
 }

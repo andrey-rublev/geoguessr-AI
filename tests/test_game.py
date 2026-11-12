@@ -146,9 +146,11 @@ class FakePredictor:
 
     def __init__(self, expected=(3000.0,)):
         self.view_counts, self.evidence, self.expected = [], [], list(expected)
+        self.quick = []
 
     def predict(self, images, evidence=None, quick=False):
         self.view_counts.append(len(images))
+        self.quick.append(quick)
         self.evidence.append(evidence)
         expected = self.expected.pop(0) if len(self.expected) > 1 else self.expected[0]
         return Guess(*LAGOS, expected_score=expected, top_cells=[], countries=[("NG", 0.8)])
@@ -376,6 +378,19 @@ def test_under_nmpz_it_guesses_from_one_view_and_leaves_street_view_alone(tmp_pa
     assert saved["nmpz"] is True and saved["walked"] is False
     assert saved["headings"] == [pytest.approx(260.0, abs=5.0)] and saved["up_headings"] == []
     assert len(bot.signs.scenes) == 1  # still reads what the view shows
+
+
+def test_in_speed_mode_it_guesses_quickly_from_one_view(tmp_path):
+    street_view = TurningStreetView(clear=True)  # blue sky: would look up, given the chance
+    predictor = FakePredictor(expected=(900.0,))  # unsure: would walk on, given the chance
+    settings = BotSettings(rounds=1, speed=True, record_answers=False, debug_dir=tmp_path)
+
+    OpenGuessrBot(LAYOUT, predictor, settings, street_view, street_view).play()
+
+    assert predictor.view_counts == [1] and predictor.quick == [True]
+    assert street_view.drags == [] and street_view.keys == []
+    saved = json.loads(next(tmp_path.glob("*/round_01/round.json")).read_text(encoding="utf-8"))
+    assert saved["speed"] is True and saved["walked"] is False
 
 
 def test_under_nmpz_with_no_compass_to_read_it_still_looks(tmp_path):
@@ -823,6 +838,19 @@ def test_under_nmpz_a_room_still_gets_the_early_pin_and_the_answer_read(party):
     assert room.drags == [] and room.keys == []
     assert bot.guess_map.early == [LAGOS, LAGOS] and bot.guess_map.guesses == [LAGOS, LAGOS]
     assert bot.reader.crowded
+
+
+def test_in_speed_mode_a_room_gets_one_quick_guess_from_one_view(party):
+    room = MultiplayerRoom(rounds=2, length=60.0, others_guess=5.0)
+    predictor = FakePredictor(expected=(900.0,))  # unsure: would walk on, given the chance
+    bot = party(room, predictor, speed=True)
+
+    bot.play()
+
+    assert len(room.locked) == 2 and all(at is not None and at < 60 for at in room.locked)
+    assert predictor.view_counts == [1, 1] and predictor.quick == [True, True]
+    assert room.drags == [] and room.keys == []
+    assert bot.guess_map.early == [] and bot.guess_map.guesses == [LAGOS, LAGOS]
 
 
 def test_hurries_when_little_time_is_left(party):

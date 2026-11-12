@@ -37,13 +37,12 @@ from global_land_mask import globe
 
 from .botrun import NO_WINDOW, BotRun, Choices, _bot_program, _end_process_tree
 from .config import REPO, wsl_command, wsl_distros
-from .fetch import IMAGE_MODEL
 from .geo import inverse_mercator, mercator_xy
+from .lineup import BY_NAME, DEFAULT, LINEUP, MODELS
 
 PAGE = Path(__file__).with_name("desktop.html")
 BORDERS = Path(__file__).with_name("knowledge") / "borders.json"
 ICON = Path(__file__).with_name("desktop.ico")
-MODEL = REPO / "models" / "geoguessr.pt"
 APP_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share") / "geoguessr-ai"
 RUNNING = APP_DIR / "running.json"
 """Where the app that's running can be found, so that opening it again opens a window on that."""
@@ -99,14 +98,17 @@ def land_rows(
 
 
 def model_is_here() -> bool:
-    """Whether it has what it plays with: a window closed during the download leaves part of it,
-    and the bot would then sit getting the rest with nothing to show for it."""
-    if not MODEL.exists():
-        return False
-    from huggingface_hub import try_to_load_from_cache
+    """Whether it has the model the app downloads, to play with by default."""
+    return BY_NAME[DEFAULT].is_here()
 
-    weights = ("pytorch_model.bin", "model.safetensors")
-    return any(isinstance(try_to_load_from_cache(IMAGE_MODEL, name), str) for name in weights)
+
+def models_here(look_closely: bool = True) -> dict[str, bool]:
+    """Which of the models in the lineup can play, by name. Not ``look_closely``, by whether
+    their files are here alone, which is quick."""
+    return {
+        brain.name: brain.is_here() if look_closely else (MODELS / brain.file).exists()
+        for brain in LINEUP
+    }
 
 
 def wsl_is_there() -> bool:
@@ -148,7 +150,9 @@ class App:
         self.run: BotRun | None = None
         self.game = 0
         self.setup = {
-            "model": MODEL.exists(),
+            "model": (MODELS / BY_NAME[DEFAULT].file).exists(),
+            "models": models_here(look_closely=False),
+            "lineup": [{"name": b.name, "title": b.title, "says": b.says} for b in LINEUP],
             "ubuntu": None,  # not known yet: finding out can take a while, if WSL has to start
             "wsl": None,
             "chrome": util.find_spec("playwright") is not None,
@@ -198,7 +202,8 @@ class App:
     def check_setup(self) -> None:
         self.setup["wsl"] = wsl_is_there()
         self.setup["ubuntu"] = self.setup["wsl"] and ubuntu_is_set_up()
-        self.setup["model"] = model_is_here()
+        self.setup["models"] = models_here()
+        self.setup["model"] = self.setup["models"][DEFAULT]
         self.changed()
 
     def start(self, data: dict) -> None:
@@ -206,6 +211,8 @@ class App:
         if self.run is not None and not self.run.over.is_set():
             raise ValueError("The bot is already playing.")
         choices = Choices.read(data)
+        if self.setup["models"].get(choices.model) is False:
+            raise ValueError(f"{BY_NAME[choices.model].title} isn't on this computer.")
         self.saved = asdict(replace(choices, room=""))  # a room's code is good for one game
         APP_DIR.mkdir(parents=True, exist_ok=True)
         LAST_CHOICES.write_text(json.dumps(self.saved), encoding="utf-8")

@@ -87,7 +87,8 @@ def build(log_path: Path, out: Path) -> None:
     played = sum(line.startswith("Round ") for line in log)
     choices = Choices(mode="play", where="hidden", rounds=played)
     app = desktop.App(program=["demo"])
-    app.setup |= {"model": True, "ubuntu": True, "wsl": True, "chrome": True}
+    models = dict.fromkeys(app.setup["models"], True)
+    app.setup |= {"model": True, "models": models, "ubuntu": True, "wsl": True, "chrome": True}
     app.saved = asdict(choices)
     demo = {
         "idle": app.state(None, 0) | {"lines": [], "restart": True},

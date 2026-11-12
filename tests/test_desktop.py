@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np
 import pytest
 
-from geoguessr_ai import botrun, desktop
+from geoguessr_ai import botrun, desktop, lineup
 from geoguessr_ai.desktop import App, handler_for, land_rows
 from geoguessr_ai.geo import mercator_xy
 from geoguessr_ai.knowledge.countries import country_index
@@ -59,7 +59,7 @@ def test_a_model_without_its_image_model_isnt_all_there(monkeypatch, tmp_path):
     import huggingface_hub
 
     model = tmp_path / "geoguessr.pt"
-    monkeypatch.setattr(desktop, "MODEL", model)
+    monkeypatch.setattr(lineup, "MODELS", tmp_path)
     assert not desktop.model_is_here()
 
     model.write_bytes(b"model")
@@ -196,6 +196,16 @@ def test_a_wrong_room_code_comes_back_to_say_so(served):
 
     assert wrong.value.code == 400
     assert "six letters and digits" in json.loads(wrong.value.read())["error"]
+    assert served.app.run is None
+
+
+def test_wont_start_with_a_model_this_computer_hasnt_got(served):
+    served.app.setup["models"] = {"zeus": False, "hermes": True, "apollo": True}
+    with pytest.raises(urllib.error.HTTPError) as wrong:
+        served.post("/start", {"mode": "play", "where": "browser", "model": "zeus"})
+
+    assert wrong.value.code == 400
+    assert json.loads(wrong.value.read())["error"] == "Zeus isn't on this computer."
     assert served.app.run is None
 
 

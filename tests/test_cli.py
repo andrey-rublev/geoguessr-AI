@@ -133,6 +133,15 @@ def test_friends_joins_a_room_by_its_code_in_a_browser_of_its_own(monkeypatch):
 
 
 @pytest.mark.parametrize("command", ["play", "friends"])
+def test_a_model_is_chosen_by_name_or_file_and_speed_mode_asked_for(command):
+    args = build_parser().parse_args([command, "--model", "Zeus", "--speed"])
+    assert args.model == Path("models/zeus.pt") and cli._bot_settings(args).speed
+    args = build_parser().parse_args([command, "--model", "mine.pt"])
+    assert args.model == Path("mine.pt") and not cli._bot_settings(args).speed
+    assert build_parser().parse_args([command]).model == Path("models/geoguessr.pt")
+
+
+@pytest.mark.parametrize("command", ["play", "friends"])
 def test_nmpz_can_be_asked_for_in_any_game(command):
     assert cli._bot_settings(build_parser().parse_args([command, "--nmpz"])).nmpz
     assert not cli._bot_settings(build_parser().parse_args([command])).nmpz

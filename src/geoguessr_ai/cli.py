@@ -14,10 +14,12 @@ from pathlib import Path
 from . import __version__
 from .config import DEFAULT_LAYOUT_PATH, PARTY_LAYOUT_PATH, WSL_DISTRO, wsl_command
 from .knowledge.evidence import DEFAULT_COVERAGE_STRENGTH
+from .lineup import BY_NAME, model_path
 from .model.backbone import DEFAULT_BACKBONE
 from .model.geocells import DEFAULT_GAME_PRIOR_STRENGTH, DEFAULT_PRIOR_STRENGTH
 
 DEFAULT_MODEL = Path("models/geoguessr.pt")
+MODEL_HELP = f"{', '.join(BY_NAME)}, or a model's file (default: hermes)"
 DEFAULT_DATA = Path("data/osv5m")
 DEFAULT_EMBEDDINGS = Path("data/embeddings")
 DEFAULT_ROUNDS = DEFAULT_EMBEDDINGS / DEFAULT_BACKBONE.replace("/", "__") / "openguessr-rounds.npz"
@@ -528,6 +530,7 @@ def _bot_settings(args: argparse.Namespace, **settings):
         look_down=args.look_down,
         walk_below=0.0 if args.no_walk else BotSettings.walk_below,
         nmpz=args.nmpz,
+        speed=args.speed,
         debug_dir=None if args.no_save else args.runs,
         **settings,
     )
@@ -667,6 +670,12 @@ def build_parser() -> argparse.ArgumentParser:
             help="no moving, panning or zooming: guess from the one view each round starts with. "
             "For a game with NMPZ on, or in any game, to make the bot easier to beat",
         )
+        p.add_argument(
+            "--speed",
+            action="store_true",
+            help="guess at once from the view each round starts with, thinking quickly: no "
+            "turning, walking or looking up",
+        )
         p.add_argument("--no-text", action="store_true", help="don't read signs (faster)")
         p.add_argument(
             "--no-walk",
@@ -698,7 +707,7 @@ def build_parser() -> argparse.ArgumentParser:
             help="don't read the answer after each round (faster, but no distances, nor rounds "
             "to learn from)",
         )
-        p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+        p.add_argument("--model", type=model_path, default=DEFAULT_MODEL, help=MODEL_HELP)
         p.add_argument(
             "--layout",
             type=Path,
@@ -781,7 +790,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Builds the first model, or a new one that replaces the current one only if it scores "
         "better on held-out rounds.",
     )
-    p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    p.add_argument("--model", type=model_path, default=DEFAULT_MODEL, help=MODEL_HELP)
     p.add_argument(
         "--shards",
         type=int,
@@ -829,7 +838,7 @@ def build_parser() -> argparse.ArgumentParser:
         "kept only if it adds points on held-out rounds. The first run embeds every round's "
         "close-ups, which takes a while; later runs only new rounds'.",
     )
-    p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    p.add_argument("--model", type=model_path, default=DEFAULT_MODEL, help=MODEL_HELP)
     p.add_argument(
         "--runs", type=Path, default=DEFAULT_RUNS, help="where play and friends save rounds"
     )
@@ -886,7 +895,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = add("predict", cmd_predict, "Test: guess where some images were taken.")
     p.add_argument("images", type=Path, nargs="+")
-    p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    p.add_argument("--model", type=model_path, default=DEFAULT_MODEL, help=MODEL_HELP)
     add_prior_strength(p)
     add_device(p)
 
@@ -901,7 +910,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--embeddings", nargs="+", help="embedding .npz files, directories, or globs")
     p.add_argument("--images", type=Path, help="a folder of labelled images instead")
     p.add_argument("--labels", type=Path, help="CSV with filename,latitude,longitude[,group]")
-    p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    p.add_argument("--model", type=model_path, default=DEFAULT_MODEL, help=MODEL_HELP)
     add_prior_strength(p)
     add_device(p)
 

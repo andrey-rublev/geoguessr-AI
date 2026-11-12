@@ -282,7 +282,7 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
         <div class="count"><input id="rounds" type="number" min="1" value="5"></div>
       </div>
 
-      <fieldset class="section">
+      <fieldset class="section" id="lineup-section" hidden>
         <legend class="section-name">Who plays</legend>
         <div id="lineup"></div>
       </fieldset>
@@ -1266,9 +1266,10 @@ function showProblem(problem) {
   else $("#room").removeAttribute("aria-invalid");
 }
 
-// Who plays: each model in the lineup, and whether this computer has it.
+// Who plays: each model in the lineup, and whether this computer has it. With one, no choice.
 function drawLineup(setup) {
   const list = $("#lineup");
+  $("#lineup-section").hidden = !setup.lineup || setup.lineup.length < 2;
   if (!list.childElementCount && setup.lineup) {
     for (const brain of setup.lineup) {
       const row = document.createElement("label");

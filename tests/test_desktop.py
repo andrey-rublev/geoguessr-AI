@@ -199,8 +199,9 @@ def test_a_wrong_room_code_comes_back_to_say_so(served):
     assert served.app.run is None
 
 
-def test_wont_start_with_a_model_this_computer_hasnt_got(served):
-    served.app.setup["models"] = {"zeus": False, "hermes": False, "apollo": True}
+def test_wont_start_with_a_model_this_computer_hasnt_got(served, monkeypatch):
+    monkeypatch.setitem(lineup.BY_NAME, "zeus", lineup.Brain("zeus", "Zeus", "", "zeus.pt", ""))
+    served.app.setup["models"] = {"zeus": False, "hermes": False}
     with pytest.raises(urllib.error.HTTPError) as wrong:
         served.post("/start", {"mode": "play", "where": "browser", "model": "zeus"})
 

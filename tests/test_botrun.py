@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from geoguessr_ai import botrun
+from geoguessr_ai import botrun, lineup
 from geoguessr_ai.botrun import BotRun, Choices, Progress
 
 GAME = """
@@ -55,8 +55,8 @@ def played(lines=GAME, choices=Choices()):
             ["play", "--rounds", "5", "--hidden", "--nmpz"],
         ),
         (  # speed mode is one view too
-            Choices(mode="play", model="zeus", speed=True, nmpz=True, walk=False),
-            ["play", "--rounds", "5", "--hidden", "--model", "zeus", "--speed"],
+            Choices(mode="play", speed=True, nmpz=True, walk=False),
+            ["play", "--rounds", "5", "--hidden", "--speed"],
         ),
     ],
 )
@@ -64,10 +64,13 @@ def test_the_choices_made_become_a_command(choices, arguments):
     assert choices.arguments() == arguments
 
 
-def test_a_model_not_in_the_lineup_is_played_as_hermes():
-    choices = Choices.read({"mode": "play", "where": "hidden", "model": "../secret.pt"})
-    assert choices.model == "hermes" and "--model" not in choices.arguments()
-    assert Choices.read({"mode": "play", "where": "hidden", "model": "apollo"}).model == "apollo"
+def test_a_model_not_in_the_lineup_is_played_as_hermes(monkeypatch):
+    for model in ("../secret.pt", "zeus"):
+        choices = Choices.read({"mode": "play", "where": "hidden", "model": model})
+        assert choices.model == "hermes" and "--model" not in choices.arguments()
+    monkeypatch.setitem(lineup.BY_NAME, "zeus", lineup.Brain("zeus", "Zeus", "", "zeus.pt", ""))
+    choices = Choices.read({"mode": "play", "where": "hidden", "model": "zeus"})
+    assert choices.arguments()[-2:] == ["--model", "zeus"]
 
 
 def test_a_rooms_code_is_tidied_and_checked():

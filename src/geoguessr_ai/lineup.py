@@ -41,14 +41,9 @@ class Brain:
         return any(isinstance(try_to_load_from_cache(self.backbone, name), str) for name in weights)
 
 
+# Zeus, Hermes retrained on many more shards and rounds, joins once it's trained: its file is
+# models/zeus.pt, grown with `geoguessr-ai train --model models/zeus.pt --shards ...`.
 LINEUP = (
-    Brain(
-        "zeus",
-        "Zeus",
-        "The strongest: Hermes, retrained on 500 more rounds. About 3,790 points a round.",
-        "zeus.pt",
-        IMAGE_MODEL,
-    ),
     Brain(
         "hermes",
         "Hermes",
@@ -56,19 +51,12 @@ LINEUP = (
         "geoguessr.pt",
         IMAGE_MODEL,
     ),
-    Brain(
-        "apollo",
-        "Apollo",
-        "An early one, on plain CLIP: easier to beat. About 3,140 points a round.",
-        "apollo.pt",
-        "openai/clip-vit-base-patch32",
-    ),
 )
 DEFAULT = "hermes"
 BY_NAME = {brain.name: brain for brain in LINEUP}
 
 
 def model_path(text: str) -> Path:
-    """A model's file from its name, like ``zeus``, or a path to one."""
+    """A model's file from its name, like ``hermes``, or a path to one."""
     brain = BY_NAME.get(text.lower())
     return Path(text) if brain is None else brain.path

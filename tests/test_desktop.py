@@ -200,7 +200,7 @@ def test_a_wrong_room_code_comes_back_to_say_so(served):
 
 
 def test_wont_start_with_a_model_this_computer_hasnt_got(served):
-    served.app.setup["models"] = {"zeus": False, "hermes": True, "apollo": True}
+    served.app.setup["models"] = {"zeus": False, "hermes": False, "apollo": True}
     with pytest.raises(urllib.error.HTTPError) as wrong:
         served.post("/start", {"mode": "play", "where": "browser", "model": "zeus"})
 

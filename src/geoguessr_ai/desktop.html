@@ -1285,7 +1285,8 @@ function drawLineup(setup) {
     if (wanted) restore({ model: wanted });
   }
   for (const brain of setup.lineup || []) {
-    const here = !setup.models || setup.models[brain.name] !== false;
+    // Without Hermes, the button below offers to download it.
+    const here = brain.name === "hermes" || !setup.models || setup.models[brain.name] !== false;
     const radio = document.querySelector(`[name=model][value="${brain.name}"]`);
     radio.disabled = !here;
     radio.closest(".place").classList.toggle("missing", !here);
@@ -1340,7 +1341,7 @@ function drawChoices() {
   if (!running) {
     if (fetching) blocked = "It's getting what it plays with: it only takes this once.";
     else if (setup.model === false) blocked = setup.fetch_failed || "It has no model to play with yet.";
-    else if (setup.models && setup.models[picks.model] === false) blocked = "That model isn't on this computer.";
+    else if (picks.model !== "hermes" && setup.models && setup.models[picks.model] === false) blocked = "That model isn't on this computer.";
     else if (picks.where === "hidden" && checking) blocked = "Checking the hidden screen is set up…";
     else if (picks.where === "hidden" && setup.ubuntu === false) blocked = "Set up the hidden screen, or choose another place.";
     else if (picks.where === "browser" && setup.chrome === false) blocked = "Its own window needs Playwright.";

@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from geoguessr_ai import botrun, lineup
+from geoguessr_ai import botrun
 from geoguessr_ai.botrun import BotRun, Choices, Progress
 
 GAME = """
@@ -64,11 +64,10 @@ def test_the_choices_made_become_a_command(choices, arguments):
     assert choices.arguments() == arguments
 
 
-def test_a_model_not_in_the_lineup_is_played_as_hermes(monkeypatch):
-    for model in ("../secret.pt", "zeus"):
+def test_a_model_not_in_the_lineup_is_played_as_hermes():
+    for model in ("../secret.pt", "apollo"):
         choices = Choices.read({"mode": "play", "where": "hidden", "model": model})
         assert choices.model == "hermes" and "--model" not in choices.arguments()
-    monkeypatch.setitem(lineup.BY_NAME, "zeus", lineup.Brain("zeus", "Zeus", "", "zeus.pt", ""))
     choices = Choices.read({"mode": "play", "where": "hidden", "model": "zeus"})
     assert choices.arguments()[-2:] == ["--model", "zeus"]
 

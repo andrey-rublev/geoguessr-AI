@@ -37,6 +37,8 @@ Enter the room's code and press **Start the bot**, or choose **Solo game** and h
 
 The map joins each guess to its answer: scroll to zoom, drag to move, and click a round to see it. To make it easier to beat, use **How it plays**: one view only (NMPZ) scores about 3,510 a round instead of 3,770, and turning off signs lowers it further. **Speed mode** guesses at once from the view each round starts with, without turning, walking or looking up.
 
+**Who plays** picks the model: **Hermes**, the one the app downloads, or **Zeus**, the strongest, trained on twice the photos. Zeus plays when its file is in `models/` as `zeus.pt`.
+
 ## From a terminal
 
 To work on it, or use it without the app, in PowerShell, in this folder:
@@ -65,7 +67,7 @@ Training runs cool, on a quarter of the CPU's threads, resting as long as it wor
 | `--hidden` | Plays on a screen of its own in WSL (set up once with `wsl -d Ubuntu -e bash scripts/wsl_setup.sh`), watched at `localhost:6080/vnc.html` |
 | `--browser` | Plays in a muted browser window of its own: `play` starts a game there, and for `friends`, join the room there or use `--join` |
 | `--rounds N` | How many rounds to play (`friends` plays as many as the host starts) |
-| `--model file.pt` | Plays with another model than the one the app downloads |
+| `--model zeus` | Which model plays: `hermes` (the default) or `zeus`, or a model's file |
 | `--speed` | Guesses at once from the first view, thinking quickly: no turning, walking or looking up |
 | `--nmpz` | One view a round: for a game with NMPZ on, or to make it easier to beat |
 | `--no-text`, `--no-walk`, `--no-look-up` | Quicker but less accurate: don't read signs, walk on when unsure, or look up at the sun |

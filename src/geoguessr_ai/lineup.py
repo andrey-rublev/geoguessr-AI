@@ -41,9 +41,15 @@ class Brain:
         return any(isinstance(try_to_load_from_cache(self.backbone, name), str) for name in weights)
 
 
-# Zeus, Hermes retrained on many more shards and rounds, joins once it's trained: its file is
-# models/zeus.pt, grown with `geoguessr-ai train --model models/zeus.pt --shards ...`.
+# Zeus grows with `geoguessr-ai train --model models/zeus.pt --shards ...`.
 LINEUP = (
+    Brain(
+        "zeus",
+        "Zeus",
+        "The strongest: Hermes, trained on twice the photos and every round played since.",
+        "zeus.pt",
+        IMAGE_MODEL,
+    ),
     Brain(
         "hermes",
         "Hermes",

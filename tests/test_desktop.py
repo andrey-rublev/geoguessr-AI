@@ -326,6 +326,21 @@ def test_follows_the_model_as_it_downloads_with_no_window(served, monkeypatch):
     assert app.setup["fetching"] is None and app.setup["fetch_failed"] == ""
 
 
+def test_downloads_zeus_when_asked_and_no_model_it_hasnt_got(served, monkeypatch):
+    monkeypatch.setattr(desktop, "ubuntu_is_set_up", lambda: True)
+    app = served.app
+    app.fetcher_program = [sys.executable, "-c", "import sys; print(sys.argv[1:]); exit(1)"]
+
+    served.post("/setup", {"what": "model", "model": "zeus"})
+    until_fetched(app)
+
+    assert app.setup["fetched"] == "zeus"
+    assert app.setup["fetch_failed"] == "['fetch-model', '--model', 'zeus']"
+    with pytest.raises(urllib.error.HTTPError) as wrong:
+        served.post("/setup", {"what": "model", "model": "../evil"})
+    assert wrong.value.code == 400
+
+
 def test_says_what_went_wrong_with_the_models_download(served, monkeypatch):
     monkeypatch.setattr(desktop, "ubuntu_is_set_up", lambda: True)
     app = served.app

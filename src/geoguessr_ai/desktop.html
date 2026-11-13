@@ -1281,6 +1281,15 @@ function drawLineup(setup) {
       name.textContent = brain.title;
       says.id = `${brain.name}-says`;
       list.append(row);
+      if (brain.name !== "hermes" && brain.download_mb) {
+        const get = document.createElement("button");
+        get.type = "button";
+        get.className = "set-up";
+        get.id = `get-${brain.name}`;
+        get.hidden = true;
+        get.addEventListener("click", () => post("/setup", { what: "model", model: brain.name }));
+        list.append(get);
+      }
     }
     const wanted = (state.choices && state.choices.model) || state.saved.model;
     if (wanted) restore({ model: wanted });
@@ -1291,8 +1300,15 @@ function drawLineup(setup) {
     const radio = document.querySelector(`[name=model][value="${brain.name}"]`);
     radio.disabled = !here;
     radio.closest(".place").classList.toggle("missing", !here);
-    $(`#${brain.name}-says`).textContent = here ? brain.says : `${brain.says} Not on this computer.`;
+    const failed = setup.fetched === brain.name && setup.fetch_failed;
+    $(`#${brain.name}-says`).textContent = here ? brain.says : failed ? `${brain.says} ${failed}` : `${brain.says} Not on this computer.`;
     if (!here && radio.checked) document.querySelector("[name=model][value=hermes]").checked = true;
+    const get = $(`#get-${brain.name}`);
+    if (get) {
+      // Hermes's own download comes first: the button below offers it.
+      get.hidden = here || Boolean(setup.fetching) || setup.model === false;
+      get.textContent = failed ? "Try again" : `Download ${brain.title} (about ${brain.download_mb} MB)`;
+    }
   }
 }
 
@@ -1322,7 +1338,7 @@ function drawChoices() {
   $("#set-up-ubuntu").textContent = setup.wsl === false ? "Install WSL" : "Set it up";
   const fetching = setup.fetching;
   $("#set-up-model").hidden = setup.model !== false || Boolean(fetching);
-  $("#set-up-model").textContent = setup.fetch_failed ? "Try again" : "Download it (about 2.2 GB)";
+  $("#set-up-model").textContent = setup.fetched === "hermes" && setup.fetch_failed ? "Try again" : "Download it (about 2.2 GB)";
   $("#fetching").hidden = !fetching;
   if (fetching) {
     const known = fetching.percent !== null;
@@ -1340,8 +1356,8 @@ function drawChoices() {
   go.textContent = stopping ? "Stopping…" : running ? "Stop the bot" : "Start the bot";
   let blocked = "";
   if (!running) {
-    if (fetching) blocked = "It's getting what it plays with: it only takes this once.";
-    else if (setup.model === false) blocked = setup.fetch_failed || "It has no model to play with yet.";
+    if (fetching) blocked = setup.fetched === "hermes" ? "It's getting what it plays with: it only takes this once." : `It's getting ${fetching.what}.`;
+    else if (setup.model === false) blocked = (setup.fetched === "hermes" && setup.fetch_failed) || "It has no model to play with yet.";
     else if (picks.model !== "hermes" && setup.models && setup.models[picks.model] === false) blocked = "That model isn't on this computer.";
     else if (picks.where === "hidden" && checking) blocked = "Checking the hidden screen is set up…";
     else if (picks.where === "hidden" && setup.ubuntu === false) blocked = "Set up the hidden screen, or choose another place.";

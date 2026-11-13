@@ -37,6 +37,7 @@ from global_land_mask import globe
 
 from .botrun import NO_WINDOW, BotRun, Choices, _bot_program, _end_process_tree
 from .config import REPO, wsl_command, wsl_distros
+from .fetch import PACKS
 from .geo import inverse_mercator, mercator_xy
 from .lineup import BY_NAME, DEFAULT, LINEUP, MODELS
 
@@ -152,12 +153,21 @@ class App:
         self.setup = {
             "model": (MODELS / BY_NAME[DEFAULT].file).exists(),
             "models": models_here(look_closely=False),
-            "lineup": [{"name": b.name, "title": b.title, "says": b.says} for b in LINEUP],
+            "lineup": [
+                {
+                    "name": b.name,
+                    "title": b.title,
+                    "says": b.says,
+                    "download_mb": round(PACKS[b.name].size / 1e6) if b.name in PACKS else None,
+                }
+                for b in LINEUP
+            ],
             "ubuntu": None,  # not known yet: finding out can take a while, if WSL has to start
             "wsl": None,
             "chrome": util.find_spec("playwright") is not None,
             "fetching": None,  # how getting the model is going
             "fetch_failed": "",
+            "fetched": DEFAULT,  # the model being got, or last tried
         }
         self.fetcher: subprocess.Popen | None = None
         self.saved = _last_choices()
@@ -233,11 +243,11 @@ class App:
         if self.fetcher is not None:
             _end_process_tree(self.fetcher)
 
-    def set_up(self, what: str) -> None:
-        """Set up ``what``: the model here, the screen in a window of its own, as it asks for a
+    def set_up(self, what: str, model: str = DEFAULT) -> None:
+        """Set up ``what``: a model here, the screen in a window of its own, as it asks for a
         password, seeing how that went once it's closed."""
         if what == "model":
-            self.fetch_model()
+            self.fetch_model(model)
             return
         console = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
         command = _staying_open(
@@ -253,18 +263,20 @@ class App:
 
         threading.Thread(target=wait, daemon=True).start()
 
-    def fetch_model(self) -> None:
-        """Download the model, following how it goes from what the download says."""
+    def fetch_model(self, name: str = DEFAULT) -> None:
+        """Download a model, following how it goes from what the download says."""
         if self.setup["fetching"] is not None:
             return
-        self.setup["fetching"], self.setup["fetch_failed"] = {"what": "the model", "percent": 0}, ""
+        self.setup["fetching"] = {"what": PACKS[name].title, "percent": 0}
+        self.setup["fetch_failed"], self.setup["fetched"] = "", name
         self.changed()
-        threading.Thread(target=self._fetch_model, daemon=True).start()
+        threading.Thread(target=self._fetch_model, args=(name,), daemon=True).start()
 
-    def _fetch_model(self) -> None:
+    def _fetch_model(self, name: str) -> None:
+        which = [] if name == DEFAULT else ["--model", name]
         try:
             self.fetcher = subprocess.Popen(
-                [*self.fetcher_program, "fetch-model"],
+                [*self.fetcher_program, "fetch-model", *which],
                 cwd=REPO,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
@@ -424,7 +436,10 @@ def handler_for(app: App, port_host: str) -> type[BaseHTTPRequestHandler]:
                 if run is not None and run.progress.screen:
                     webbrowser.open(run.progress.screen)
             elif route == "/setup" and data.get("what") in ("wsl", "ubuntu", "model"):
-                app.set_up(data["what"])
+                model = data.get("model", DEFAULT)
+                if model not in PACKS:
+                    raise ValueError("There's no such model to download.")
+                app.set_up(data["what"], model)
             else:
                 raise ValueError("Nothing here does that.")
 

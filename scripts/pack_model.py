@@ -1,7 +1,11 @@
-"""Pack the model and the photos it votes with for a release, for `geoguessr-ai fetch-model`:
+"""Pack a model and the photos it votes with for a release, for `geoguessr-ai fetch-model`:
 
-    python scripts/pack_model.py geoguessr-model-1.zip
+    python scripts/pack_model.py geoguessr-model-1.zip --shards 0 1 2 3 4
     gh release create model-1 geoguessr-model-1.zip --title "The model" --notes "..."
+
+Zeus goes on from Hermes's pack, so its own holds only the photos Hermes's hasn't:
+
+    python scripts/pack_model.py geoguessr-zeus-1.zip --model models/zeus.pt --shards 5 6 7 8 9
 
 Then put what it prints in src/geoguessr_ai/fetch.py. Run from the repo. Only embeddings go in, no
 pictures: what the model learned from, not what it saw. The rounds played go in as places, one to a
@@ -21,7 +25,6 @@ import numpy as np
 
 from geoguessr_ai.model.rounds import ROUNDS_FILE, RoundEmbeddings
 
-MODEL = "models/geoguessr.pt"
 EMBEDDINGS = Path("data/embeddings/geolocal__StreetCLIP")
 PLAYED = "openguessr-played.npz"
 
@@ -46,18 +49,22 @@ def played_as_places() -> bytes:
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("out", type=Path)
+parser.add_argument("--model", default="models/geoguessr.pt")
+parser.add_argument(
+    "--shards", type=int, nargs="+", required=True, help="the photo shards it holds"
+)
 args = parser.parse_args()
 
 with zipfile.ZipFile(args.out, "w", zipfile.ZIP_STORED) as pack:  # they hardly compress
-    for path in sorted(EMBEDDINGS.glob("*.npz")):
-        if path.name != ROUNDS_FILE:
-            print(f"Adding {path.as_posix()}")
-            pack.write(path, path.as_posix())
+    for shard in args.shards:
+        path = EMBEDDINGS / f"osv5m-train-{shard:02d}.npz"
+        print(f"Adding {path.as_posix()}")
+        pack.write(path, path.as_posix())
     played = played_as_places()
     print(f"Adding the rounds played, {len(played) / 1e6:.0f} MB")
     pack.writestr((EMBEDDINGS / PLAYED).as_posix(), played)
-    print(f"Adding {MODEL}")
-    pack.write(MODEL)
+    print(f"Adding {args.model}")
+    pack.write(args.model, Path(args.model).as_posix())
 
 digest = hashlib.sha256()
 with open(args.out, "rb") as file:

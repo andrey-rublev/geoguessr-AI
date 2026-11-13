@@ -118,7 +118,25 @@ def test_fetches_unpacks_and_clears_away_the_pack(tmp_path, monkeypatch):
     fetch.fetch_model(tmp_path, ())
 
     assert (tmp_path / "models" / "geoguessr.pt").exists()
-    assert not (tmp_path / "data" / "geoguessr-model.zip").exists()
+    assert not (tmp_path / "data" / "geoguessr-hermes.zip").exists()
+
+
+def test_zeus_comes_after_hermes_and_only_what_isnt_there_is_downloaded(tmp_path, monkeypatch):
+    got = []
+
+    def download(url, to, expected, size, what):
+        got.append(what)
+        to.parent.mkdir(parents=True, exist_ok=True)
+        pack(to, ["models/zeus.pt" if "zeus" in url else "models/geoguessr.pt"])
+
+    monkeypatch.setattr(fetch, "download", download)
+
+    fetch.fetch_model(tmp_path, (), name="zeus")
+    fetch.fetch_model(tmp_path, (), name="zeus")
+
+    assert got == ["the model", "Zeus"]
+    assert (tmp_path / "models" / "zeus.pt").exists()
+    assert not list((tmp_path / "data").glob("*.zip"))
 
 
 def test_says_what_to_do_if_the_sign_reader_cant_be_downloaded(monkeypatch):

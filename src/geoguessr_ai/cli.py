@@ -148,7 +148,7 @@ def cmd_fetch_model(args: argparse.Namespace) -> None:
     from .fetch import FetchFailed, fetch_model
 
     try:
-        fetch_model()
+        fetch_model(name=args.model)
     except FetchFailed as failed:
         raise SystemExit(str(failed)) from None
 
@@ -776,11 +776,17 @@ def build_parser() -> argparse.ArgumentParser:
         "or with --own-screen on that screen",
     )
 
-    add(
+    p = add(
         "fetch-model",
         cmd_fetch_model,
         "Setup: download the model, ready to play with (about 2.2 GB in all).",
         "It's what `train --shards 0` builds, and better: it learned from thousands of rounds.",
+    )
+    p.add_argument(
+        "--model",
+        choices=["hermes", "zeus"],
+        default="hermes",
+        help="which: hermes (the default), or zeus, which needs about 455 MB more",
     )
 
     p = add(

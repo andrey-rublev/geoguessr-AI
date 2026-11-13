@@ -37,7 +37,7 @@ Enter the room's code and press **Start the bot**, or choose **Solo game** and h
 
 The map joins each guess to its answer: scroll to zoom, drag to move, and click a round to see it. To make it easier to beat, use **How it plays**: one view only (NMPZ) scores about 3,510 a round instead of 3,770, and turning off signs lowers it further. **Speed mode** guesses at once from the view each round starts with, without turning, walking or looking up.
 
-**Who plays** picks the model: **Hermes**, the one the app downloads, or **Zeus**, the strongest, trained on twice the photos. Zeus plays when its file is in `models/` as `zeus.pt`.
+**Who plays** picks the model: **Hermes**, the one the app downloads, or **Zeus**, the strongest, trained on twice the photos. The app offers to download Zeus too, about 455 MB more, or run `geoguessr-ai fetch-model --model zeus`.
 
 ## From a terminal
 

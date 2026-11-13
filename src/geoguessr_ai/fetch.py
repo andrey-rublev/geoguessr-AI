@@ -4,6 +4,7 @@ this project's releases, the image model from Hugging Face, and the sign reader'
 says is for reading, and the desktop app follows it, which ``Fetching ...: 12%`` lines are for.
 
     geoguessr-ai fetch-model
+    geoguessr-ai fetch-model --model zeus
 """
 
 from __future__ import annotations
@@ -15,15 +16,45 @@ import urllib.error
 import urllib.request
 import zipfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from .files import write_safely
 
-PACK_URL = (
-    "https://github.com/andrey-rublev/geoguessr-AI/releases/download/model-1/geoguessr-model-1.zip"
-)
-PACK_SHA256 = "353a89f334033dd200b2b44b935ce04ecf0fdb1dbef2793320ca7495526aaf0d"
-PACK_BYTES = 440787323
+RELEASES = "https://github.com/andrey-rublev/geoguessr-AI/releases/download"
+
+
+@dataclass(frozen=True)
+class Pack:
+    """A model and the photos it votes with, as a release holds them: ``model`` is the file it
+    puts in place last, so its being there says the pack is all there. ``after``, the pack it goes
+    on from, comes first."""
+
+    title: str
+    url: str
+    sha256: str
+    size: int
+    model: str
+    after: str | None = None
+
+
+PACKS = {
+    "hermes": Pack(
+        "the model",
+        f"{RELEASES}/model-1/geoguessr-model-1.zip",
+        "353a89f334033dd200b2b44b935ce04ecf0fdb1dbef2793320ca7495526aaf0d",
+        440787323,
+        "models/geoguessr.pt",
+    ),
+    "zeus": Pack(
+        "Zeus",
+        f"{RELEASES}/zeus-1/geoguessr-zeus-1.zip",
+        "ef7993bce25c11c85d7e146d7a10c7d773bb33ed5341477c3ceb65e340ae1c42",
+        455066909,
+        "models/zeus.pt",
+        after="hermes",
+    ),
+}
 PACK_PLACES = ("models", "data/embeddings")
 """The only folders a pack may put files in."""
 IMAGE_MODEL = "geolocal/StreetCLIP"
@@ -186,19 +217,30 @@ def ready_image_model(name: str = IMAGE_MODEL) -> None:
     ImageEncoder(name)
 
 
-def fetch_model(
-    root: Path = Path("."), steps: tuple[Callable[[], None], ...] | None = None
-) -> None:
-    """Fetch all the bot plays with, into ``root``, which plays from there."""
-    model = root / "models" / "geoguessr.pt"
+def fetch_pack(name: str, root: Path) -> None:
+    """Download and unpack a model's pack into ``root``, and the one it goes on from first, unless
+    they're there."""
+    pack = PACKS[name]
+    if pack.after is not None:
+        fetch_pack(pack.after, root)
+    model = root / pack.model
     if model.exists():
         print(f"{model} is there already.", flush=True)
-    else:
-        pack = root / "data" / "geoguessr-model.zip"
-        download(PACK_URL, pack, PACK_SHA256, PACK_BYTES, "the model")
-        print("Unpacking the model...", flush=True)
-        unpack(pack, root)
-        pack.unlink()
+        return
+    file = root / "data" / f"geoguessr-{name}.zip"
+    download(pack.url, file, pack.sha256, pack.size, pack.title)
+    print(f"Unpacking {pack.title}...", flush=True)
+    unpack(file, root)
+    file.unlink()
+
+
+def fetch_model(
+    root: Path = Path("."),
+    steps: tuple[Callable[[], None], ...] | None = None,
+    name: str = "hermes",
+) -> None:
+    """Fetch all the bot plays with, into ``root``, which plays from there: the model ``name``."""
+    fetch_pack(name, root)
     every_step = (fetch_image_model, fetch_sign_reader, ready_image_model)
     for step in steps if steps is not None else every_step:
         step()

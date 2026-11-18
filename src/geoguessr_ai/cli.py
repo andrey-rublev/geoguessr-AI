@@ -427,14 +427,20 @@ def _run_bot(args: argparse.Namespace, settings) -> None:
 
     from .buttons import button_image_path
     from .game import OpenGuessrBot, load_sign_reader
+    from .random_guess import RandomGuesser
     from .windows import COMPUTER_AWAKE, SCREEN_AWAKE, keep_awake
 
-    if not args.model.exists():
+    if settings.collect:
+        if settings.debug_dir is None or not settings.record_answers:
+            raise SystemExit("--collect saves every round with its answer: leave out --no-save")
+        if settings.speed:
+            raise SystemExit("--collect looks around, to save every view: leave out --speed")
+    elif not args.model.exists():
         raise SystemExit(f"{args.model} not found. Get one with `geoguessr-ai fetch-model`.")
     keep_awake(COMPUTER_AWAKE, SCREEN_AWAKE)  # a game on this screen draws nothing with it off
     if args.layout is None:
         args.layout = _browser_layout(args.default_layout, args.browser)
-    predictor = _predictor(args)
+    predictor = RandomGuesser() if settings.collect else _predictor(args)
     read_words = _read_words()
     signs = load_sign_reader() if settings.read_text else None  # now, not in the first round
     button = button_image_path(args.layout)
@@ -525,12 +531,13 @@ def _bot_settings(args: argparse.Namespace, **settings):
         rounds=args.rounds,
         views=args.views,
         dry_run=args.dry_run,
-        read_text=not args.no_text,
-        look_up=not args.no_look_up,
+        read_text=not (args.no_text or args.collect),
+        look_up=not (args.no_look_up or args.collect),
         look_down=args.look_down,
         walk_below=0.0 if args.no_walk else BotSettings.walk_below,
         nmpz=args.nmpz,
         speed=args.speed,
+        collect=args.collect,
         debug_dir=None if args.no_save else args.runs,
         **settings,
     )
@@ -675,6 +682,12 @@ def build_parser() -> argparse.ArgumentParser:
             action="store_true",
             help="guess at once from the view each round starts with, thinking quickly: no "
             "turning, walking or looking up",
+        )
+        p.add_argument(
+            "--collect",
+            action="store_true",
+            help="only save rounds to train on: look around, then guess at random, with no model "
+            "(no signs, walking or looking up)",
         )
         p.add_argument("--no-text", action="store_true", help="don't read signs (faster)")
         p.add_argument(

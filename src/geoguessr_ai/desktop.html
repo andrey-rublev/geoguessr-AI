@@ -310,6 +310,11 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
       <fieldset class="section">
         <legend class="section-name">How it plays</legend>
         <label class="switch">
+          <span class="switch-name">Collect rounds</span>
+          <span class="switch-says">Guesses at random, with no model, saving each round to train on.</span>
+          <input type="checkbox" role="switch" id="collect">
+        </label>
+        <label class="switch" id="speed-switch">
           <span class="switch-name">Speed mode</span>
           <span class="switch-says">Guesses at once from the view each round starts with: no turning, walking or looking up.</span>
           <input type="checkbox" role="switch" id="speed">
@@ -319,7 +324,7 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
           <span class="switch-says">For NMPZ rooms, or to give your friends a chance. It scores about 7% less.</span>
           <input type="checkbox" role="switch" id="nmpz">
         </label>
-        <label class="switch">
+        <label class="switch" id="signs-switch">
           <span class="switch-name">Read signs</span>
           <span class="switch-says">Off makes it easier to beat.</span>
           <input type="checkbox" role="switch" id="signs" checked>
@@ -1241,6 +1246,7 @@ function chosen() {
     rounds: Number($("#rounds").value),
     model: (document.querySelector("[name=model]:checked") || { value: "hermes" }).value,
     speed: $("#speed").checked,
+    collect: $("#collect").checked,
     nmpz: $("#nmpz").checked,
     signs: $("#signs").checked,
     walk: $("#walk").checked,
@@ -1254,7 +1260,7 @@ function restore(saved) {
     if (radio) radio.checked = true;
   }
   if (saved.rounds) $("#rounds").value = saved.rounds;
-  for (const name of ["speed", "nmpz", "signs", "walk", "sun"]) {
+  for (const name of ["collect", "speed", "nmpz", "signs", "walk", "sun"]) {
     if (name in saved) document.getElementById(name).checked = saved[name];
   }
 }
@@ -1323,9 +1329,12 @@ function drawChoices() {
   const running = Boolean(state && state.running);
   $("#room-section").hidden = picks.mode !== "friends" || picks.where === "screen";
   $("#rounds-section").hidden = picks.mode !== "play";
-  $("#nmpz-switch").hidden = picks.speed;
-  $("#walk-switch").hidden = picks.nmpz || picks.speed;
-  $("#sun-switch").hidden = picks.nmpz || picks.speed;
+  $("#lineup-section").hidden ||= picks.collect;  // it plays with no model
+  $("#speed-switch").hidden = picks.collect;
+  $("#nmpz-switch").hidden = picks.collect || picks.speed;
+  $("#signs-switch").hidden = picks.collect;
+  $("#walk-switch").hidden = picks.collect || picks.nmpz || picks.speed;
+  $("#sun-switch").hidden = picks.collect || picks.nmpz || picks.speed;
   $("#all-choices").disabled = running;
 
   const hiddenSays = $("#hidden-says");
@@ -1357,8 +1366,8 @@ function drawChoices() {
   let blocked = "";
   if (!running) {
     if (fetching) blocked = setup.fetched === "hermes" ? "It's getting what it plays with: it only takes this once." : `It's getting ${fetching.what}.`;
-    else if (setup.model === false) blocked = (setup.fetched === "hermes" && setup.fetch_failed) || "It has no model to play with yet.";
-    else if (picks.model !== "hermes" && setup.models && setup.models[picks.model] === false) blocked = "That model isn't on this computer.";
+    else if (setup.model === false && !picks.collect) blocked = (setup.fetched === "hermes" && setup.fetch_failed) || "It has no model to play with yet.";
+    else if (!picks.collect && picks.model !== "hermes" && setup.models && setup.models[picks.model] === false) blocked = "That model isn't on this computer.";
     else if (picks.where === "hidden" && checking) blocked = "Checking the hidden screen is set up…";
     else if (picks.where === "hidden" && setup.ubuntu === false) blocked = "Set up the hidden screen, or choose another place.";
     else if (picks.where === "browser" && setup.chrome === false) blocked = "Its own window needs Playwright.";
@@ -1475,6 +1484,10 @@ function playingWhat(choices) {
   else parts.push(choices.room ? `Room ${formatCode(choices.room)}` : "Friends' room");
   parts.push(WHERE_NAMES[choices.where]);
   const brain = ((state && state.setup.lineup) || []).find((b) => b.name === choices.model);
+  if (choices.collect) {  // with no model, signs or anything else to say
+    parts.push("Collecting rounds");
+    return parts.join("  ·  ");
+  }
   if (brain) parts.push(brain.title);
   if (choices.speed) parts.push("Speed mode");
   else if (choices.nmpz) parts.push("One view only");

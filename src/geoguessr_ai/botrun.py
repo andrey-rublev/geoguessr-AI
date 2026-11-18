@@ -80,6 +80,7 @@ class Choices:
     sun: bool = True
     speed: bool = False
     model: str = DEFAULT
+    collect: bool = False
 
     @classmethod
     def read(cls, data: dict) -> Choices:
@@ -107,6 +108,7 @@ class Choices:
             bool(data.get("sun", True)),
             bool(data.get("speed")),
             data.get("model") if data.get("model") in BY_NAME else DEFAULT,
+            bool(data.get("collect")),
         )
 
     @property
@@ -122,18 +124,21 @@ class Choices:
             arguments += ["--rounds", str(self.rounds)]
         if self.where != "screen":
             arguments.append(f"--{self.where}")
-        if self.model != DEFAULT:
-            arguments += ["--model", self.model]
-        if self.speed:
-            arguments.append("--speed")
-        elif self.nmpz:
-            arguments.append("--nmpz")
-        if not self.signs:
-            arguments.append("--no-text")
-        if not (self.nmpz or self.speed) and not self.walk:
-            arguments.append("--no-walk")
-        if not (self.nmpz or self.speed) and not self.sun:
-            arguments.append("--no-look-up")
+        if self.collect:  # no model, signs, walking or sun: only the rounds, saved
+            arguments.append("--collect")
+        else:
+            if self.model != DEFAULT:
+                arguments += ["--model", self.model]
+            if self.speed:
+                arguments.append("--speed")
+            elif self.nmpz:
+                arguments.append("--nmpz")
+            if not self.signs:
+                arguments.append("--no-text")
+            if not (self.nmpz or self.speed) and not self.walk:
+                arguments.append("--no-walk")
+            if not (self.nmpz or self.speed) and not self.sun:
+                arguments.append("--no-look-up")
         if not self.hidden:  # on its own screen, it stops by a signal: see BotRun.stop
             arguments.append("--stop-on-eof")
         return arguments
@@ -245,6 +250,12 @@ class Progress:
         current.guess_country, current.sure = found[3] or "", found[4] and int(found[4])
         current.expected = _whole(found[5])
         self.detail = f"Placing the pin, expecting about {found[5]} points"
+
+    def _random_guess(self, found: re.Match) -> None:
+        if not self.rounds:
+            return
+        self.rounds[-1].guess = (float(found[1]), float(found[2]))
+        self.detail = "Placing the pin at random"
 
     def _answer(self, found: re.Match) -> None:
         if not self.rounds:
@@ -359,6 +370,7 @@ _LINES: Sequence[tuple[re.Pattern, Callable[[Progress, re.Match], None]]] = [
             r"\(model expects ~([\d,]+) points\)$",
             Progress._guess,
         ),
+        (rf"^random guess {_NUMBER}, {_NUMBER}$", Progress._random_guess),
         (
             rf"^answer {_NUMBER}, {_NUMBER} in (\S*): our pin at {_NUMBER}, {_NUMBER} was "
             r"([\d,]+) km away, (?:the right country|guessed (\S*))$",

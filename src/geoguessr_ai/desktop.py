@@ -222,7 +222,11 @@ class App:
             raise ValueError("The bot is already playing.")
         choices = Choices.read(data)
         # Without the default, the window offers to download it.
-        if choices.model != DEFAULT and self.setup["models"].get(choices.model) is False:
+        if (
+            not choices.collect
+            and choices.model != DEFAULT
+            and self.setup["models"].get(choices.model) is False
+        ):
             raise ValueError(f"{BY_NAME[choices.model].title} isn't on this computer.")
         self.saved = asdict(replace(choices, room=""))  # a room's code is good for one game
         APP_DIR.mkdir(parents=True, exist_ok=True)

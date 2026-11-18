@@ -64,6 +64,12 @@ def test_the_choices_made_become_a_command(choices, arguments):
     assert choices.arguments() == arguments
 
 
+def test_collecting_asks_for_nothing_but_the_rounds():
+    choices = Choices(mode="play", collect=True, model="zeus", speed=True, signs=False, walk=False)
+    assert choices.arguments() == ["play", "--rounds", "5", "--hidden", "--collect"]
+    assert Choices.read({"mode": "play", "where": "hidden", "collect": True}).collect
+
+
 def test_a_model_not_in_the_lineup_is_played_as_hermes():
     for model in ("../secret.pt", "apollo"):
         choices = Choices.read({"mode": "play", "where": "hidden", "model": model})
@@ -147,6 +153,12 @@ def test_plots_where_the_pin_went_when_that_isnt_the_guess():
     )
     done = progress.rounds[0]
     assert done.guess_country == "MX" and done.sure == 69 and done.right is False
+
+
+def test_follows_a_round_guessed_at_random():
+    progress = played("Round 1\n  random guess -12.300, 131.200\n")
+    assert progress.rounds[0].guess == (-12.3, 131.2) and progress.rounds[0].expected is None
+    assert progress.detail == "Placing the pin at random"
 
 
 def test_says_how_the_last_round_went_while_waiting_for_the_host():

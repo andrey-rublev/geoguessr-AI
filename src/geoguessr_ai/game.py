@@ -175,6 +175,9 @@ class BotSettings:
     """Guess as soon as it can: from the one view each round starts with, as under ``nmpz``,
     thinking from each view as a whole (see :meth:`Predictor.predict`'s ``quick``), with no
     early pin, since the guess follows at once, and waiting less for the round to load."""
+    collect: bool = False
+    """Play only to save rounds to learn from: look around as ever, then guess at random (see
+    :mod:`.random_guess`), never walking on, as the guess wouldn't get surer."""
     step_wait: float = 0.8
     record_answers: bool = True
     """Read the real location off each result screen and save it with the round."""
@@ -324,7 +327,9 @@ class OpenGuessrBot:
         if s.dry_run:
             print("Dry run: one round, no clicks. The mouse still hovers, drags and zooms.")
         print(f"Stop any time with {getattr(self.controls, 'stop_hint', 'F8')}.")
-        if s.speed:
+        if s.collect:
+            print("Collect mode: saving each round to learn from, and guessing at random.")
+        elif s.speed:
             print("Speed mode: one view a round, guessed at once.")
         elif s.nmpz:
             print("No moving, panning or zooming: one view a round.")
@@ -372,7 +377,7 @@ class OpenGuessrBot:
         read_up_to = len(look.scenes) if read else 0
         guess = self.predictor.predict(look.seen(), evidence, quick=s.speed)
         sure = [guess.expected_score]  # after each look, saved to judge walking by later
-        stays = s.dry_run or s.nmpz or s.speed
+        stays = s.dry_run or s.nmpz or s.speed or s.collect
         for below in () if stays else (s.walk_below, s.walk_again_below):
             if guess.expected_score >= below:
                 break
@@ -395,10 +400,13 @@ class OpenGuessrBot:
             sure.append(guess.expected_score)
         for note in evidence.notes:
             print(f"  clue: {note}")
-        print(
-            f"  guess {guess.lat:.3f}, {guess.lon:.3f}{_describe(guess)} "
-            f"(model expects ~{guess.expected_score:,.0f} points)"
-        )
+        if s.collect:
+            print(f"  random guess {guess.lat:.3f}, {guess.lon:.3f}")
+        else:
+            print(
+                f"  guess {guess.lat:.3f}, {guess.lon:.3f}{_describe(guess)} "
+                f"(model expects ~{guess.expected_score:,.0f} points)"
+            )
 
         placement, locked_in = early, False
         folder = None if run_dir is None else run_dir / f"round_{number:02d}"
@@ -726,6 +734,7 @@ class OpenGuessrBot:
             "party": self.settings.party,
             "nmpz": self.settings.nmpz,
             "speed": self.settings.speed,
+            "collect": self.settings.collect,
             "model": getattr(self.predictor, "source", None),
             "expected_in": "openguessr points",  # before 19 October 2026, an estimate ~900 lower
             "short_of_time": list(self.short_of_time),

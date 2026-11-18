@@ -133,6 +133,29 @@ def test_friends_joins_a_room_by_its_code_in_a_browser_of_its_own(monkeypatch):
 
 
 @pytest.mark.parametrize("command", ["play", "friends"])
+def test_collecting_reads_no_signs_and_looks_up_at_nothing(command):
+    settings = cli._bot_settings(build_parser().parse_args([command, "--collect"]))
+    assert settings.collect and not settings.read_text and not settings.look_up
+
+
+def test_collecting_needs_no_model_but_wont_go_unsaved(tmp_path, monkeypatch):
+    def plays(args, settings):
+        raise SystemExit("played")
+
+    for flags, said in (
+        (["--no-save"], "leave out --no-save"),
+        (["--speed"], "leave out --speed"),
+        ([], "played"),
+    ):
+        args = build_parser().parse_args(
+            ["play", "--collect", "--model", str(tmp_path / "none.pt"), *flags]
+        )
+        monkeypatch.setattr("geoguessr_ai.windows.keep_awake", plays)
+        with pytest.raises(SystemExit, match=said):
+            cli._run_bot(args, cli._bot_settings(args))
+
+
+@pytest.mark.parametrize("command", ["play", "friends"])
 def test_a_model_is_chosen_by_name_or_file_and_speed_mode_asked_for(command):
     args = build_parser().parse_args([command, "--model", "Zeus", "--speed"])
     assert args.model == Path("models/zeus.pt") and cli._bot_settings(args).speed

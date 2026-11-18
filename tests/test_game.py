@@ -393,6 +393,27 @@ def test_in_speed_mode_it_guesses_quickly_from_one_view(tmp_path):
     assert saved["speed"] is True and saved["walked"] is False
 
 
+def test_collecting_it_looks_around_saves_and_never_walks(tmp_path):
+    street_view = TurningStreetView(clear=True)  # blue sky: would look up, given the chance
+    predictor = FakePredictor(expected=(0.0,))  # as unsure as can be: would walk on, otherwise
+    settings = BotSettings(
+        rounds=1,
+        collect=True,
+        read_text=False,
+        look_up=False,
+        record_answers=False,
+        debug_dir=tmp_path,
+    )
+
+    OpenGuessrBot(LAYOUT, predictor, settings, street_view, street_view).play()
+
+    assert predictor.view_counts == [4] and street_view.keys == []
+    folder = next(tmp_path.glob("*/round_01"))
+    assert len(list(folder.glob("view_*.jpg"))) == 4 and not list(folder.glob("up_*.jpg"))
+    saved = json.loads((folder / "round.json").read_text(encoding="utf-8"))
+    assert saved["collect"] is True and saved["walked"] is False
+
+
 def test_under_nmpz_with_no_compass_to_read_it_still_looks(tmp_path):
     controls, predictor = FakeControls(), FakePredictor()
     settings = BotSettings(rounds=1, nmpz=True, record_answers=False, debug_dir=tmp_path)

@@ -37,6 +37,8 @@ Enter the room's code and press **Start the bot**, or choose **Solo game** and h
 
 The map joins each guess to its answer: scroll to zoom, drag to move, and click a round to see it. To make it easier to beat, use **How it plays**: one view only (NMPZ) scores about 3,510 a round instead of 3,770, and turning off signs lowers it further. **Speed mode** guesses at once from the view each round starts with, without turning, walking or looking up.
 
+**Collect rounds** plays only to save rounds to train on: it looks around, then guesses at random, with no model needed.
+
 **Who plays** picks the model: **Hermes**, the one the app downloads, or **Zeus**, the strongest, trained on twice the photos. The app offers to download Zeus too, about 455 MB more, or run `geoguessr-ai fetch-model --model zeus`.
 
 ## From a terminal
@@ -68,6 +70,7 @@ Training runs cool, on a quarter of the CPU's threads, resting as long as it wor
 | `--browser` | Plays in a muted browser window of its own: `play` starts a game there, and for `friends`, join the room there or use `--join` |
 | `--rounds N` | How many rounds to play (`friends` plays as many as the host starts) |
 | `--model zeus` | Which model plays: `hermes` (the default) or `zeus`, or a model's file |
+| `--collect` | Saves each round to train on, guessing at random: no model, signs, walking or looking up |
 | `--speed` | Guesses at once from the first view, thinking quickly: no turning, walking or looking up |
 | `--nmpz` | One view a round: for a game with NMPZ on, or to make it easier to beat |
 | `--no-text`, `--no-walk`, `--no-look-up` | Quicker but less accurate: don't read signs, walk on when unsure, or look up at the sun |

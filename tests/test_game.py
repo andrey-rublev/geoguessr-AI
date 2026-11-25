@@ -211,6 +211,38 @@ def fakes(monkeypatch):
     monkeypatch.setattr(game_module, "SignReader", FakeSignReader)
 
 
+class StickyGuess(FakeScreen, FakeControls):
+    """A game where the first ``ignored`` presses of Guess don't take: until one does, the
+    button stays red, with the pin down."""
+
+    def __init__(self, ignored):
+        FakeScreen.__init__(self)
+        FakeControls.__init__(self)
+        self.ignored, self.guessed = ignored, False
+
+    def click(self, p):
+        super().click(p)
+        if p == LAYOUT.guess_button:
+            self.guessed = self.clicks.count(p) > self.ignored
+
+    def grab(self, region):
+        if region.contains(LAYOUT.guess_button) and region.width < 200 and not self.guessed:
+            return Image.new("RGB", (region.width, region.height), (230, 20, 25))
+        return super().grab(region)
+
+
+@pytest.mark.parametrize("ignored", [0, 1, 2])
+def test_a_guess_press_that_doesnt_take_is_pressed_again(tmp_path, monkeypatch, ignored):
+    monkeypatch.setattr(game_module, "ResultReader", FakeReader)
+    game = StickyGuess(ignored)
+    settings = BotSettings(rounds=1, views=4, debug_dir=tmp_path)
+
+    OpenGuessrBot(LAYOUT, FakePredictor(), settings, game, game).play()
+
+    assert game.clicks.count(LAYOUT.guess_button) == ignored + 1
+    assert game.clicks[-1] == LAYOUT.continue_button
+
+
 def test_round_looks_around_places_pin_reads_answer_and_advances(tmp_path, monkeypatch):
     monkeypatch.setattr(game_module, "ResultReader", FakeReader)
     controls, predictor = FakeControls(), FakePredictor()

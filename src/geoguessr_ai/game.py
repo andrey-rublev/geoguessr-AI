@@ -63,6 +63,11 @@ CAMERA_DRAG = 0.35
 GROUND_BOX_SCORE = 0.5
 """Road names seen from above are found less surely than signs: a Paraguayan one scored 0.52
 and 0.55, under the 0.6 that signs need."""
+GUESS_TRIES, GUESS_CHECK_WAIT = 3, 1.5
+"""How often to press Guess again if a press doesn't take, and how long to wait each time
+before looking: the result screen replaced the button within a fraction of a second."""
+RED_SHARE = 0.4
+"""How much of the Guess button's patch must be red for it to count as still showing."""
 MAP_BLUR = 1 / 6
 """How much the collapsed map is blurred, as a share of its height: beyond recognition, as a
 smudge of its own colours. Shown Street View down to the map's bottom in a 1280 by 650 window,
@@ -458,7 +463,8 @@ class OpenGuessrBot:
                     print(f"  locked in with {spare:.0f} s to spare; waiting for the round to end")
                 self._wait_for(lambda: not self._round_on())
             if not s.party:  # in a room, the result map goes in a few seconds
-                self.controls.sleep(s.result_wait)
+                waited = self._make_sure_guessed() if locked_in else 0.0
+                self.controls.sleep(max(s.result_wait - waited, 0.0))
             if self.reader is not None:
                 if self.reader.scale is None:  # the result screen draws the same pin
                     self.reader.scale = self.guess_map.scale
@@ -1024,6 +1030,22 @@ class OpenGuessrBot:
                 patch[:] = fill
         return Image.fromarray(pixels)
 
+    def _make_sure_guessed(self) -> float:
+        """Press Guess again while it still shows red, as it does with the pin down and the
+        round on: now and then a press doesn't take, and the result screen never comes. Three
+        of five runs that stopped at a "covered" Continue button had sat on the round's own
+        screen. The result screen replaces the button at once, so a second look is safe.
+        Returns how long it waited."""
+        waited = 0.0
+        for _ in range(GUESS_TRIES):
+            self.controls.sleep(GUESS_CHECK_WAIT)
+            waited += GUESS_CHECK_WAIT
+            if not _is_red(self.screen.grab(button_region(self.layout.guess_button))):
+                break
+            print("  the Guess press didn't take; pressing it again")
+            self.controls.click(self.layout.guess_button)
+        return waited
+
     def _press_continue(self, folder: Path | None) -> None:
         """Click Continue, but only once it looks as it did at first, not covered."""
         if self.layout.continue_button is None:
@@ -1224,6 +1246,14 @@ def _shows_sun(view: Image.Image) -> bool:
 def _compass_point(degrees: float) -> str:
     points = ("north", "north-east", "east", "south-east", "south", "south-west", "west")
     return (*points, "north-west")[round(degrees / 45) % 8]
+
+
+def _is_red(patch: Image.Image) -> bool:
+    """Whether the patch is mostly the game's bright red, as the Guess button is with the pin
+    down. The patches saved when the bot stopped were about two thirds this red."""
+    rgb = np.asarray(patch.convert("RGB")).astype(np.int16)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    return float(((r > 170) & (g < 90) & (b < 90)).mean()) > RED_SHARE
 
 
 def _is_blank(image: Image.Image) -> bool:

@@ -84,6 +84,9 @@ class GuessMap:
             if placement.confirmed is not False:
                 break
             print("  couldn't see the pin where it was clicked; opening the map to place it again")
+            # Out and back in: in the bot's own browser the map once never opened, both tries
+            # zooming and clicking on Street View, as the game didn't see the mouse arrive.
+            self.controls.leave(self.hover)
             placement = self._place(lat, lon, 0 if quick else self.zoom_levels)
         return placement
 

@@ -41,6 +41,9 @@ class FakeMinimap:
     def move(self, p):
         pass
 
+    def leave(self, p):
+        self.left = getattr(self, "left", 0) + 1
+
     def click(self, p):
         if self.lost_clicks:
             self.lost_clicks -= 1
@@ -104,6 +107,7 @@ def test_opens_the_map_again_when_both_clicks_are_lost():
 
     assert placement.confirmed and haversine_km(*fake.pin, *MADRID) < 40
     assert fake.projection.world_px == ATLANTIC.world_px  # zoomed back out both times
+    assert fake.left == 1  # the mouse left the window, for the map to open afresh
 
 
 def test_reports_a_pin_that_never_appears():

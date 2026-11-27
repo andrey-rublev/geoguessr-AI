@@ -35,6 +35,8 @@ Enter the room's code and press **Start the bot**, or choose **Solo game** and h
 - **In its own browser window** needs nothing more, but OpenGuessr's person check may stop it there.
 - **On this screen** plays in your own browser, taking over your mouse until you press F8.
 
+A bot can play in each place at once, say collecting rounds on the hidden screen and in its own window: pick a place to see its game, or start one there.
+
 The map joins each guess to its answer: scroll to zoom, drag to move, and click a round to see it. To make it easier to beat, use **How it plays**: one view only (NMPZ) scores about 3,510 a round instead of 3,770, and turning off signs lowers it further. **Speed mode** guesses at once from the view each round starts with, without turning, walking or looking up.
 
 **Collect rounds** plays only to save rounds to train on: it looks around, then guesses at random, with no model needed.

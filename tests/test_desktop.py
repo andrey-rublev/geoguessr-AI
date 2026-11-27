@@ -47,12 +47,15 @@ class Served:
         )
         return urllib.request.urlopen(request, timeout=10)
 
-    def events(self):
-        """Each message the window would be sent, as it comes."""
+    def events(self, place: str | None = "browser"):
+        """Each message the window would be sent, as it comes: of the game at ``place``, with
+        nothing played there as an empty one, or with None, all of it."""
         with self.get("/events") as stream:
             for line in stream:
                 if line.startswith(b"data: "):
-                    yield json.loads(line[6:])
+                    said = json.loads(line[6:])
+                    empty = {"running": False, "progress": None, "lines": [], "restart": False}
+                    yield said if place is None else said["runs"].get(place, empty)
 
 
 def test_a_model_without_its_image_model_isnt_all_there(monkeypatch, tmp_path):
@@ -187,7 +190,7 @@ def test_answers_only_the_window(served, ask):
     with pytest.raises(urllib.error.HTTPError) as refused:
         ask(served)
 
-    assert refused.value.code == 403 and served.app.run is None
+    assert refused.value.code == 403 and served.app.runs == {}
 
 
 def test_a_wrong_room_code_comes_back_to_say_so(served):
@@ -196,7 +199,7 @@ def test_a_wrong_room_code_comes_back_to_say_so(served):
 
     assert wrong.value.code == 400
     assert "six letters and digits" in json.loads(wrong.value.read())["error"]
-    assert served.app.run is None
+    assert served.app.runs == {}
 
 
 def test_wont_start_with_a_model_this_computer_hasnt_got(served):
@@ -206,7 +209,7 @@ def test_wont_start_with_a_model_this_computer_hasnt_got(served):
 
     assert wrong.value.code == 400
     assert json.loads(wrong.value.read())["error"] == "Zeus isn't on this computer."
-    assert served.app.run is None
+    assert served.app.runs == {}
 
 
 def test_starts_the_bot_and_follows_it_until_stopped(served):
@@ -227,7 +230,7 @@ def test_starts_the_bot_and_follows_it_until_stopped(served):
         if not message["running"]:
             break
     assert message["progress"]["phase"] == "stopped"
-    assert "Stopped by user." in served.app.run.lines
+    assert "Stopped by user." in served.app.runs["browser"].lines
 
 
 def test_a_new_window_hears_it_all_from_the_start_and_says_so(served):
@@ -239,8 +242,10 @@ def test_a_new_window_hears_it_all_from_the_start_and_says_so(served):
     again = next(served.events())
 
     assert again["restart"] and again["lines"][0] == "Round 1"
-    said, game, printed = served.app.message(again["game"], len(again["lines"]))
-    assert not said["restart"] and said["lines"] == [] and printed == len(again["lines"])
+    said, heard = served.app.message({"browser": (again["game"], len(again["lines"]))})
+    browser = said["runs"]["browser"]
+    assert not browser["restart"] and browser["lines"] == []
+    assert heard == {"browser": (again["game"], len(again["lines"]))}
 
 
 def test_wont_start_a_second_game_over_the_first(served):
@@ -251,6 +256,30 @@ def test_wont_start_a_second_game_over_the_first(served):
         served.post("/start", start)
 
     assert second.value.code == 400 and "already" in json.loads(second.value.read())["error"]
+
+
+def test_plays_in_two_places_at_once_and_stops_only_the_one_asked(served):
+    served.post("/start", {"mode": "play", "where": "browser", "rounds": 50, "collect": True})
+    served.post("/start", {"mode": "play", "where": "screen", "rounds": 50, "collect": True})
+    printed = {"browser": [], "screen": []}
+    for said in served.events(None):
+        runs = said["runs"]
+        for place, lines in printed.items():
+            lines += runs.get(place, {}).get("lines", [])
+        if all(printed.values()):
+            break
+    assert runs["browser"]["game"] != runs["screen"]["game"]
+
+    served.post("/stop", {"where": "screen"})
+    for said in served.events(None):
+        if not said["runs"]["screen"]["running"]:
+            break
+    assert said["runs"]["browser"]["running"]
+    assert served.app.playing("browser") and not served.app.playing("screen")
+
+    with pytest.raises(urllib.error.HTTPError) as nowhere:
+        served.post("/stop", {"where": "the moon"})
+    assert nowhere.value.code == 400
 
 
 def test_remembers_the_choices_but_not_the_room(served):

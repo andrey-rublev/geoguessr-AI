@@ -110,6 +110,8 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .place:has(input:checked) { background: var(--paper); border-left-color: var(--plot); }
 .place input { margin: 3px 0 0; accent-color: var(--plot); }
 .place-name { font-weight: 600; }
+.place-busy { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 3px; background: var(--plot); color: var(--paper); font: 600 11px/1.5 var(--display); letter-spacing: .04em; vertical-align: 1px; }
+.place-busy.done { background: transparent; color: var(--ink-soft); box-shadow: inset 0 0 0 1px var(--ink-soft); }
 .place-says { grid-column: 2; font-size: 12.5px; line-height: 1.35; color: var(--ink-soft); }
 .set-up {
   margin: 4px 0 4px 36px; padding: 2px 8px;
@@ -265,7 +267,7 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
       <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.6" fill="none" stroke="var(--plot)" stroke-width="2.4"/><circle cx="10" cy="10" r="2.4" fill="var(--ink)"/></svg>
       geoguessr-AI
     </p>
-    <fieldset id="all-choices">
+    <fieldset class="locked-choices">
       <div class="modes" role="radiogroup" aria-label="What to play">
         <label><input type="radio" name="mode" value="friends" checked><span>Friends' room</span></label>
         <label><input type="radio" name="mode" value="play"><span>Solo game</span></label>
@@ -286,27 +288,31 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--ink); back
         <legend class="section-name">Who plays</legend>
         <div id="lineup"></div>
       </fieldset>
+    </fieldset>
 
-      <fieldset class="section">
-        <legend class="section-name">Where it plays</legend>
-        <label class="place">
-          <input type="radio" name="where" value="hidden" checked>
-          <span class="place-name">On a hidden screen</span>
-          <span class="place-says" id="hidden-says">Your mouse and screen stay yours.</span>
-        </label>
-        <button type="button" class="set-up" id="set-up-ubuntu" hidden>Set it up</button>
-        <label class="place">
-          <input type="radio" name="where" value="browser">
-          <span class="place-name">In its own browser window</span>
-          <span class="place-says" id="browser-says">OpenGuessr's person check may stop it there.</span>
-        </label>
-        <label class="place">
-          <input type="radio" name="where" value="screen">
-          <span class="place-name">On this screen</span>
-          <span class="place-says" id="screen-says">Open the game first. It takes over your mouse until you press F8.</span>
-        </label>
-      </fieldset>
+    <!-- Not locked while a game is on: picking another place shows the game there, or starts one. -->
+    <fieldset class="section" id="where-section">
+      <legend class="section-name">Where it plays</legend>
+      <label class="place">
+        <input type="radio" name="where" value="hidden" checked>
+        <span class="place-name">On a hidden screen <span class="place-busy" id="hidden-busy" hidden></span></span>
+        <span class="place-says" id="hidden-says">Your mouse and screen stay yours.</span>
+      </label>
+      <button type="button" class="set-up" id="set-up-ubuntu" hidden>Set it up</button>
+      <label class="place">
+        <input type="radio" name="where" value="browser">
+        <span class="place-name">In its own browser window <span class="place-busy" id="browser-busy" hidden></span></span>
+        <span class="place-says" id="browser-says">OpenGuessr's person check may stop it there.</span>
+      </label>
+      <label class="place">
+        <input type="radio" name="where" value="screen">
+        <span class="place-name">On this screen <span class="place-busy" id="screen-busy" hidden></span></span>
+        <span class="place-says" id="screen-says">Open the game first. It takes over your mouse until you press F8.</span>
+      </label>
+      <p class="hint" id="places-hint" hidden>A bot can play in each place at once. Pick one to see its game.</p>
+    </fieldset>
 
+    <fieldset class="locked-choices">
       <fieldset class="section">
         <legend class="section-name">How it plays</legend>
         <label class="switch">
@@ -425,7 +431,9 @@ const token = new URLSearchParams(location.search).get("token");
 const $ = (selector) => document.querySelector(selector);
 const SVG = "http://www.w3.org/2000/svg";
 
-let state = null;
+let state = null;  // the game at the place picked, as draw() shows it
+let last = null;  // what the app said last: every place's game
+const logs = {};  // what the bot has printed at each place, this game
 let game = null;
 let tab = "chart";
 let placeChosen = false;
@@ -1335,7 +1343,8 @@ function drawChoices() {
   $("#signs-switch").hidden = picks.collect;
   $("#walk-switch").hidden = picks.collect || picks.nmpz || picks.speed;
   $("#sun-switch").hidden = picks.collect || picks.nmpz || picks.speed;
-  $("#all-choices").disabled = running;
+  for (const set of document.querySelectorAll(".locked-choices")) set.disabled = running;
+  drawBusy();
 
   const hiddenSays = $("#hidden-says");
   const checking = setup.ubuntu === null || setup.ubuntu === undefined;
@@ -1362,7 +1371,8 @@ function drawChoices() {
   const go = $("#go");
   const stopping = running && state.progress && state.progress.phase === "stopping";
   go.classList.toggle("stops", running);
-  go.textContent = stopping ? "Stopping…" : running ? "Stop the bot" : "Start the bot";
+  const others = last ? Object.values(last.runs).filter((run) => run.running).length - (running ? 1 : 0) : 0;
+  go.textContent = stopping ? "Stopping…" : running ? (others ? "Stop this bot" : "Stop the bot") : "Start the bot";
   let blocked = "";
   if (!running) {
     if (fetching) blocked = setup.fetched === "hermes" ? "It's getting what it plays with: it only takes this once." : `It's getting ${fetching.what}.`;
@@ -1377,6 +1387,26 @@ function drawChoices() {
   $("#go-note").hidden = !blocked;
 
   if (!running && !(state && state.progress)) drawIdle(picks);
+}
+
+// Which places have a game on, so you can see a bot playing at one while you look at another.
+function drawBusy() {
+  const runs = (last && last.runs) || {};
+  let anyOn = false;
+  for (const place of PLACES) {
+    const run = runs[place];
+    const badge = document.getElementById(`${place}-busy`);
+    const on = Boolean(run && run.running);
+    anyOn ||= on;
+    badge.hidden = !on;
+    if (!on) continue;
+    const progress = run.progress || {};
+    const played = (progress.rounds || []).length;
+    badge.textContent = progress.attention ? "Needs you"
+      : progress.phase === "stopping" ? "Stopping"
+      : played ? `Playing · round ${played.toLocaleString("en")}` : "Playing";
+  }
+  $("#places-hint").hidden = !anyOn;
 }
 
 const roundsOf = (count) => `${count.toLocaleString("en")} round${count === 1 ? "" : "s"}`;
@@ -1430,20 +1460,53 @@ function drawScreen() {
   }
 }
 
+const PLACES = ["hidden", "browser", "screen"];
+const watching = () => document.querySelector("[name=where]:checked").value;
+
+// The game at the place picked, with what was printed there just now (``fresh``) and before.
+function gameShown(fresh = {}) {
+  const place = watching();
+  const run = last.runs[place] || { game: 0, running: false, choices: null, progress: null };
+  return { ...run, setup: last.setup, saved: last.saved, lines: fresh[place] || [], log: logs[place] || [] };
+}
+
+function hear(message) {
+  last = message;
+  const fresh = {};
+  for (const [place, run] of Object.entries(message.runs)) {
+    if (run.restart) logs[place] = [];
+    logs[place].push(...run.lines);
+    fresh[place] = run.lines;
+  }
+  if (!restored) {
+    restored = true;
+    restore(message.saved);
+    // Open on a game that's on, if the place last chosen has none.
+    const on = PLACES.filter((place) => message.runs[place] && message.runs[place].running);
+    if (on.length && !on.includes(watching())) restore({ where: on[0] });
+  }
+  draw(gameShown(fresh));
+}
+
 function draw(message) {
   state = message;
   const progress = state.progress;
-  if (message.restart && state.game > 0) $("#messages").textContent = "";
   if (state.game !== game) {
     game = state.game;
     if (game > 0) $("#use-screen").checked = false;
     pickedRound = pointedRound = null;
     drawPlots([]);
     drawRounds([]);
-    restoredOnce();
-    if (progress) setTab(tab === "screen" ? "chart" : tab);
-  }
-  if (message.lines.length) {
+    if (state.choices && (state.running || !shownOnce)) restore(state.choices);
+    shownOnce = true;
+    setTab(tab === "screen" ? "chart" : tab);
+    $("#messages").textContent = state.log.length ? state.log.join("\n") + "\n" : "Nothing yet.";
+    if (!progress) {  // nothing played here yet
+      document.title = "geoguessr-AI";
+      $("#needs-you").hidden = true;
+      $("#tab-screen").disabled = true;
+    }
+  } else if (message.lines.length) {
     const log = $("#messages");
     const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
     log.append(message.lines.join("\n") + "\n");
@@ -1470,13 +1533,8 @@ function draw(message) {
   drawChoices();
 }
 
-let restored = false;
-function restoredOnce() {
-  if (restored) return;
-  restored = true;
-  restore(state.saved);
-  if (state.choices) restore(state.choices);
-}
+let restored = false;  // the choices last made, put back once, as the window opens
+let shownOnce = false;
 
 function playingWhat(choices) {
   const parts = [];
@@ -1499,7 +1557,7 @@ function playingWhat(choices) {
 $("#form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (state && state.running) {
-    await post("/stop");
+    await post("/stop", { where: state.choices.where });
     return;
   }
   const picks = chosen();
@@ -1521,13 +1579,17 @@ $("#room").addEventListener("input", (event) => {
 });
 $("#form").addEventListener("input", () => showProblem(""));
 $("#form").addEventListener("change", (event) => {
-  if (event.target.name === "where") placeChosen = true;
+  if (event.target.name === "where") {
+    placeChosen = true;
+    if (last) draw(gameShown());  // the game there, if there's one
+  }
   drawChoices();
 });
 $("#set-up-ubuntu").addEventListener("click", (event) => {
   event.preventDefault();
   document.querySelector("[name=where][value=hidden]").checked = true;
   placeChosen = true;
+  if (last) draw(gameShown());
   drawChoices();
   post("/setup", { what: state.setup.wsl === false ? "wsl" : "ubuntu" });
 });
@@ -1552,7 +1614,8 @@ $(".tabs").addEventListener("keydown", (event) => {
 
 addEventListener("beforeunload", (event) => {
   // Closing the window stops the bot, unless the app has gone already.
-  if (state && state.running && $("#lost-touch").hidden) event.preventDefault();
+  const anyOn = last && Object.values(last.runs).some((run) => run.running);
+  if (anyOn && $("#lost-touch").hidden) event.preventDefault();
 });
 
 setChart();
@@ -1564,7 +1627,7 @@ events.onmessage = (event) => {
   clearTimeout(outOfTouch);
   outOfTouch = null;
   $("#lost-touch").hidden = true;
-  draw(JSON.parse(event.data));
+  hear(JSON.parse(event.data));
 };
 events.onerror = () => {  // it tries again by itself, so only say so if that doesn't work
   outOfTouch ??= setTimeout(() => { $("#lost-touch").hidden = false; }, 4000);

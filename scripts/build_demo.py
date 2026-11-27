@@ -47,11 +47,10 @@ def steps(log: list[str], choices: Choices) -> list[dict]:
     progress = Progress(choices)
     over = threading.Event()
     run = SimpleNamespace(over=over, choices=choices, progress=progress)
-    app = SimpleNamespace(setup={}, saved={})
     said, rounds, at = [], [], START_S
 
     def say(lines: list[str]) -> None:
-        state = desktop.App.state(app, run, 1)
+        state = desktop.App.state(run, 1)
         now = state["progress"].pop("rounds")
         changed = next(
             (i for i, (was, is_) in enumerate(zip(rounds, now, strict=False)) if was != is_),
@@ -91,8 +90,10 @@ def build(log_path: Path, out: Path) -> None:
     app.setup |= {"model": True, "models": models, "ubuntu": True, "wsl": True, "chrome": True}
     app.saved = asdict(choices)
     demo = {
-        "idle": app.state(None, 0) | {"lines": [], "restart": True},
-        "base": {"choices": asdict(choices), "setup": app.setup, "saved": app.saved},
+        "idle": {"runs": {}, "setup": app.setup, "saved": app.saved},
+        "base": {"setup": app.setup, "saved": app.saved},
+        "where": choices.where,
+        "choices": asdict(choices),
         "steps": steps(log, choices),
     }
     page = desktop._page(desktop.land_rows()).decode()
@@ -103,7 +104,7 @@ def build(log_path: Path, out: Path) -> None:
     swaps = [
         ("<title>geoguessr-AI</title>", HEAD.format(words=words, url=PAGE_URL, picture=PICTURE)),
         ("</style>", STYLE + "</style>"),
-        ('    <fieldset id="all-choices">', NOTE.format(words=words, get_it=GET_IT)),
+        (FIRST_CHOICES, NOTE.format(words=words, get_it=GET_IT)),
         ("\n<script>\n", f"\n<script>\nconst DEMO = {_json(demo)};\n{REPLAY}</script>\n<script>\n"),
     ]
     for old, new in swaps:
@@ -143,11 +144,15 @@ STYLE = """
 .demo-get:hover { color: var(--ink); }
 @media (max-width: 860px) {
   /* On a phone, the game comes first: the choices, and the button to start, are for the app. */
-  #all-choices, .go { display: none; }
+  .locked-choices, #where-section, .go { display: none; }
 }
 """
 
-NOTE = """    <aside class="demo-note" aria-labelledby="demo-name">
+FIRST_CHOICES = '    <fieldset class="locked-choices">\n      <div class="modes"'
+"""Where the note goes: above the first of the choices."""
+
+NOTE = (
+    """    <aside class="demo-note" aria-labelledby="demo-name">
       <p class="section-name" id="demo-name">Played back</p>
       <p>{words}</p>
       <div class="demo-actions">
@@ -156,7 +161,9 @@ NOTE = """    <aside class="demo-note" aria-labelledby="demo-name">
         <a class="demo-get" href="{get_it}">Get the app</a>
       </div>
     </aside>
-    <fieldset id="all-choices">"""
+"""
+    + FIRST_CHOICES
+)
 
 REPLAY = """// Played back: there's no app behind this page, so it hears again what the app said
 // while the bot played, at the pace given (?speed=2 doubles it). The bot can't start here.
@@ -172,13 +179,15 @@ REPLAY = """// Played back: there's no app behind this page, so it hears again w
       rounds = rounds.slice(0, step.from).concat(step.tail);
       const progress = { ...step.progress, rounds };
       const { running, lines } = step;
-      return [step.at, { ...DEMO.base, game, running, progress, lines, restart: i === 0 }];
+      const run = { game, running, choices: DEMO.choices, progress, lines, restart: i === 0 };
+      return [step.at, { ...DEMO.base, runs: { [DEMO.where]: run } }];
     });
   }
 
   function say(message) {
     listener?.onmessage?.({ data: JSON.stringify(message) });
-    document.getElementById("demo-end").hidden = !message.running;
+    const run = message.runs[DEMO.where];
+    document.getElementById("demo-end").hidden = !(run && run.running);
   }
 
   function play() {
@@ -191,7 +200,9 @@ REPLAY = """// Played back: there's no app behind this page, so it hears again w
     timers.forEach(clearTimeout);
     const all = messages();
     const [, last] = all[all.length - 1];
-    say({ ...last, lines: all.flatMap(([, message]) => message.lines), restart: true });
+    const lines = all.flatMap(([, message]) => message.runs[DEMO.where].lines);
+    const run = { ...last.runs[DEMO.where], lines, restart: true };
+    say({ ...last, runs: { [DEMO.where]: run } });
   }
 
   window.EventSource = class {

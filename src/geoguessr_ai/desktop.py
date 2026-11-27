@@ -35,7 +35,7 @@ from urllib.parse import parse_qs, urlsplit
 import numpy as np
 from global_land_mask import globe
 
-from .botrun import NO_WINDOW, BotRun, Choices, _bot_program, _end_process_tree
+from .botrun import NO_WINDOW, PLACES, BotRun, Choices, _bot_program, _end_process_tree
 from .config import REPO, wsl_command, wsl_distros
 from .fetch import PACKS
 from .geo import inverse_mercator, mercator_xy
@@ -148,7 +148,12 @@ class App:
         self.token = secrets.token_urlsafe(24)
         self.program = program
         self.fetcher_program = program or _bot_program()
-        self.run: BotRun | None = None
+        self.runs: dict[str, BotRun] = {}
+        """The game at each place the bot plays (see :data:`.botrun.PLACES`), going on or last
+        played: one at a time there, but one in each at once, as on its hidden screen and in its
+        own browser window together."""
+        self.games: dict[str, int] = {}
+        """Each place's game by number, counted across all places, so a window sees a new one."""
         self.game = 0
         self.setup = {
             "model": (MODELS / BY_NAME[DEFAULT].file).exists(),
@@ -188,26 +193,35 @@ class App:
             self.updates.wait_for(lambda: self.version != seen, STILL_HERE_S)
             return self.version
 
-    def message(self, game: int | None, printed: int) -> tuple[dict, int, int]:
-        """What to tell a window that has heard of ``game`` up to its line ``printed``, then which
-        game that is and which line it has now heard to. With a new game, or a new window, it
-        starts over, which ``restart`` tells it."""
+    def message(self, heard: dict[str, tuple[int, int]]) -> tuple[dict, dict[str, tuple[int, int]]]:
+        """What to tell a window that has ``heard`` of each place's game up to which of its
+        lines, and what it has heard of then. With a new game there, or a new window, a place's
+        lines start over, which its ``restart`` tells it."""
         with self.updates:
-            run, number = self.run, self.game
-        restart = number != game
-        lines = [] if run is None else run.lines[0 if restart else printed :]
-        said = self.state(run, number) | {"lines": lines, "restart": restart}
-        return said, number, (0 if restart else printed) + len(lines)
+            runs, games = dict(self.runs), dict(self.games)
+        places, now = {}, {}
+        for place, run in runs.items():
+            game = games[place]
+            known = heard.get(place)
+            restart = known is None or known[0] != game
+            start = 0 if restart else known[1]
+            lines = run.lines[start:]
+            places[place] = self.state(run, game) | {"lines": lines, "restart": restart}
+            now[place] = (game, start + len(lines))
+        return {"runs": places, "setup": self.setup, "saved": self.saved}, now
 
-    def state(self, run: BotRun | None, game: int) -> dict:
+    @staticmethod
+    def state(run: BotRun, game: int) -> dict:
         return {
             "game": game,
-            "running": run is not None and not run.over.is_set(),
-            "choices": None if run is None else asdict(run.choices),
-            "progress": None if run is None else run.progress.as_dict(),
-            "setup": self.setup,
-            "saved": self.saved,
+            "running": not run.over.is_set(),
+            "choices": asdict(run.choices),
+            "progress": run.progress.as_dict(),
         }
+
+    def playing(self, place: str) -> bool:
+        run = self.runs.get(place)
+        return run is not None and not run.over.is_set()
 
     def check_setup(self) -> None:
         self.setup["wsl"] = wsl_is_there()
@@ -218,9 +232,9 @@ class App:
 
     def start(self, data: dict) -> None:
         """Start a game. Raises ValueError, saying why not, if it can't be started."""
-        if self.run is not None and not self.run.over.is_set():
-            raise ValueError("The bot is already playing.")
         choices = Choices.read(data)
+        if self.playing(choices.where):
+            raise ValueError("The bot is already playing there: stop it, or choose another place.")
         # Without the default, the window offers to download it.
         if (
             not choices.collect
@@ -233,13 +247,19 @@ class App:
         LAST_CHOICES.write_text(json.dumps(self.saved), encoding="utf-8")
         run = BotRun(choices, self.changed, self.program)
         with self.updates:
-            self.run, self.game = run, self.game + 1
+            self.game += 1
+            self.runs[choices.where], self.games[choices.where] = run, self.game
         run.start()
         self.changed()
 
-    def stop(self) -> None:
-        if self.run is not None:
-            self.run.stop()
+    def stop(self, place: str | None = None) -> None:
+        """Stop the game at ``place``, or every game, all at once, returning once they've gone."""
+        runs = [run for where, run in self.runs.items() if place in (None, where)]
+        stoppers = [threading.Thread(target=run.stop, daemon=True) for run in runs]
+        for stopper in stoppers:
+            stopper.start()
+        for stopper in stoppers:
+            stopper.join()
 
     def close(self) -> None:
         """Stop whatever's going on, as the app ends."""
@@ -434,9 +454,12 @@ def handler_for(app: App, port_host: str) -> type[BaseHTTPRequestHandler]:
             if route == "/start":
                 app.start(data)
             elif route == "/stop":
-                threading.Thread(target=app.stop, daemon=True).start()
+                place = data.get("where")
+                if place is not None and place not in PLACES:
+                    raise ValueError("The bot doesn't play there.")
+                threading.Thread(target=app.stop, args=(place,), daemon=True).start()
             elif route == "/open-screen":
-                run = app.run
+                run = app.runs.get("hidden")  # the only place with a screen to open
                 if run is not None and run.progress.screen:
                     webbrowser.open(run.progress.screen)
             elif route == "/setup" and data.get("what") in ("wsl", "ubuntu", "model"):
@@ -456,14 +479,14 @@ def handler_for(app: App, port_host: str) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             app.window_opened()
             try:
-                seen, game, printed = None, None, 0
+                seen, heard = None, {}
                 while True:
                     version = app.next_version(seen)
                     if version == seen:
                         self.wfile.write(b": still here\n\n")
                     else:
                         seen = version
-                        said, game, printed = app.message(game, printed)
+                        said, heard = app.message(heard)
                         self.wfile.write(f"data: {json.dumps(said)}\n\n".encode())
                     self.wfile.flush()
             except OSError:  # the window has closed
